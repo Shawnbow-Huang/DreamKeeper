@@ -1,0 +1,48 @@
+§14.7 负向证据：应用无联网能力 + 空闲窗口上行 0 B
+采集时点：2026-10-30 03:06:38 CST（Asia/Shanghai）
+设备：emulator-5554，Android 17（API 36）
+构建：app-debug.apk 12,436,053 B，sha256 A621948807A420020A97A6F4C5CD99FB58571547F1216BA0DFF83D0A34D954FE（2026-10-30 02:41:09）
+包名：com.dreamkeeper，安装方式 adb install -r（02:41 前先 pm clear）
+
+一、没有 INTERNET 权限（静态能力面）
+
+命令：
+  adb shell dumpsys package com.dreamkeeper | Select-String INTERNET
+输出：无（0 行；没有 requested/granted 的 android.permission.INTERNET）
+
+命令：
+  adb shell cmd package list packages -U | Select-String dreamkeeper
+输出：
+  package:com.dreamkeeper uid:10237
+
+二、该 uid 的网络计数器整行为 0（运行面）
+
+命令：
+  adb shell dumpsys netstats
+输出片段（BPF mAppUidStatsMap，表头 uid rxBytes rxPackets txBytes txPackets，共 11 行）：
+  10172 0 0 3324 48
+  1073 15718 181 71233 1008
+  1000 18634 221 2554 31
+  10157 13811 54 68924 855
+  10210 11738 54 376938 3073
+  1020 6737 33 2121 11
+  ...
+判定：11 行里没有 uid=10237，即 com.dreamkeeper 自本次开机以来 rx=0 tx=0（计数器为 0 的 uid 不出现在这张表里）。
+旁证：adb shell pidof com.dreamkeeper = 22225，自 02:51 启动后到 03:06 未变（进程一直在前台空闲，没有被杀重启）。
+
+三、观察窗口
+
+02:51:0x  强制停止后启动，停在日历页（「说梦」按钮未点击，无录音、无网络动作）
+02:51–03:06  16 分钟内无任何人为操作（除本文件用到的只读 dumpsys / pidof）
+03:06:38 采样：uid=10237 计数器仍为 0
+
+说明：本应给「空闲 5 分钟前后各采样一次、delta=0」。5 分钟定时采样的两次实现（02:52–02:57、03:03–03:08 的脚本各跑了一轮）
+都因解析 bug 没真正读到表行（第一次把段头的 `mAppUidStatsMap: OK` 当成数据段、第二次把列名行当成段尾），
+故不以它们的 delta 作证。改用上表的累计计数器口径：该 uid 整行缺席 = 自开机起 tx/rx 恒为 0，覆盖 02:51–03:06 的 16 分钟空闲窗口，
+比 5 分钟窗口更强。
+
+四、边界（这一段必须写进 ACCEPTANCE，别让别人当全证）
+
+本文件只证明「这个应用没有联网能力，且给了它 16 分钟空闲它一个字节都没发」。
+它**不**覆盖设计里 R3 的那条路径：将来接系统 STT 时，识别本身可能走系统服务的网络回退（那部分流量记在 system/其它 uid 上，
+不记在 com.dreamkeeper 上）。真·抓包（tcpdump/pcap 或 mitm）留到 Plan 2 与录音、转写一起做。

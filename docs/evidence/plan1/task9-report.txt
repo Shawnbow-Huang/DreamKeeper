@@ -1,0 +1,8 @@
+﻿ADB: C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe serial=emulator-5554 mode=cold-start x3
+RUN 1: status=ok TotalTime=910ms
+RUN 2: status=ok TotalTime=1002ms
+RUN 3: status=ok TotalTime=1008ms
+LOGCAT: docs\evidence\plan1\task9-logcat.txt lines=1217 bytes=243227
+CRASHES: 0
+LAUNCH: Displayed=3 statuses=ok,ok,ok
+STARTUP: runs=910,1002,1008 min=910ms median=1002ms max=1008ms
