@@ -36,9 +36,8 @@ class DreamCalendarTest {
     // ---------------------------------------------------------------- 任务书要求的 5 条
 
     @Test
-    fun `month with 31 days starting on monday has no leading blanks`() {
-        // 任务书标题写的是「31 days」,但 2026-06 实际只有 30 天;
-        // 这里保留原意图(月首正好周一 -> 前导空白为 0),并按真实天数断言。
+    fun `month starting on monday has no leading blanks`() {
+        // 2026-06-01 是周一,6 月 30 天 -> 前导空白必须是 0(不是占位格)
         val month = YearMonth.of(2026, 6)
         assertEquals(30, month.lengthOfMonth())
         val grid = DreamCalendar.monthGrid(month)
@@ -154,11 +153,12 @@ class DreamCalendarTest {
         assertEquals(29, month.lengthOfMonth())
         val grid = DreamCalendar.monthGrid(month)
         assertEquals(35, grid.size)                       // 3 + 29 + 3
-        assertTrue(grid.take(3).all { it == null })
+        assertTrue("前 3 格是空白", grid.take(3).all { it == null })
         assertEquals(LocalDate.of(2024, 2, 1), grid[3])
         assertEquals(LocalDate.of(2024, 2, 29), grid[31])
+        assertTrue("最后 3 格是空白", grid.takeLast(3).all { it == null })
         assertEquals(29, grid.filterNotNull().size)
-        assertEquals(3, grid.count { it == null } / 2)     // 前后各 3
+        assertEquals(3 + 3, grid.count { it == null })
     }
 
     @Test
