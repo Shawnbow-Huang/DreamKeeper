@@ -15,10 +15,17 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
-        // 种子数据开关：true 时首次启动写入 4 条示例梦境（见 data/db/SeedData.kt），
-        // 改成 "false" 就整体消失，不需要删代码。
-        buildConfigField("boolean", "SEED_DEMO_DATA", "true")
+    // 种子数据开关：debug 才有，release 恒 false。
+    // 2026-10-30 修正：原先写在 defaultConfig 里恒为 true，正式包首启也会灌 4 条假梦。
+    buildTypes {
+        debug {
+            buildConfigField("boolean", "SEED_DEMO_DATA", "true")
+        }
+        release {
+            buildConfigField("boolean", "SEED_DEMO_DATA", "false")
+        }
     }
 
     buildFeatures {
@@ -45,6 +52,7 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
