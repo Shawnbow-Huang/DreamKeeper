@@ -1,7 +1,7 @@
 # DreamKeeper · 梦境记录 App 设计文档
 
 - 日期：2026-10-29
-- 状态：待用户审阅
+- 状态：已批准（2026-10-29，用户确认）
 - 阶段：第一阶段（纯文字记录）
 - 平台：Android（Kotlin + Jetpack Compose）
 
