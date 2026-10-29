@@ -21,6 +21,16 @@ interface TagDao {
     @Query("UPDATE OR REPLACE dream_tags SET tagId = :intoId WHERE tagId = :fromId")
     suspend fun repointDreamTags(fromId: String, intoId: String)
 
+    @Query("SELECT * FROM tags WHERE id = :id") suspend fun findById(id: String): TagEntity?
+
+    /**
+     * 按名字查重（`tags.name` 有唯一索引）。
+     *
+     * 重命名前**必须**先查这一下：撞名时改走 [upsert] 会触发 REPLACE，把旧标签行删掉、
+     * 把它的 `dream_tags` 留成孤儿，`INNER JOIN` 之后那个标签在界面上静默消失（D75）。
+     */
+    @Query("SELECT * FROM tags WHERE name = :name") suspend fun findByName(name: String): TagEntity?
+
     @Query("SELECT COUNT(*) FROM tags") suspend fun count(): Int
 
     @Query("DELETE FROM dream_tags WHERE tagId = :tagId") suspend fun deleteLinksForTag(tagId: String)

@@ -3,6 +3,7 @@ package com.dreamkeeper.di
 import android.content.Context
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
+import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.library.SharedPreferencesLayoutPrefs
 
@@ -25,6 +26,13 @@ class AppContainer(context: Context) {
 
     /** 界面/ViewModel 只拿这一个入口，不自己 new DAO */
     val repository: DreamRepository by lazy { DreamRepository(database) }
+
+    /**
+     * 标签管理页要的 DAO。**不**从 [DreamRepository] 漏出去：仓库是「领域模型翻译层」，
+     * 而标签页的重命名/删除本来就是单表操作，硬包一层只会让仓库多两个转发方法。
+     * 合并（要动关联表 + 删行）仍然在仓库层，见 `DreamRepository.mergeTags`。
+     */
+    val tagDao: TagDao by lazy { database.tagDao() }
 
     /**
      * 「全部」页的排布偏好（时间轴 / 卡片流）。落盘在 SharedPreferences `layout_prefs`，

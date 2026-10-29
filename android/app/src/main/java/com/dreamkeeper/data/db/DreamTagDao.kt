@@ -32,4 +32,11 @@ interface DreamTagDao {
     fun observeTagsForDream(dreamId: String): Flow<List<TagEntity>>
 
     @Query("DELETE FROM dream_tags WHERE tagId = :tagId") suspend fun deleteByTag(tagId: String)
+
+    /**
+     * 一条梦当前挂着的标签 id（**不是** `COUNT(*)`：测试要断言「剩下哪一个」）。
+     *
+     * 放在这里而不是 `TagDao`：这个 DAO 是关联表的唯一入口，`TagDao` 只管标签本身。
+     */
+    @Query("SELECT tagId FROM dream_tags WHERE dreamId = :dreamId") suspend fun countTagsOn(dreamId: String): List<String>
 }

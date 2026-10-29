@@ -80,6 +80,36 @@ class DreamRepository(
         }
     }
 
+    /**
+     * 合并标签：把 [fromId] 的关联全部改指 [intoId]，然后删掉源标签行。真的合并了才返回 true。
+     *
+     * 「UPDATE **OR REPLACE**」不是手滑：一条梦可能同时挂着两个待合并的标签（先自动打了
+     * 「升降机」，后来又手动加了「电梯」），普通 UPDATE 会撞 `dream_tags` 的联合主键
+     * `(dreamId, tagId)` 直接抛异常；OR REPLACE 会删掉那一行再写指向目标的行，
+     * 结果正好是「这条梦只剩一个标签」。**改成普通 UPDATE 会让合并直接崩**。
+     *
+     * 三条护栏：
+     * 1. [fromId] == [intoId] 立刻返回 false —— 否则最后一步会把标签自己删掉；
+     * 2. 目标不存在时**一个字都不写**并返回 false —— 否则源标签被删、关联指向不存在的 id，
+     *    `observeTagsForDream` 是 INNER JOIN，这些标注会静默消失；
+     * 3. 源不存在也返回 false（没什么可并的），不把「删了个寂寞」当成功。
+     *
+     * 两步必须在同一事务里：只改关联不删源，下次合并会重复；只删源不改关联，
+     * 梦上的标注全丢。也不许加外键 CASCADE（`tags.upsert` 是 REPLACE 语义，级联会连带删关联，D75）。
+     */
+    suspend fun mergeTags(fromId: String, intoId: String): Boolean {
+        if (fromId == intoId) return false
+        return db.withTransaction {
+            if (tags.findById(fromId) == null || tags.findById(intoId) == null) {
+                false
+            } else {
+                tags.repointDreamTags(fromId, intoId)
+                tags.delete(fromId)
+                true
+            }
+        }
+    }
+
     /** 详情页「素材」tab：Plan 1 里通常是空表，空态文案由 UI 决定 */
     fun observeMediaAssets(dreamId: String): Flow<List<MediaAsset>> =
         assets.observeByDream(dreamId).map { list -> list.map(::mediaToDomain) }

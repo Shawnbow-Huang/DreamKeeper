@@ -23,7 +23,19 @@ object SeedData {
     const val DREAM_CLASSROOM = "seed-dream-2"
     const val DREAM_OLD_HOUSE = "seed-dream-3"
     const val DREAM_STAIRS = "seed-dream-4"
+
+    /**
+     * 4 个跨 kind 的种子标签，id 全部写死（用户自己改过名字也不会在重装后变回种子名——
+     * 幂等靠 `count() != 0` 整体跳过，不靠 id 覆盖）。
+     *
+     * 「电梯」与「升降机」是**故意的同义词**：标签页的合并功能需要一对真实可并的标签，
+     * 而且它们同时挂在 dream-1 上——正好逼出 `UPDATE OR REPLACE` 那条路径
+     * （同一篇梦两个标签并存时普通 UPDATE 会撞主键）。
+     */
+    const val TAG_OBJECT_ELEVATOR = "seed-tag-object-elevator"
+    const val TAG_OBJECT_LIFT = "seed-tag-object-lift"
     const val TAG_EMOTION_FALL = "seed-tag-emotion-fall"
+    const val TAG_PLACE_CLASSROOM = "seed-tag-place-classroom"
     const val MEDIA_VIDEO_CLASSROOM = "seed-media-1"
 
     /**
@@ -44,16 +56,28 @@ object SeedData {
             val day15 = month.atDay(15)
             val day22 = month.atDay(22)
 
-            // 1) 电梯：带一个 EMOTION 标签，evidenceText 非空（设计 §4 要求标签有出处）
+            // 1) 电梯：三个标签。两个同义（「电梯」/「升降机」）同时挂在这一条上，
+            //    标签页合并时可以拿它演示；另一个是情绪，evidenceText 非空（设计 §4 要求标签有出处）
             dreams.upsert(dream(DREAM_ELEVATOR, day1, "电梯",
                 "我在电梯里，电梯一直往上，按不到一楼。数字过了三十还在涨。"))
+            db.tagDao().upsert(TagEntity(TAG_OBJECT_ELEVATOR, "电梯", TagKind.OBJECT,
+                TagSource.AUTO, "我在电梯里"))
+            db.tagDao().upsert(TagEntity(TAG_OBJECT_LIFT, "升降机", TagKind.OBJECT,
+                TagSource.USER, "电梯一直往上"))
             db.tagDao().upsert(TagEntity(TAG_EMOTION_FALL, "下坠的预感", TagKind.EMOTION,
                 TagSource.AUTO, "电梯一直往上，按不到一楼"))
-            db.dreamTagDao().upsertAll(listOf(DreamTagEntity(DREAM_ELEVATOR, TAG_EMOTION_FALL)))
+            db.dreamTagDao().upsertAll(listOf(
+                DreamTagEntity(DREAM_ELEVATOR, TAG_OBJECT_ELEVATOR),
+                DreamTagEntity(DREAM_ELEVATOR, TAG_OBJECT_LIFT),
+                DreamTagEntity(DREAM_ELEVATOR, TAG_EMOTION_FALL),
+            ))
 
-            // 2) 教室：带一个 VIDEO 素材占位（设计 §12「梦 → 视频」的预留口子）
+            // 2) 教室：带一个 VIDEO 素材占位（设计 §12「梦 → 视频」的预留口子）+ 一个 PLACE 标签
             dreams.upsert(dream(DREAM_CLASSROOM, day8, "教室",
                 "教室最后一排，黑板上的字在动，像水。同桌递给我一张纸，上面只写了我的名字。"))
+            db.tagDao().upsert(TagEntity(TAG_PLACE_CLASSROOM, "教室", TagKind.PLACE,
+                TagSource.AUTO, "教室最后一排"))
+            db.dreamTagDao().upsertAll(listOf(DreamTagEntity(DREAM_CLASSROOM, TAG_PLACE_CLASSROOM)))
             db.mediaAssetDao().upsert(
                 MediaAssetEntity(MEDIA_VIDEO_CLASSROOM, DREAM_CLASSROOM, MediaType.VIDEO,
                     path = null, prompt = null, model = null, status = "PENDING", createdAt = 0L)

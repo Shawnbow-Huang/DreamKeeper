@@ -34,6 +34,8 @@ class MainActivity : ComponentActivity() {
                     repo = container.repository,
                     // 排布偏好也由容器给：界面不自己 getSharedPreferences（否则换个 Context 就丢配置）
                     layoutPrefs = container.layoutPrefs,
+                    // 标签页的重命名/删除走 DAO；合并仍在仓库层（要动关联表，必须事务）
+                    tagDao = container.tagDao,
                     initialSearchQuery = prefillSearch,
                 )
             }

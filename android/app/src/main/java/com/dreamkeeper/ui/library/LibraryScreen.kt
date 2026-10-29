@@ -65,11 +65,12 @@ private val EntryGap = 20.dp
 fun LibraryScreen(
     vm: LibraryViewModel,
     onOpen: (String) -> Unit,
+    onOpenTags: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize().background(Night)) {
-        LibraryHeader(layout = state.layout, onLayout = vm::setLayout)
+        LibraryHeader(layout = state.layout, onLayout = vm::setLayout, onOpenTags = onOpenTags)
 
         if (state.items.isEmpty()) {
             EmptyLibrary()
@@ -82,9 +83,13 @@ fun LibraryScreen(
     }
 }
 
-/** 顶部：左边标题，右边**一个**分段控件 */
+/** 顶部：左边标题，右边**一个**分段控件 + 「标签」文字按钮（brief §0.1 的入口） */
 @Composable
-private fun LibraryHeader(layout: LibraryLayout, onLayout: (LibraryLayout) -> Unit) {
+private fun LibraryHeader(
+    layout: LibraryLayout,
+    onLayout: (LibraryLayout) -> Unit,
+    onOpenTags: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -97,6 +102,18 @@ private fun LibraryHeader(layout: LibraryLayout, onLayout: (LibraryLayout) -> Un
             style = MaterialTheme.typography.titleLarge,
             color = Paper,
         )
+        // 文字按钮而不是图标：这一版没有图标资源，摆一个来路不明的放大镜/齿轮更像故障
+        Box(
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clip(CircleShape)
+                .clickable { onOpenTags() }
+                .semantics { contentDescription = "标签" }
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "标签", style = MaterialTheme.typography.bodyMedium, color = InkDim)
+        }
         LayoutSwitch(current = layout, onLayout = onLayout)
     }
 }
