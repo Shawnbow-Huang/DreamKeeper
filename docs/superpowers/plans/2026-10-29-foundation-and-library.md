@@ -2859,5 +2859,10 @@ git rev-parse --short HEAD
 | D11 | 录音编码 | §8 只写"录音"，未指定容器与编码 | **PCM 16kHz 单声道 WAV**，单文件连续录（按红钮 → 追问窗口超时，含静音），路径 `files/audio/<dreamId>.wav` | **已定（用户口径）**：崩溃可恢复优先，接受 ≈1.92MB/分钟；理由见设计 §8.1「音频存储契约」 |
 | D12 | 导航实现 | 设计未指定导航方案 | 引入 `androidx.navigation:navigation-compose`，根界面用 `NavHost`（Task 6），底部栏只在 Calendar/Library 显示 | **已定（用户口径）**：多一个依赖可接受。版本号在 Task 1 标了「未验证」，实现者按仓库可用版本填 |
 | D13 | `transcriptStatus` 字段 | 设计 §5 的 `dreams` 表没有这个字段 | 新增 `transcriptStatus`（`PENDING`/`OK`/`FAILED`，默认 `OK`），用来表达「录音已落盘、文字还没出来」的中间态 | **已回写设计 §5**（本轮同步改了设计文档），因此不再是偏差，登记于此备查 |
+| D14 | KSP 版本 | 计划初稿写 `ksp = "2.4.21-2.0.4"` | 实际改 `ksp = "2.3.12"`：双段命名在 Maven 上止于 `2.2.21-2.0.5`，2.3.0 起 KSP 改单段版本号，`2.4.21-2.0.4` 不存在 | **Task 1 实测**。KSP 2.3.12 与 Kotlin 2.4.21 的兼容性要到 Task 4（Room/KSP 真正跑注解处理）才受验；若红则降 Kotlin 到 2.3.x 或升 KSP |
+| D15 | Kotlin 插件与 toolchain | 计划写显式 `kotlin-android` 插件 + `jvmToolchain(17)` | 移除 `kotlin-android`（AGP 9 内置 Kotlin 支持，显式加会构建失败）、移除 `jvmToolchain(17)`（本机只有 JDK 25，toolchain 会去找不存在的 JDK 17）；`jvmTarget` 取 `compileOptions.targetCompatibility = 17` | **Task 1 实测，已验证可构建**。以后新增模块照此写 |
+| D16 | Maven 仓库顺序 | 计划只依赖默认 `gradlePluginPortal()`/`google()`/`mavenCentral()` | `settings.gradle.kts` 两处 `repositories` 前置 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`，`google()`/`mavenCentral()` 保留作回退 | **Task 1 实测**：`repo.maven.apache.org` 在本机停滞，腾讯镜像实测 8294 KB/s |
+| D17 | 占位界面主题 | 计划 Task 1 写「占位界面用 `MaterialTheme`」 | 改为显式常量 `Color(0xFF0B0E13)` / `Color(0xFFE6EAF2)`，不用 `MaterialTheme` / `Surface` | **Task 1 实测**：Material3 `Surface` 不透明近白，覆盖 `windowBackground`，白闪直接违反夜间硬约束 |
+| D18 | 系统栏颜色 | 计划 Task 2 写「在 `themes.xml` 设 `statusBarColor`/`navigationBarColor`」 | `targetSdk 37` 强制 edge-to-edge，这两个属性是**空操作**；Task 2 必须用 `enableEdgeToEdge(SystemBarStyle.dark(TRANSPARENT))` 显式声明，并靠 Compose 背景铺满系统栏区域 | **Task 1 实测**：截图状态栏近黑是 Compose 背景铺过去的结果，不是主题属性生效 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
