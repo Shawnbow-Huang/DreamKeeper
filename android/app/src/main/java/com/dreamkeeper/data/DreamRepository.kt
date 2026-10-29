@@ -12,6 +12,7 @@ import com.dreamkeeper.domain.MediaAsset
 import com.dreamkeeper.domain.Tag
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.YearMonth
 
 /**
@@ -48,6 +49,10 @@ class DreamRepository(
 
     /** 全部未删除的梦（列表数据源之一） */
     fun observeAll(): Flow<List<Dream>> = dreams.observeAll().map { list -> list.map(::toDomain) }
+
+    /** 当日列表。`date.toString()` 就是 `dreamDate` 列的 `yyyy-MM-dd` 存储格式，不需要再格式化 */
+    fun observeDay(date: LocalDate): Flow<List<Dream>> =
+        dreams.observeDay(date.toString()).map { list -> list.map(::toDomain) }
 
     /**
      * 按 id 观察单条梦。**不过滤 `deletedAt`**：回收站要能打开一条已删除的梦（D26）。

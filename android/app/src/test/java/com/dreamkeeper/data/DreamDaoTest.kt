@@ -123,6 +123,26 @@ class DreamDaoTest {
         assertEquals(listOf("2"), dao.observeAll().first().map { it.id })
     }
 
+    // ---------- 当日查询（D35） ----------
+
+    @Test
+    fun `observeDay does not leak the same day number from another month`() = runTest {
+        // 三条里只有 2026-11-08 属于要查的那天：12-08 是另一个月，11-09 是第二天
+        dao.upsert(dream("1", "2026-11-08"))
+        dao.upsert(dream("2", "2026-12-08"))
+        dao.upsert(dream("3", "2026-11-09"))
+
+        assertEquals(listOf("1"), dao.observeDay("2026-11-08").first().map { it.id })
+    }
+
+    @Test
+    fun `observeDay excludes soft deleted dreams`() = runTest {
+        dao.upsert(dream("1", "2026-11-08").copy(deletedAt = 1L))
+        dao.upsert(dream("2", "2026-11-08"))
+
+        assertEquals(listOf("2"), dao.observeDay("2026-11-08").first().map { it.id })
+    }
+
     // ---------- 搜索 ----------
 
     @Test

@@ -27,6 +27,19 @@ interface DreamDao {
     """)
     fun observeByMonth(fromIso: String, toIso: String): Flow<List<DreamEntity>>
 
+    /**
+     * 当日列表（设计 §11 的中间层，D35）。等值匹配 `dreamDate = :dateIso`，**不用 BETWEEN**：
+     * 跨月不串靠的是「不同月份的同一天号是两个不同的字符串」，比区间更直接。
+     * `deletedAt IS NULL` 必须有：软删的梦不进当日列表。
+     * 排序按 `createdAt DESC`（同一天里后补录的在前）。
+     */
+    @Query("""
+        SELECT * FROM dreams
+        WHERE deletedAt IS NULL AND dreamDate = :dateIso
+        ORDER BY createdAt DESC
+    """)
+    fun observeDay(dateIso: String): Flow<List<DreamEntity>>
+
     @Query("SELECT * FROM dreams WHERE deletedAt IS NULL ORDER BY dreamDate DESC, createdAt DESC")
     fun observeAll(): Flow<List<DreamEntity>>
 
