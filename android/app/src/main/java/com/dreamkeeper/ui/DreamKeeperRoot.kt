@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,10 +35,12 @@ import com.dreamkeeper.ui.calendar.CalendarScreen
 import com.dreamkeeper.ui.calendar.CalendarViewModel
 import com.dreamkeeper.ui.day.DayScreen
 import com.dreamkeeper.ui.day.DayViewModel
+import com.dreamkeeper.ui.detail.DetailScreen
 import com.dreamkeeper.ui.library.LibraryScreen
 import com.dreamkeeper.ui.library.LibraryViewModel
 import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.nav.DreamRoute
+import com.dreamkeeper.ui.search.SearchScreen
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.InkDim
 import com.dreamkeeper.ui.theme.Night
@@ -51,11 +54,23 @@ import java.time.LocalDate
  * Scaffold 的 innerPadding 会跟着变，子页不需要自己再算导航栏避让。
  */
 @Composable
-fun DreamKeeperRoot(repo: DreamRepository, layoutPrefs: LayoutPrefs) {
+fun DreamKeeperRoot(
+    repo: DreamRepository,
+    layoutPrefs: LayoutPrefs,
+    initialSearchQuery: String = "",
+) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
     val showBottomBar = current == DreamRoute.Calendar.route || current == DreamRoute.Library.route
+
+    // debug 钩子（D67）：带 `dk_prefill_search` 冷启动时直接落到搜索页。
+    // 只有 MainActivity 在 BuildConfig.DEBUG 下才会传非空值；这里不判断 DEBUG，免得 release 里多一份逻辑。
+    LaunchedEffect(Unit) {
+        if (initialSearchQuery.isNotBlank()) {
+            nav.navigate(DreamRoute.Search.route) { launchSingleTop = true }
+        }
+    }
 
     Scaffold(
         containerColor = Night,
@@ -80,7 +95,7 @@ fun DreamKeeperRoot(repo: DreamRepository, layoutPrefs: LayoutPrefs) {
                     // 点格子进「当日列表」，**不是**进 Detail（D35）：
                     // 把 date.toString() 当 dreamId 传给详情，详情按 id 查库必然查不到 → 必空白。
                     onDayClick = { date -> nav.navigate(DreamRoute.Day(date.toString()).route) },
-                    onSearch = { /* Task 8：nav.navigate(DreamRoute.Search.route) */ },
+                    onSearch = { nav.navigate(DreamRoute.Search.route) },
                     onRecord = { /* Plan 2：这里换成 nav.navigate(DreamRoute.Record(RecordEntry.HOME_BUTTON).route) */ },
                 )
             }
@@ -103,11 +118,26 @@ fun DreamKeeperRoot(repo: DreamRepository, layoutPrefs: LayoutPrefs) {
                     onOpen = { dreamId -> nav.navigate(DreamRoute.Detail(dreamId).route) },
                 )
             }
-            // 下面五个路由 Plan 1 允许是空屏/占位——重点是**路径已经存在**，
-            // Plan 2 的录音与 Plan 4 的通知只往里填内容，不会再动根界面结构。
-            composable(DreamRoute.Search.route) { /* Task 8 */ }
+            // 搜索与详情在 Task 8 落成真页面；下面三个仍是 Plan 2/Plan 4 的占位——重点是
+            // **路径已经存在**，后续任务只往里填内容，不会再动根界面结构。
+            composable(DreamRoute.Search.route) {
+                // 结果行点了必须真的进详情（brief 0.4）：不接这一行，搜索页能进但点了没反应
+                SearchScreen(
+                    repo = repo,
+                    onOpen = { dreamId -> nav.navigate(DreamRoute.Detail(dreamId).route) },
+                    onBack = { nav.popBackStack() },
+                    initialQuery = initialSearchQuery,
+                )
+            }
             composable(DreamRoute.Tags.route) { /* Task 9 */ }
-            composable("detail/{dreamId}") { /* Task 8 */ }
+            composable("detail/{dreamId}") { backStackEntry ->
+                val dreamId = backStackEntry.arguments?.getString("dreamId").orEmpty()
+                DetailScreen(
+                    dreamId = dreamId,
+                    repo = repo,
+                    onBack = { nav.popBackStack() },
+                )
+            }
             composable("record/{entry}") { /* Plan 2：RecordScreen */ }
             composable("followup/{dreamId}") { /* Plan 2：FollowUpScreen */ }
         }

@@ -18,7 +18,15 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        // Activity 只做一件事：把根界面接进主题。Plan 1 不解析 intent extra（Plan 4 的活）
+        // D67 的 debug 钩子：`adb shell input text` 只映射 ASCII，中文检索没法手打，
+        // 只能靠 intent extra 预填。**仅 DEBUG 生效**；这里只传「搜什么」，
+        // 结果仍由 SearchViewModel → repo.search 实查，绝不写死任何一条。
+        val prefillSearch = if (BuildConfig.DEBUG) {
+            intent?.getStringExtra("dk_prefill_search").orEmpty()
+        } else {
+            ""
+        }
+        // Activity 只做一件事：把根界面接进主题
         setContent {
             DreamKeeperTheme {
                 val container = (application as DreamKeeperApp).container
@@ -26,6 +34,7 @@ class MainActivity : ComponentActivity() {
                     repo = container.repository,
                     // 排布偏好也由容器给：界面不自己 getSharedPreferences（否则换个 Context 就丢配置）
                     layoutPrefs = container.layoutPrefs,
+                    initialSearchQuery = prefillSearch,
                 )
             }
         }

@@ -22,12 +22,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -38,15 +40,20 @@ import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.InkDim
 import com.dreamkeeper.ui.theme.InkFaint
+import com.dreamkeeper.ui.theme.Line
 import com.dreamkeeper.ui.theme.Night
+import com.dreamkeeper.ui.theme.NightRaised
 import com.dreamkeeper.ui.theme.Paper
 import java.time.LocalDate
 
 /**
  * 日历首屏（设计 §11 第一层）。
  *
- * 屏上除底部栏的「日历 / 全部」外只有 4 类文案：月份标题、`共 N 天有梦`、
- * 星期表头、`说梦`。不加任何操作提示——深夜界面里，说明文字比空白更吵。
+ * 屏上除底部栏的「日历 / 全部」外只有 5 类文案：月份标题、`共 N 天有梦`、
+ * 星期表头、搜索框里的「搜索梦里的词」、`说梦`。不加任何操作提示——深夜界面里，
+ * 说明文字比空白更吵。
+ *
+ * `onRecord` 仍是 Plan 2 的占位（红钮先有入口不接实现）。
  */
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -79,6 +86,7 @@ fun CalendarScreen(
                         onNext = vm::nextMonth,
                         onToday = vm::goToday,
                     )
+                    SearchEntry(onSearch = onSearch)
                     WeekdayHeader()
 
                     LazyVerticalGrid(
@@ -154,6 +162,37 @@ private fun MonthHeader(
             )
         }
         ArrowButton("›", "下个月", onNext)
+    }
+}
+
+/**
+ * 搜索入口（D39 / brief 0.6）：月头下面一条 48dp 的假输入框。
+ *
+ * 不用 `Icons.Outlined.Search`——仓库没有 material-icons 依赖，`Icons.*` 编译不过。
+ * `clickable` 包在 48dp 高的整行容器上，而不是只包住那行 15sp 的文案；整行点哪都进搜索页。
+ * `contentDescription = "搜索"` 既是读屏标签，也是证据脚本定位这个入口的唯一锚点。
+ */
+@Composable
+private fun SearchEntry(onSearch: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(NightRaised)
+            .border(1.dp, Line, RoundedCornerShape(999.dp))
+            .clickable { onSearch() }
+            .semantics { contentDescription = "搜索" }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "搜索梦里的词",
+            style = MaterialTheme.typography.bodyMedium,
+            color = InkFaint,
+            maxLines = 1,
+        )
     }
 }
 
