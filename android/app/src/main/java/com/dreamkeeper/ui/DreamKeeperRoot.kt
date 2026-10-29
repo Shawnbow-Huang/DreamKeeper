@@ -34,6 +34,9 @@ import com.dreamkeeper.ui.calendar.CalendarScreen
 import com.dreamkeeper.ui.calendar.CalendarViewModel
 import com.dreamkeeper.ui.day.DayScreen
 import com.dreamkeeper.ui.day.DayViewModel
+import com.dreamkeeper.ui.library.LibraryScreen
+import com.dreamkeeper.ui.library.LibraryViewModel
+import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.nav.DreamRoute
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.InkDim
@@ -48,7 +51,7 @@ import java.time.LocalDate
  * Scaffold 的 innerPadding 会跟着变，子页不需要自己再算导航栏避让。
  */
 @Composable
-fun DreamKeeperRoot(repo: DreamRepository) {
+fun DreamKeeperRoot(repo: DreamRepository, layoutPrefs: LayoutPrefs) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
@@ -91,7 +94,15 @@ fun DreamKeeperRoot(repo: DreamRepository) {
                     onBack = { nav.popBackStack() },
                 )
             }
-            composable(DreamRoute.Library.route) { /* Task 7：LibraryScreen(...) */ }
+            composable(DreamRoute.Library.route) {
+                // ViewModel 挂在 Library 这条 NavBackStackEntry 上：切排布、从详情返回都在同一个实例上，
+                // 不会每次都重新构造、把排布重新读一遍
+                val vm: LibraryViewModel = viewModel { LibraryViewModel(repo, layoutPrefs) }
+                LibraryScreen(
+                    vm = vm,
+                    onOpen = { dreamId -> nav.navigate(DreamRoute.Detail(dreamId).route) },
+                )
+            }
             // 下面五个路由 Plan 1 允许是空屏/占位——重点是**路径已经存在**，
             // Plan 2 的录音与 Plan 4 的通知只往里填内容，不会再动根界面结构。
             composable(DreamRoute.Search.route) { /* Task 8 */ }

@@ -21,7 +21,12 @@ class MainActivity : ComponentActivity() {
         // Activity 只做一件事：把根界面接进主题。Plan 1 不解析 intent extra（Plan 4 的活）
         setContent {
             DreamKeeperTheme {
-                DreamKeeperRoot((application as DreamKeeperApp).container.repository)
+                val container = (application as DreamKeeperApp).container
+                DreamKeeperRoot(
+                    repo = container.repository,
+                    // 排布偏好也由容器给：界面不自己 getSharedPreferences（否则换个 Context 就丢配置）
+                    layoutPrefs = container.layoutPrefs,
+                )
             }
         }
     }
