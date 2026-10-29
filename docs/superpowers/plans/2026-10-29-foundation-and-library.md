@@ -2753,7 +2753,7 @@ Get-ChildItem $ev\plan1-coldstart-*.png | ForEach-Object {
 - [ ] 日历上下切 12 个月，不闪白、不崩
 - [ ] 全部列表两种视图切换正常，杀进程重进保留偏好
 - [ ] 搜索「电」命中，搜索纯标点不崩
-- [ ] 详情**四个 tab** 可切（原样 / 小说化·补写N处 / 标签 / 素材）、原样正文可滚动、素材 tab 空态文案「还没有素材」出现过
+- [ ] 详情**四个 tab** 可切（原样 / 小说化·补写N处 / 标签 / 素材）、原样正文可滚动、素材 tab 显示 16:9 空槽占位（与 Task 8 一致：只有空槽 +「以后可以在这里把梦做成视频」，**没有「还没有素材」这句文案**）
 - [ ] 标签页可重命名、可合并、合并后原标签消失
 - [ ] `adb logcat -d | Select-String "FATAL"` 无输出
 
@@ -2875,5 +2875,9 @@ git rev-parse --short HEAD
 | D27 | `dream_tags.tagId` 无索引 | 计划未写索引 | 暂不加索引，接受 Task 9 合并/删除时全表扫 | **Task 4 判断**：千条量级无感；现在加索引会触发 v2 迁移，为未测到的性能问题付迁移成本不划算，破万条再说 |
 | D28 | `gradle-daemon-jvm.properties` 不入库 | Android Studio 同步时自动生成，含 `toolchainVersion=25` 与 10 个平台的 JDK 远程下载地址 | 保留在磁盘（AS 需要），但**加进 `.gitignore`**；JDK 由 `JAVA_HOME` / AS 的 Gradle JDK 设置决定 | **环境相关文件**：它把「用哪个 JDK」钉成 25 并附远程地址，换一台装 JDK 17/21 的机器会触发下载。这类文件不该进公共仓库 |
 | D29 | `save()` 全量重建会重置残留字段 | 计划只点名 `createdAt`/`deletedAt` 两条要保 | 追加：`ownerId`、`faithfulEditedByUser`、`novelEditedByUser`、`remoteId` 也必须 read-modify-write 保留 | **Task 5 实测**：`save()` 里 `ownerId = "local"` 写死、三处编辑标记根本没传，任何一次保存都会把它们重置成默认值。Plan 1 无写入方，所以是「埋着的雷」，Plan 2 接上录音就会炸 |
+| D30 | 偏好存储 | §13「设置」行写 `DataStore (Proto/Preferences)`，理由「类型安全」 | 用 `SharedPreferences`（文件 `layout_prefs`、键 `library_layout`，同步读写，**不新增任何依赖**），Task 7 起按此实现 | **已回写设计 §13**（`DataStore` → `SharedPreferences`）：只存一个列表布局枚举，`DataStore` 的读是 suspend 的，为拿首值要么 `runBlocking` 要么首帧抖一下——为一个枚举引框架不划算 |
+| D31 | `VideoClient` 归属 | §12「梦 → 视频」行写「`LlmClient` 同级再放一个 `VideoClient` 接口」，读起来像 Plan 1 就要建 | Plan 1 **不建** `VideoClient`；与 `LlmClient` 同批在 **Plan 3** 建空接口。Plan 1 只落 `media_assets` 表与详情页素材位 | **已回写设计 §12**（注明归 Plan 3）：Plan 1 没有任何生成链路，先建一个只有签名、没有调用方的接口，等于留一个没人验的空壳 |
+| D32 | 设置页与 API Key 录入归属 | §11 底部导航含「设置」、§9/§10 要求用户自填 Key 并存入 Keystore；计划原先写设置页整体归 Plan 4 | **拆分**：**Plan 3 做最小 Key 录入**（provider / baseUrl / model / Key 四栏 + Keystore 保存 + 首次填写时明说「消耗的是你自己账号的额度」），**Plan 4 做完整设置页**（主题、默认参数、用量、回收站入口等） | **Lead 裁定**：Key 是生成功能的前置条件，不能等到 Plan 4——Plan 3 要验「真实调用出稿」，没有录入入口就只能把 Key 硬编码进代码，那不叫端到端验收。完整设置页是打磨，可以等 |
+| D33 | Task 9 验收描述与 Task 8 实现不符 | 计划 Task 9 验收清单写「素材 tab 空态文案『还没有素材』出现过」 | Task 8 的素材 tab 只有 16:9 空槽 +「以后可以在这里把梦做成视频」，**没有「还没有素材」这句文案**；验收改为「素材 tab 显示 16:9 空槽占位」 | **按实现改验收**（不改界面去迁就文档）：为一句不存在的文案加一个分支，是为了打勾造需求。验收描述只许描述已经存在的东西 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。

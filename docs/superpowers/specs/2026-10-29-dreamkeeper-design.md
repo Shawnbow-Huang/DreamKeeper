@@ -1,7 +1,7 @@
 # DreamKeeper · 梦境记录 App 设计文档
 
 - 日期：2026-10-29
-- 状态：已批准（2026-10-29，用户确认）
+- 状态：已批准（v1.1，2026-10-30）
 - 阶段：第一阶段（纯文字记录）
 - 平台：Android（Kotlin + Jetpack Compose）
 
@@ -95,7 +95,7 @@ DreamRecord(
   id: UUID,
   ownerId: String,          // 默认 "local"；界面不暴露切换
   dreamDate: LocalDate,     // 梦属于哪一晚（可手动改，与 createdAt 区分）
-  createdAt: Instant,       // 实际录入时间
+  createdAt: Long,          // 实际录入时间（epoch 毫秒）
   title: String?,           // 可空，模型可建议
   rawAudioPath: String?,
   rawAudioMs: Long?,
@@ -109,8 +109,8 @@ DreamRecord(
   novelEditedByUser: Boolean,
   mood: String?,            // 单一主情绪，可选
   isDraft: Boolean,         // 录音完成但未生成/未确认
-  deletedAt: Instant?,      // 软删除，回收站 30 天
-  updatedAt: Instant
+  deletedAt: Long?,         // 软删除，回收站 30 天（epoch 毫秒）
+  updatedAt: Long           // epoch 毫秒
 )
 
 Tag(id, name, kind, source, evidenceText?)
@@ -123,14 +123,18 @@ DreamTag(dreamId, tagId, confidence?)
 MediaAsset(id, dreamId, type, path, prompt, model, status, createdAt)
   type = IMAGE | VIDEO   // v1 无写入方，仅建表 + 详情页占位
 
+// 下面两张表 Plan 1 不建：建表与 DAO 归 Plan 3，届时 v1→v2 有 schema 基线可验。
+// 字段保留在此作为 Plan 3 的建表依据，不是「已经建好的表」。
 GenerationJob(
   id, dreamId, kind,      // FAITHFUL_CLEANUP | NOVEL | TAGGING | TITLE | CHANGELOG
   status,                 // PENDING | RUNNING | OK | FAILED | CANCELLED
   provider, model, promptVersion,
-  tokensIn, tokensOut, error, createdAt
+  tokensIn, tokensOut, error, createdAt   // createdAt：epoch 毫秒
 )
 
-PromptVersion(id, kind, version, body, createdAt)   // 提示词进库，便于 A/B 与回滚
+// Plan 3 建。提示词正文不进库：唯一真源是 prompts/ 下的文件（版本 = 文件名 + sha256，见 §7.1），
+// 这张表只存版本指针，A/B 与回滚都回到文件。
+PromptVersion(id, kind, version, promptHash, createdAt)
 
 AppSettings(provider, baseUrl, model, apiKeyAlias, sttEngine, nightBehavior, ...)
 ```
@@ -142,6 +146,8 @@ AppSettings(provider, baseUrl, model, apiKeyAlias, sttEngine, nightBehavior, ...
 - `faithfulEditedByUser` / `novelEditedByUser`：用户改过之后，重生成必须**先确认覆盖**，默认另存新版本。
 - 软删除 + 回收站：误删一条梦是灾难级事故。
 - `ownerId` 只留字段不建 UI（见决策表附注）。
+- **时间戳一律 `Long`（epoch 毫秒）**：`createdAt` / `updatedAt` / `deletedAt` 以及将来的生成、素材时间戳都不用 `Instant`——省一层 `TypeConverter`，SQLite 里可直接比较与排序。
+- **`generation_jobs` / `prompt_versions` 不在 Plan 1 建**：两张表连同 DAO 归 **Plan 3**，届时 v1→v2 有真实 schema 基线可验；Plan 1 只落迁移基建（`exportSchema` + 基线 schema）。提示词**以文件为唯一真源**，版本 = 文件名 + 文件内容 sha256（见 §7.1）。
 
 ---
 
@@ -194,6 +200,7 @@ prompts/
 ```
 
 - 进 `assets/prompts/`，带版本号；改动即新增版本，旧版本保留。
+- **文件是唯一真源**：版本 = 文件名里的版本号 + 文件内容 sha256；数据库只存版本指针（`promptId` / `promptVersion` / `promptHash`），**不存提示词正文**（`prompt_versions` 表归 Plan 3，见 §5）。改提示词就是一次 git diff，不是一次 SQL。
 - **禁止把提示词硬编码在 Kotlin 字符串里**（改不了、测不了、回滚不了）。
 - 参数：`novel` temperature 0.9、`tagging` 0.2、`cleanup` 0.1。
 
@@ -218,7 +225,7 @@ prompts/
 **④ 自检重写 + 离线审 + 人工评测**
 - 初稿 → 自检提示词（"逐条检查上述黑名单，列出违规并重写"）→ 终稿。
 - 离线可用 `humanizer-zh` / `writing-anti-ai` skill 复审。
-- **评测集：`docs/eval/dreams.md` 收录 20 条真实梦境**，每条人工打三项分：
+- **评测集：`docs/eval/dreams.md` 先收录 10 条真实梦境试跑，随用户继续提供逐步攒到 20 条**，每条人工打三项分：
   1. 像不像人写的（1–5）
   2. 有没有丢核心情节（有/无）
   3. 有没有编造事实（有/无）
@@ -321,7 +328,7 @@ prompts/
 
 | 未来能力 | 现在留什么 |
 |---|---|
-| 梦 → 视频 | `MediaAsset(type=VIDEO)` 表 + 详情页素材区占位 + `LlmClient` 同级再放一个 `VideoClient` 接口 |
+| 梦 → 视频 | `MediaAsset(type=VIDEO)` 表 + 详情页素材区占位（Plan 1 就有）；`VideoClient` 接口**不在 Plan 1**，与 `LlmClient` 同批在 **Plan 3** 建空接口 |
 | 梦 → 插画 | 同一张表 `type=IMAGE`，字段 `prompt/model` 已就绪 |
 | 多用户 | `ownerId` 字段（已建，无 UI） |
 | 云同步/多端 | 预留 `remoteId`、`updatedAt`；不在 v1 传输 |
@@ -332,15 +339,15 @@ prompts/
 | 项 | 选择 | 理由 |
 |---|---|---|
 | 语言/UI | Kotlin + Compose | 单人可以最快迭代 |
-| SDK | compileSdk/targetSdk 36，minSdk 26 | 对齐本机已装 build-tools 36；minSdk 26 覆盖 Composable 生态且省兼容代码 |
+| SDK | compileSdk/targetSdk 37，minSdk 26 | 本机只装了 SDK 37（36 未装），构建必须对齐；minSdk 26 覆盖 Composable 生态且省兼容代码 |
 | 持久化 | Room | 搜索与标签关联天然合适 |
-| 设置 | DataStore (Proto/Preferences) | 类型安全 |
+| 设置 | SharedPreferences | v1 要存的偏好只有一个列表布局枚举（时间轴 / 卡片流）；`DataStore` 的读是 suspend 的，为拿首值要么 `runBlocking` 要么首帧抖一下——为一个枚举引框架不划算 |
 | 密钥 | Keystore + AES-GCM | 系统级 |
 | 网络 | OkHttp + kotlinx.serialization | 轻，流式方便 |
 | 后台 | WorkManager（生成排队）+ ForegroundService（录音） | 断网续跑 |
 | 图片 | Coil | 未来插画直接用 |
 | 架构 | **单 module + 包边界**（data / domain / llm / ui） | 一人维护，多 module 拖慢迭代；边界靠包与接口约束，等第二个人再拆 |
-| 测试 | JUnit + Turbine + Robolectric；UI 用 Roborazzi 截图 | JVM 上跑，CI 友好 |
+| 测试 | JUnit4 + Robolectric；界面验收走「构建 → 安装 → 截图人眼读」 | 业务逻辑与 DAO 在 JVM 上跑；Compose 断言在 Robolectric 下收益低于维护成本，不引 Turbine / Roborazzi，不做自动图像比对，每张截图人工看并写进证据 |
 | 构建 | Gradle CLI 为主，Android Studio 为辅 | 便于自动化验证 |
 
 ### 13.1 仓库结构
@@ -355,19 +362,19 @@ DreamKeeper/
 └── README.md
 ```
 
-**根目录中立，平台目录只是消费者。** 理由不是整齐，而是：提示词与评测集是真正跨平台的资产——同一句「禁止新增人物关系」换到 iOS 意思不变；20 条梦境的打分标准必须两平台共用，否则两个版本会各自漂移。
+**根目录中立，平台目录只是消费者。** 理由不是整齐，而是：提示词与评测集是真正跨平台的资产——同一句「禁止新增人物关系」换到 iOS 意思不变；评测集的打分标准（先 10 条、逐步攒到 20 条）必须两平台共用，否则两个版本会各自漂移。
 
 **暂不创建 `ios/`**：空目录不被 git 跟踪，`.gitkeep` 只是假装已经在做了。真开始时 `mkdir ios` 是一秒钟的事。
 
-**验证闭环（无需人肉点屏）**：Gradle 构建 → `adb install` → uiautomator dump / mobile-mcp 驱动 → `adb exec-out screencap` 截图逐张核对 → `adb logcat` 定位。
+**验证闭环**：Gradle 构建 → `adb install` → uiautomator dump / mobile-mcp 驱动 → `adb exec-out screencap` 截图**逐张人眼核对** → `adb logcat` 定位。没有自动视觉回归（不搭 Roborazzi / golden 目录），截图就是证据，必须真的打开看。
 
 ## 14. 验收标准
 
 - [ ] 从点亮屏幕到开始录音 ≤ 3 步，≤ 3 秒。
 - [ ] 录音过程中接电话/切后台/锁屏，音频不丢。
-- [ ] 原样稿 diff 违规次数 = 0（评测集 20 条）。
-- [ ] 小说化评测集：≥ 8/10 条被判"像人写的"；编造事实率 ≤ 10%。
-- [ ] 1000 条记录下，日历与列表滚动不掉帧（基准机：本机模拟器 + 一台真机）。
+- [ ] 原样稿 diff 违规次数 = 0（先 10 条真实梦境试跑，随用户提供逐步攒到 20 条）。
+- [ ] 小说化评测集：10 条时 ≥ 8/10 条被判"像人写的"；编造事实率 ≤ 10%；样本扩到 20 条后按同口径复核（≥ 16/20）。
+- [ ] 1000 条记录下，日历与列表滚动不掉帧（基准机：本机模拟器 + 一台真机）。**Plan 1 不做，Plan 2 开工前补测**（Plan 1 只有 4 条种子，测不出滚动性能）。
 - [ ] 飞行模式下：可录音、可本地转写、小说化进队列并在恢复网络后自动完成。
 - [ ] 抓包验证：全程无音频外传。
 
@@ -381,3 +388,12 @@ DreamKeeper/
 | 4 | STT 引擎最终选型 | 需真机验证系统识别质量；本机模拟器无中文语音包 |
 | 5 | 字体 | 正文用系统字体起步，后续再谈衬线字体授权 |
 | 6 | 是否做本地多用户 UI | 当前：不做，只留字段 |
+
+---
+
+## 修订记录
+
+| 版本 | 日期 | 改了什么 |
+|---|---|---|
+| v1.0 | 2026-10-29 | 初版，用户确认 |
+| v1.1 | 2026-10-30 | 回写执行期已做出的 6 类决定：SDK 37 与测试策略（JUnit4 + Robolectric + 截图人眼读，删 Turbine / Roborazzi）（D1、D2）；偏好存储 `SharedPreferences`、不引 DataStore（D30，原 U1）；时间戳统一 `Long`、不用 `Instant`（D7）；`generation_jobs` / `prompt_versions` 归 Plan 3、提示词以 `prompts/` 文件为唯一真源（D5、D6）；验收口径先 10 条后 20 条、千条性能归 Plan 2（D8、D9）；`VideoClient` 归 Plan 3（D31，原 U2）。正文状态改为已批准 |
