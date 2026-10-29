@@ -4,7 +4,7 @@
 
 **Goal:** 做出一个装得上模拟器、打开就能看见日历、能翻能搜能管标签的「梦匣」，但还不会录音。
 
-**Architecture:** 单 Gradle 工程置于 `android/`，单 module `:app` + 包边界（`data` / `domain` / `ui`）。数据用 Room（含 FTS4 全文索引），UI 用 Compose + Material3，深色为默认主题。本计划只做「读」的一半：录入与生成在 Plan 2/3。
+**Architecture:** 单 Gradle 工程置于 `android/`，单 module `:app` + 包边界（`data` / `domain` / `ui`）。数据用 Room，**不用 FTS4**——中文搜索走 4 列 `LIKE`（实测结论与理由见 Task 4「为什么不用 FTS4」）。UI 用 Compose + Material3，根界面用 `navigation-compose` 的真路由，深色为默认主题。本计划只做「读」的一半：录入与生成在 Plan 2/3。
 
 **Tech Stack:** Kotlin 2.4.21 · AGP 9.5.0 · Gradle 9.8.2 · Compose BOM 2026.09.00 · Room 2.8.5 · JUnit4 + Robolectric
 
@@ -18,6 +18,7 @@
 - **提示词不放进 `android/`**：`prompts/` 在仓库根，通过 `sourceSets` 引入（本计划暂不涉及，Plan 3 处理）。
 - **夜间体验是硬约束**：全流程深色、无白闪、不用纯白（`#FFFFFF` 禁止出现在主题与布局里）。
 - **不使用多 module**；不引入 Hilt/Koin（用简单的手写容器）；不引入 Navigation-Compose 之外的导航框架。
+- **导航必须是真路由**：根界面用 `androidx.navigation:navigation-compose` 的 `NavHost`，**不要再手搓 `when (tab)`**。底部栏只在 `Calendar` / `Library` 两个路由显示；`Record` / `FollowUp` / `Detail` / `Search` / `Tags` 路由现在就建好（Plan 1 允许先不导航过去，但路由定义必须在）。
 - **测试策略（有意的取舍）**：业务逻辑与 DAO 用 JVM 单测（JUnit4 + Robolectric）；Compose 界面靠「构建 → 安装 → 截图」验收，不写 UI 单元测试。理由：Robolectric 下跑 Compose 断言收益低于维护成本。**视觉回归靠人工读截图**：本工程没有 Roborazzi、没有 Turbine、没有 golden 目录，也没有任何自动图像比对。每张截图都必须逐张打开看（agent 用 read_image），并把「看到了什么」写进证据文件（见 §2）。
 - **机队纪律 · adb**：`adb` **不在 PATH**，绝对路径是 `C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe`。PowerShell 的 `>` 会把二进制重定向污染成 UTF-16LE——实测裸 `adb exec-out screencap -p > x.png` 产出 2,651,774 字节、头部 `FF FE FD FF 50 00 4E 00 ...`，PIL 报 `UnidentifiedImageError`。所以**禁止**裸 `adb ... > file`，截图必须走 `cmd /c` 的二进制安全重定向（每个 Task 的截图步骤都已写成这个形式）：
 
@@ -50,6 +51,7 @@
 | 版本实查 | AGP 稳定版最新 **9.5.0**；Kotlin **2.4.21**；Compose BOM **2026.09.00**；Room **2.8.5** |
 
 **已知风险**：
+- **没有 JDK 17**：本机 JDK 就是 Android Studio 自带的 OpenJDK 25.0.4，既没有第二个 JDK，也没有 toolchain resolver。所以**禁止 `jvmToolchain(17)`**（必然 `No matching toolchains found for requested specification: {languageVersion=17}`）；正确写法是 `compilerOptions.jvmTarget = JvmTarget.JVM_17` + `compileOptions` 双写，用 JDK 25 编译到 17 字节码（Task 1 Step 3 已按此改）。
 - `platforms` 目录名是 `android-37.0`（新版次要 API 命名），若 AGP 找不到 SDK 平台，先跑一次 `./gradlew :app:compileDebugKotlin`，按报错里的精确提示调整 `compileSdk`（报错会写出它需要的平台目录名）。
 - 只有 `build-tools/36.0.0`；AGP 9.5 可能要求 37.x，会在首次构建时自动下载（`licenses/android-sdk-license` 已存在，`dl.google.com` 可达）。
 
@@ -80,13 +82,11 @@ D:\DreamKeeper\
 │           │   │   ├── db\DreamEntity.kt
 │           │   │   ├── db\TagEntity.kt
 │           │   │   ├── db\DreamTagEntity.kt
-│           │   │   ├── db\DreamFtsEntity.kt
 │           │   │   ├── db\MediaAssetEntity.kt
-│           │   │   ├── db\GenerationJobEntity.kt
 │           │   │   ├── db\DreamDao.kt
 │           │   │   ├── db\TagDao.kt
+│           │   │   ├── db\DreamTagDao.kt
 │           │   │   ├── db\MediaAssetDao.kt
-│           │   │   ├── db\GenerationJobDao.kt
 │           │   │   ├── db\SeedData.kt
 │           │   │   └── DreamRepository.kt
 │           │   ├── domain\
@@ -95,17 +95,24 @@ D:\DreamKeeper\
 │           │   │   ├── MediaAsset.kt
 │           │   │   └── DreamCalendar.kt
 │           │   └── ui\
-│           │       ├── theme\Color.kt / Theme.kt / Type.kt
+│           │       ├── theme\Color.kt / Theme.kt / Type.kt / Night.kt
+│           │       ├── nav\DreamRoute.kt
 │           │       ├── DreamKeeperRoot.kt
 │           │       ├── calendar\CalendarScreen.kt / CalendarViewModel.kt
-│           │       ├── library\LibraryScreen.kt / LibraryViewModel.kt
-│           │       ├── detail\DetailScreen.kt
-│           │       ├── search\SearchScreen.kt
-│           │       └── tags\TagsScreen.kt
+│           │       ├── library\LibraryScreen.kt / LibraryViewModel.kt / LayoutPrefs.kt
+│           │       ├── detail\DetailScreen.kt / DetailViewModel.kt
+│           │       ├── search\SearchScreen.kt / SearchViewModel.kt
+│           │       ├── record\RecordUiState.kt
+│           │       └── tags\TagsScreen.kt / TagsViewModel.kt
 │           └── res\values\strings.xml / themes.xml
 │       └── src\test\java\com\dreamkeeper\
 │           ├── domain\DreamCalendarTest.kt
-│           └── data\DreamDaoTest.kt
+│           ├── data\DreamDaoTest.kt
+│           ├── data\DreamRepositoryTest.kt
+│           ├── ui\calendar\CalendarViewModelTest.kt
+│           ├── ui\library\LibraryViewModelTest.kt
+│           ├── ui\detail\DetailViewModelTest.kt
+│           └── ui\theme\ThemeContrastTest.kt
 └── docs\
     ├── superpowers\plans\             # 本文件所在
     ├── superpowers\specs\             # 设计文档（最高依据）
@@ -219,11 +226,16 @@ coroutines = "1.10.2"
 junit = "4.13.2"
 robolectric = "4.16"
 androidxTestCore = "1.7.0"
+# ⚠️ 未验证：这个版本号没有在本机解析过。实现者第一次构建时若报找不到该版本，
+# 按 https://maven.google.com/androidx/navigation/navigation-compose/maven-metadata.xml
+# 的当前稳定版改这一行即可（不要动别的依赖）。
+navigationCompose = "2.9.6"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
@@ -302,6 +314,8 @@ sdk.dir=C\:\\Users\\17383\\AppData\\Local\\Android\\Sdk
 `android/app/build.gradle.kts`：
 
 ```kotlin
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -324,14 +338,22 @@ android {
 
     buildFeatures { compose = true }
 
+    // 编译目标 17，但**不用 jvmToolchain(17)**：本机只有 Android Studio 自带的 JDK 25.0.4，
+    // 没有 JDK 17、也没有 toolchain resolver。jvmToolchain(17) 会直接报
+    // `No matching toolchains found for requested specification: {languageVersion=17}`。
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin { jvmToolchain(17) }
-
     testOptions { unitTests { isIncludeAndroidResources = true } }
+}
+
+// 与 android { } 同级：用现有 JDK 25 编译，产出 17 字节码（与 compileOptions 成对出现，缺一个都不行）
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
 }
 
 dependencies {
@@ -339,6 +361,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)   // 真路由（Task 6 的 NavHost）
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
@@ -354,6 +377,10 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 ```
+
+> **版本口径**：这里只有「Kotlin 编译器目标 = 17」，没有「本机必须装 JDK 17」。以后若看到 `jvmToolchain` 被加回来，直接删掉——它不是更严格，它只是在本机会失败。
+>
+> **若 KSP/Room 编译报版本不匹配**（典型报错 `ksp-2.x.x is too old for kotlin-2.4.21` / `Unable to find method ... KspExtension`）：**先按 Kotlin 版本对齐 KSP**，即把 `[plugins] ksp` 改成 `<kotlin 版本>-<ksp 版本>`（`2.4.21-<ksp>`），去 `maven-metadata.xml` 取对应的那一条。**不要误改 Room 版本**——Room 2.8.5 与 Kotlin 版本无关，改它只会把问题挪到别处。
 
 `android/app/src/main/AndroidManifest.xml`：
 
@@ -470,6 +497,7 @@ cd D:\DreamKeeper\android
 
 Expected: `BUILD SUCCESSFUL`，产物 `app\build\outputs\apk\debug\app-debug.apk`。
 若报 SDK 平台/Build-Tools 缺失：读报错里的精确目录名，先试 `compileSdk = 37`+`buildToolsVersion = "36.0.0"`，仍失败则把报错原文贴进计划文档的「已知风险」并停下询问。
+若报 `No matching toolchains found`：说明 `jvmToolchain(...)` 又被加回来了。删掉它，回到 Step 3 的 `compilerOptions.jvmTarget = JvmTarget.JVM_17` 写法——本机没有 JDK 17，这不是配置问题，是环境事实。
 
 - [ ] **Step 6: 安装到模拟器并截图**
 
@@ -523,10 +551,12 @@ git commit -m "docs(evidence): task1 证据归档"
 - Create: `android/app/src/main/res/drawable/ic_launcher_dark.xml`（深底临时图标）
 - Modify: `android/app/src/main/java/com/dreamkeeper/MainActivity.kt`
 - Modify: `android/app/src/main/AndroidManifest.xml`（补 `android:icon`）
+- Test: `android/app/src/test/java/com/dreamkeeper/ui/theme/ThemeContrastTest.kt`（纯 JVM，不写 UI 测试）
 
 **Interfaces:**
-- Produces: `@Composable fun DreamKeeperTheme(content: @Composable () -> Unit)`；颜色常量 `Night`、`Paper`、`Ink`、`InkDim`、`Ember`、`Line`（后续所有界面只用这套）。
+- Produces: `@Composable fun DreamKeeperTheme(content: @Composable () -> Unit)`；颜色常量 `Night`、`NightRaised`、`Paper`、`Ink`、`InkDim`、`Ember`、`Line`、`EmberDeep`、`ErrorText`（后续所有界面只用这套）。
 - Produces: 一个「从图标到第一帧都不白」的启动路径：`values/themes.xml` + `values-v31/themes.xml` + 深底图标。
+- Produces: `ThemeContrastTest` —— 把「这个灰太暗了」从审美争论变成会红的断言（WCAG 实算，见 Step 2）。
 
 - [ ] **Step 1: 写色板**
 
@@ -537,25 +567,37 @@ package com.dreamkeeper.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** 夜色背景：比纯黑略暖一点，避免 OLED 上的"空洞感" */
+/** 夜色背景：冷灰（偏蓝调的墨黑），不是暖黑。这个值不动——整屏观感由它定调，改了所有对比度都得重算 */
 val Night = Color(0xFF0B0E13)
 /** 抬升层（卡片、弹窗） */
 val NightRaised = Color(0xFF12161F)
-/** 正文：不用纯白，用微暖的浅灰 */
+/** 正文：冷灰的浅色（偏蓝调），不用纯白 */
 val Paper = Color(0xFFE6EAF2)
 /** 次要文字 */
 val InkDim = Color(0xFF8B95A7)
-/** 更弱的辅助信息 */
-val InkFaint = Color(0xFF5A6474)
-/** 分隔线 */
+/** 更弱的辅助信息。12sp 也属于正文，必须 ≥ 4.5:1 —— 旧值 #5A6474 只有 3.23:1 */
+val InkFaint = Color(0xFF7C8698)
+/** 分隔线：**只做装饰**。旧值拿它画"今天"的描边（1.34:1）等于看不见，今天改用 Ember */
 val Line = Color(0xFF232A36)
-/** 唯一强调色：琥珀，夜间不刺眼，也不与"红钮"抢注意力 */
+/** 唯一强调色：琥珀，夜间不刺眼，也不与"红钮"抢注意力（Night 上 6.4:1，够做 1.5dp 描边） */
 val Ember = Color(0xFFC8873F)
-/** 录音状态专用：暗红 */
+/** 录音状态专用**填充色**：暗红。不做文字色（Night 上只有 2.57:1），只用于说梦钮与错误容器的底色 */
 val EmberDeep = Color(0xFF8C3B34)
+/** 错误文字：EmberDeep 当 `error` 用时对比度不达标，M3 的 `error` 必须用这个（Night 上 7.18:1） */
+val ErrorText = Color(0xFFE08578)
 ```
 
-- [ ] **Step 2: 写主题**
+> **为什么动这三个值**（WCAG 2.x 实算，Night `#0B0E13` 为底）：
+> | 颜色 | 旧值 | 旧对比度 | 新值 | 新对比度 | 用途 |
+> |---|---|---|---|---|---|
+> | `InkFaint` | `#5A6474` | **3.23:1**（12sp 正文不合格） | `#7C8698` | **5.27:1** | 辅助文字 |
+> | 今天描边 | `Line #232A36` | **1.34:1**（等于没画） | `Ember #C8873F` | 6.4:1 | 1.5dp 圈住今天 |
+> | `error` | `EmberDeep #8C3B34` | **2.57:1** | `ErrorText #E08578` | **7.18:1** | M3 错误文字 |
+>
+> **色温不动**：`Night` / `Paper` 一个字节都不改。要改的是注释——它们一直把冷灰写成"暖"，这是文档错误，不是配色方案。
+> `Line` 从此只出现在装饰性分隔线（列表竖线、卡片分隔），**不许再用于任何"必须看见"的边界**。`EmberDeep` 只作填充：说梦钮的底色、错误容器底色。
+
+- [ ] **Step 2: 写主题 + 对比度单测（WCAG 实算，纯 JVM）**
 
 `ui/theme/Theme.kt`：
 
@@ -574,8 +616,14 @@ private val DreamColorScheme = darkColorScheme(
     surface = NightRaised,
     onSurface = Paper,
     onSurfaceVariant = InkDim,
-    outline = Line,
-    error = EmberDeep,
+    // outline 是"必须看得见的边界"（输入框、可点容器），不能给 Line（1.34:1）；
+    // 装饰性分隔线走 outlineVariant —— 这是 Line 在 M3 里的唯一去处
+    outline = InkDim,
+    outlineVariant = Line,
+    error = ErrorText,
+    // EmberDeep 只做填充：错误容器的底色，不是错误文字的颜色
+    errorContainer = EmberDeep,
+    onErrorContainer = Paper,
 )
 
 @Composable
@@ -583,6 +631,58 @@ fun DreamKeeperTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = DreamColorScheme, typography = DreamTypography, content = content)
 }
 ```
+
+`android/app/src/test/java/com/dreamkeeper/ui/theme/ThemeContrastTest.kt`（**纯 JVM 单测**：不渲染、不截图、无需 Robolectric）：
+
+```kotlin
+package com.dreamkeeper.ui.theme
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * WCAG 2.0 对比度实算。Compose 的 `Color.luminance()` 就是 WCAG 相对亮度公式的实现，
+ * 所以这里不再手写 0.2126/0.7152/0.0722——公式只该有一份，且不该抄错。
+ *
+ * 目的：把「这个灰太暗了」变成一条会红的断言。失败信息里带实测值，直接照着调色。
+ */
+class ThemeContrastTest {
+
+    private fun contrast(a: Color, b: Color): Double {
+        val la = a.luminance().toDouble()
+        val lb = b.luminance().toDouble()
+        return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
+    }
+
+    private fun assertContrast(name: String, fg: Color, bg: Color, min: Double) {
+        val actual = contrast(fg, bg)
+        assertTrue(
+            "$name 实测 %.2f:1，要求 ≥ %.1f:1".format(actual, min),
+            actual >= min,
+        )
+    }
+
+    @Test fun `ink faint is readable on night`() =
+        assertContrast("InkFaint on Night", InkFaint, Night, 4.5)
+
+    @Test fun `error text is readable on night`() =
+        assertContrast("ErrorText on Night", ErrorText, Night, 4.5)
+
+    @Test fun `paper is readable on night`() =
+        assertContrast("Paper on Night", Paper, Night, 4.5)
+
+    @Test fun `ember ring is visible on night`() =
+        assertContrast("Ember on Night", Ember, Night, 3.0)
+}
+```
+
+```powershell
+cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*ThemeContrastTest*" --no-daemon
+```
+
+Expected: 4 个测试通过。**这条测试先于界面存在**：色板改错时它在几秒内告诉你，而不是等截图出来靠肉眼猜。若它红了，改色值，不要放宽阈值（4.5 是 WCAG AA 的正文线）。
 
 - [ ] **Step 3: 写字体尺度**
 
@@ -676,7 +776,7 @@ git rev-parse --short HEAD
 
 - [ ] **Step 8: 归档证据**
 
-按 §2 写 `docs/evidence/plan1/task2.md`（short SHA、构建命令、APK 与截图 SHA256、读图结论、复现步骤、`task2-logcat.txt`），再 `git add docs/evidence/plan1; git commit -m "docs(evidence): task2 证据归档"`。
+按 §2 写 `docs/evidence/plan1/task2.md`（short SHA、构建命令、APK 与截图 SHA256、读图结论、复现步骤、`task2-logcat.txt`），并把 `ThemeContrastTest` 的 4 行通过输出贴进「构建结果」（它是三个符号对比度的唯一机器证据），再 `git add docs/evidence/plan1; git commit -m "docs(evidence): task2 证据归档"`。
 
 ---
 
@@ -808,30 +908,30 @@ git rev-parse --short HEAD
 
 ---
 
-## Task 4: 数据层 —— Room 实体、FTS 全文索引、DAO
+## Task 4: 数据层 —— Room 实体、LIKE 搜索与 DAO
 
 **Files:**
-- Create: `.../data/db/DreamEntity.kt`, `TagEntity.kt`, `DreamTagEntity.kt`, `DreamFtsEntity.kt`, `MediaAssetEntity.kt`, `GenerationJobEntity.kt`, `DreamDao.kt`, `TagDao.kt`, `MediaAssetDao.kt`, `GenerationJobDao.kt`, `Converters.kt`, `SeedData.kt`, `DreamDatabase.kt`
+- Create: `.../data/db/DreamEntity.kt`, `TagEntity.kt`, `DreamTagEntity.kt`, `MediaAssetEntity.kt`, `DreamDao.kt`, `TagDao.kt`, `DreamTagDao.kt`, `MediaAssetDao.kt`, `Converters.kt`, `SeedData.kt`, `DreamDatabase.kt`
 - Modify: `android/app/build.gradle.kts`（`ksp { arg("room.schemaLocation", ...) }`、`room-testing`、`buildConfigField("SEED_DEMO_DATA")`）
 - Modify: `android/gradle/libs.versions.toml`（加 `room-testing`）
 - Commit（必须入库）: `android/app/schemas/com.dreamkeeper.data.db.DreamDatabase/1.json` —— `exportSchema = true` 的产物，是 migration 的唯一对照物，删了它以后任何 schema 变更都失去依据
 - Test: `android/app/src/test/java/com/dreamkeeper/data/DreamDaoTest.kt`
 
+> **本任务不建 `generation_jobs` 表**：`GenerationJobEntity`/`GenerationJobDao` 整个撤回（第一轮按旧指令加过，现在撤回）。该表由 **Plan 3 建**——迁移基建（`exportSchema` + schema json + `room-testing`）已在 Plan 1 就位，届时 v1→v2 有基线可验。同理 `PromptVersion` 也不建，提示词以 `prompts/` 文件为唯一真源。
+
 **Interfaces:**
 - Produces（后续任务全部依赖这些精确签名）:
-  - `DreamEntity(id: String, ownerId: String, dreamDate: LocalDate, createdAt: Long, title: String?, rawTranscript: String, faithfulText: String?, novelText: String?, novelVersion: Int, novelChangeLog: String?, mood: String?, isDraft: Boolean, deletedAt: Long?, updatedAt: Long, rawAudioPath: String? = null, rawAudioMs: Long? = null, faithfulEditedByUser: Boolean = false, novelEditedByUser: Boolean = false, remoteId: String? = null)`
+  - `DreamEntity(id: String, ownerId: String, dreamDate: LocalDate, createdAt: Long, title: String?, rawTranscript: String, faithfulText: String?, novelText: String?, novelVersion: Int, novelChangeLog: String?, mood: String?, isDraft: Boolean, deletedAt: Long?, updatedAt: Long, rawAudioPath: String? = null, rawAudioMs: Long? = null, faithfulEditedByUser: Boolean = false, novelEditedByUser: Boolean = false, remoteId: String? = null, transcriptStatus: String = "OK")` —— `transcriptStatus` 是末尾追加字段，取值 `PENDING`/`OK`/`FAILED`
   - `MediaAssetEntity(id: String, dreamId: String, type: String, path: String?, prompt: String?, model: String?, status: String, createdAt: Long)`
-  - `GenerationJobEntity(id: String, dreamId: String, kind: String, status: String, provider: String?, model: String?, promptId: String?, promptVersion: Int?, promptHash: String?, temperature: Double?, tokensIn: Int?, tokensOut: Int?, error: String?, createdAt: Long)`
   - `DreamDao.observeByMonth(fromIso: String, toIso: String): Flow<List<DreamEntity>>`
   - `DreamDao.observeAll(): Flow<List<DreamEntity>>`
   - `DreamDao.observeById(id: String): Flow<DreamEntity?>`
   - `DreamDao.upsert(dream: DreamEntity)`
   - `DreamDao.count(): Int`（种子幂等判据）
-  - `DreamDao.searchRaw(ftsQuery: String): List<DreamEntity>`
-  - `TagDao.observeAll(): Flow<List<TagEntity>>`、`TagDao.upsert(tag: TagEntity)`、`TagDao.rename(id, newName)`、`TagDao.repointDreamTags(fromId, intoId)`、`TagDao.delete(id)`、`TagDao.count(): Int`
-  - `TagDao.observeTagsForDream(dreamId: String): Flow<List<TagEntity>>`（联 `dream_tags`，详情页标签 tab 用这个——`Dream` 上没有 `tags` 字段）
+  - `DreamDao.searchTerm(term: String): List<DreamEntity>` —— `term` 必须是**已转义**的词（调用方唯一：`DreamRepository.search`；转义见 Task 5）
+  - `TagDao.observeAll(): Flow<List<TagEntity>>`、`TagDao.upsert(tag: TagEntity)`、`TagDao.rename(id, newName)`、`TagDao.repointDreamTags(fromId, intoId)`、`TagDao.delete(id)`（事务：先删关联再删标签）、`TagDao.count(): Int`
+  - `DreamTagDao.upsertAll(links: List<DreamTagEntity>)`、`DreamTagDao.deleteByDream(dreamId)`、`DreamTagDao.observeTagsForDream(dreamId): Flow<List<TagEntity>>`（`tags INNER JOIN dream_tags`，按 `kind, name` 排序；详情页标签 tab 用这个——`Dream` 上没有 `tags` 字段）、`DreamTagDao.deleteByTag(tagId)`
   - `MediaAssetDao.upsert(asset)`、`MediaAssetDao.observeByDream(dreamId): Flow<List<MediaAssetEntity>>`
-  - `GenerationJobDao.insert(job: GenerationJobEntity)`、`GenerationJobDao.observeByDream(dreamId: String): Flow<List<GenerationJobEntity>>`
   - `SeedData.seedIfEmpty(db: DreamDatabase)`（幂等：库里已有梦就返回）
   - `DreamDatabase.create(context: Context): DreamDatabase`
 
@@ -949,17 +1049,17 @@ class DreamDaoTest {
     }
 
     @Test
-    fun `full text search finds a word inside the transcript`() = runTest {
+    fun `like search finds a word inside the transcript`() = runTest {
         dao.upsert(dream("1", "2026-10-01", "电梯里有人按了六楼"))
         dao.upsert(dream("2", "2026-10-02", "教室最后一排"))
-        val got = dao.search("电梯")
+        val got = dao.searchTerm("电梯")
         assertEquals(listOf("1"), got.map { it.id })
     }
 
     @Test
     fun `search also matches the novel text`() = runTest {
         dao.upsert(dream("1", "2026-10-01").copy(novelText = "他在楼道尽头回头看我"))
-        val got = dao.search("楼道")
+        val got = dao.searchTerm("楼道")
         assertEquals(listOf("1"), got.map { it.id })
     }
 
@@ -975,19 +1075,15 @@ class DreamDaoTest {
     }
 
     @Test
-    fun `generation job is stored against a dream`() = runTest {
-        dao.upsert(dream("1", "2026-10-01"))
-        db.generationJobDao().insert(
-            GenerationJobEntity(
-                id = "g1", dreamId = "1", kind = "NOVELIZE", status = "PENDING",
-                provider = null, model = null, promptId = "novelize", promptVersion = 1,
-                promptHash = "abc123", temperature = 0.7, tokensIn = null, tokensOut = null,
-                error = null, createdAt = 0L,
-            )
-        )
-        val jobs = db.generationJobDao().observeByDream("1").first()
-        assertEquals(1, jobs.size)
-        assertEquals("NOVELIZE", jobs.first().kind)
+    fun `transcript status defaults to OK and round trips PENDING then OK`() = runTest {
+        // 默认构造仍编译，且默认值就是 OK：Plan 1 不录音，所有行都该是 OK
+        assertEquals(TranscriptStatus.OK, dream("0", "2026-10-01").transcriptStatus)
+
+        dao.upsert(dream("1", "2026-10-01").copy(transcriptStatus = TranscriptStatus.PENDING))
+        assertEquals(TranscriptStatus.PENDING, dao.observeById("1").first()!!.transcriptStatus)
+
+        dao.upsert(dream("1", "2026-10-01").copy(transcriptStatus = TranscriptStatus.OK))
+        assertEquals(TranscriptStatus.OK, dao.observeById("1").first()!!.transcriptStatus)
     }
 
     @Test
@@ -995,9 +1091,21 @@ class DreamDaoTest {
         dao.upsert(dream("1", "2026-10-01"))
         db.tagDao().upsert(TagEntity("t1", "电梯", TagKind.OBJECT))
         db.tagDao().upsert(TagEntity("t2", "坠落", TagKind.EMOTION))
-        db.tagDao().linkDreamTag(DreamTagEntity("1", "t1"))
-        val tags = db.tagDao().observeTagsForDream("1").first()
+        db.dreamTagDao().upsertAll(listOf(DreamTagEntity("1", "t1")))
+        val tags = db.dreamTagDao().observeTagsForDream("1").first()
         assertEquals(listOf("t1"), tags.map { it.id })
+    }
+
+    @Test
+    fun `deleting a tag also removes its dream links`() = runTest {
+        dao.upsert(dream("1", "2026-10-01"))
+        db.tagDao().upsert(TagEntity("t1", "电梯", TagKind.OBJECT))
+        db.dreamTagDao().upsertAll(listOf(DreamTagEntity("1", "t1")))
+
+        db.tagDao().delete("t1")   // 事务：先删 dream_tags，再删 tags
+
+        assertEquals(0, db.dreamTagDao().observeTagsForDream("1").first().size)
+        assertEquals(0, db.tagDao().observeAll().first().size)
     }
 
     @Test
@@ -1049,6 +1157,17 @@ object MediaType {
     const val VIDEO = "VIDEO"
 }
 
+/**
+ * 转写状态。为什么不用「空串当哨兵」：断网首跑、本机无中文离线包、API 26–30 没有 on-device 识别时，
+ * 必然出现「录音已落盘、文字还没出来」的中间态；而「真录到静音」也会产出空串。
+ * 两种空串含义完全相反，必须由状态位解释，不能靠内容猜。
+ */
+object TranscriptStatus {
+    const val PENDING = "PENDING"
+    const val OK = "OK"
+    const val FAILED = "FAILED"
+}
+
 @Entity(tableName = "dreams")
 data class DreamEntity(
     @PrimaryKey val id: String,
@@ -1079,6 +1198,11 @@ data class DreamEntity(
     val novelEditedByUser: Boolean = false,
     /** 云同步预留（设计 §12：v1 不传输，只留字段） */
     val remoteId: String? = null,
+    /**
+     * 转写状态（设计 §5、§8）：`PENDING` = 已开录、文字还没出来；`OK` = 转写成功；`FAILED` = 转写失败。
+     * 不能用空串当哨兵——空串分不清「还没转写」和「真的录到一段静音」。
+     */
+    val transcriptStatus: String = TranscriptStatus.OK,
 )
 ```
 
@@ -1140,64 +1264,6 @@ data class MediaAssetEntity(
 )
 ```
 
-`data/db/GenerationJobEntity.kt`（生成任务台账。Plan 1 只建表，不产生任务；Plan 3 写入）：
-
-```kotlin
-package com.dreamkeeper.data.db
-
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-object GenKind { const val NOVELIZE = "NOVELIZE"; const val TAGS = "TAGS"; const val STT = "STT" }
-object GenStatus { const val PENDING = "PENDING"; const val RUNNING = "RUNNING"
-                   const val DONE = "DONE"; const val FAILED = "FAILED" }
-
-/**
- * 每次调模型都留一条记录：花了多少 token、用的哪个提示词版本、失败原因是什么。
- * 设计 §9 要求「成本可见」与「绝不静默丢弃」，所以这张表是审计面，不是缓存。
- *
- * 注意：**不建 PromptVersion 表**。提示词的真源是仓库根的 `prompts/` 文件，
- * 表里只存 (promptId, promptVersion, promptHash) 三元组——这样提示词改动走 git diff，
- * 而不是走数据库迁移；也不会出现「库里那份提示词和文件里那份不一致」的分裂。
- */
-@Entity(tableName = "generation_jobs", indices = [androidx.room.Index("dreamId")])
-data class GenerationJobEntity(
-    @PrimaryKey val id: String,
-    val dreamId: String,
-    val kind: String,                 // GenKind
-    val status: String,               // GenStatus
-    val provider: String? = null,     // 失败时可能还没选到 provider
-    val model: String? = null,
-    val promptId: String? = null,
-    val promptVersion: Int? = null,
-    val promptHash: String? = null,   // 提示词内容哈希，用于追溯"当时发的到底是哪版"
-    val temperature: Double? = null,
-    val tokensIn: Int? = null,
-    val tokensOut: Int? = null,
-    val error: String? = null,
-    val createdAt: Long = 0L,
-)
-```
-
-`data/db/DreamFtsEntity.kt`（FTS4 内容表，Room 自动与 `dreams` 同步）：
-
-```kotlin
-package com.dreamkeeper.data.db
-
-import androidx.room.Entity
-import androidx.room.Fts4
-import androidx.room.FtsOptions
-
-@Fts4(contentEntity = DreamEntity::class, order = FtsOptions.Order.DESC)
-@Entity(tableName = "dreams_fts")
-data class DreamFtsEntity(
-    val title: String?,
-    val rawTranscript: String,
-    val faithfulText: String?,
-    val novelText: String?,
-)
-```
-
 - [ ] **Step 5: 写 DAO**
 
 `data/db/DreamDao.kt`：
@@ -1233,24 +1299,48 @@ interface DreamDao {
     @Query("SELECT * FROM dreams WHERE id = :id")
     fun observeById(id: String): Flow<DreamEntity?>
 
+    /**
+     * 4 列 LIKE 搜索。
+     *
+     * **term 必须是已转义的**：`\` → `\\`、`%` → `\%`、`_` → `\_`。否则用户搜 `100%`
+     * 会被当成通配符命中全库。转义只该发生在一处：`DreamRepository.search`。
+     *
+     * 为什么不是 FTS：见下面「为什么不用 FTS4」——中文没有空格，FTS 的 tokenizer
+     * 会把整段连续汉字当成一个 token，`MATCH "电梯"` 命中 0 行。
+     */
     @Query("""
-        SELECT dreams.* FROM dreams
-        JOIN dreams_fts ON dreams.rowid = dreams_fts.rowid
-        WHERE dreams_fts MATCH :ftsQuery AND dreams.deletedAt IS NULL
-        ORDER BY dreams.dreamDate DESC
+        SELECT * FROM dreams
+        WHERE deletedAt IS NULL AND (
+            title LIKE '%'||:term||'%' ESCAPE '\'
+            OR rawTranscript LIKE '%'||:term||'%' ESCAPE '\'
+            OR faithfulText LIKE '%'||:term||'%' ESCAPE '\'
+            OR novelText LIKE '%'||:term||'%' ESCAPE '\'
+        )
+        ORDER BY dreamDate DESC, createdAt DESC
     """)
-    suspend fun searchRaw(ftsQuery: String): List<DreamEntity>
+    suspend fun searchTerm(term: String): List<DreamEntity>
 }
 ```
 
-> **注意**：`dreamDate` 是 `LocalDate`，经 TypeConverter 存成 `yyyy-MM-dd` 字符串，所以 `BETWEEN :fromIso AND :toIso` 是字符串比较——ISO 日期按字典序比较与按时间比较结果一致，这是安全的。中文检索必须给每段加引号：`search()` 的封装放在 Repository（Task 5），把用户输入切成 `"词1" AND "词2"`。
+> **注意**：`dreamDate` 是 `LocalDate`，经 TypeConverter 存成 `yyyy-MM-dd` 字符串，所以 `BETWEEN :fromIso AND :toIso` 是字符串比较——ISO 日期按字典序比较与按时间比较结果一致，这是安全的。搜索的封装在 Repository（Task 5）：按空白切词、每词做 LIKE 转义、逐词调 `searchTerm`、按 id 求交集。
 
-> **已知风险（中文 FTS，开工前就要知道）**：SQLite 的 FTS4 默认 tokenizer（`simple`）**不按词切分中文**，它把一整段连续汉字当成一个 token。后果是 `search("电梯")` 对正文「电梯里有人按了六楼」**可能直接失配**（整条正文是一个 token，`"电梯"` 这个短语匹配不到它），`search("电")` 更必然失配。这是 FTS 的中文通病，不是我们代码写错。
->
-> 处置顺序（别提前优化，但亮红灯时别改错方向）：
-> 1. 先跑 `DreamDaoTest` 里的 `full text search finds a word inside the transcript`。**绿了就继续，一行都不要动**——不同 SQLite/Room 版本对 CJK 的实际行为有出入，实测优先于推理。
-> 2. 若红灯，兜底方案是**写入前切分**：入库 FTS 的那份文本按「汉字双字切分」处理（`电梯里有人` → `电梯 梯里 里有 有人`），`dreams` 表本身仍存原文（原文一个字都不能改）；查询时对 query 做同样的双字切分，再拼成短语 `"电梯" AND "梯里"` 匹配。
-> 3. 这条兜底会动两处：`DreamFtsEntity`（`@Fts4(contentEntity = ...)` 的自动同步做不了文本变换，必须改成手动维护 FTS 表或在实体上加"切分后"的列）与 Repository 的匹配函数 `search()`。具体形态等红灯再定，**定了必须写进 task4 的证据文件**，并在设计文档 §15 登记这条决策。
+#### 为什么不用 FTS4（实测于 SQLite 3.40.1）
+
+两个角色各自独立复现，结论一致——**这不是"可能有风险"，是已经确定会红**：
+
+| 写法 | 对正文「电梯里有人按了六楼」搜「电梯」 | 结论 |
+|---|---|---|
+| `@Fts4`（默认 `simple` tokenizer） | `MATCH "电梯"` → **0 行** | 整段连续汉字是一个 token |
+| `@Fts4` + `unicode61` | 同样 **0 行** | unicode61 不按中文词边界切分 |
+| `MATCH "电梯*"` | 命中 | 只有前缀匹配可用 |
+
+中文没有空格，FTS 的 tokenizer 拿不到"词"这个单位；拿整段当一个 token，结果就是"要么全中，要么不中"。
+所以 Plan 1 的搜索是：**4 列 `LIKE` + 手写转义 + 逐词求交**（`title` / `rawTranscript` / `faithfulText` / `novelText`）。
+`DreamDaoTest` 里那两条中文搜索断言**保持原样**——它们代表产品需求（搜「电梯」必须命中），实现迁就需求，不是需求迁就实现。
+
+**性能**：1000 条规模、4 列短文本的 `LIKE '%x%'` 是毫秒级，够用。真到破万条、搜索明显变卡，再换"逐字空格索引"。
+
+**升级路径（已探明，但现在不做）**：写入时按汉字加空格（`电梯里有` → `电 梯 里 有`），查询时按短语匹配。拦路的是 `@Fts4(contentEntity = DreamEntity::class)`——Room 自动同步的是**原文**，插不了空格。届时必须改成非 content 表（自己维护 FTS 表、写入切分后的文本），这是一次真正的迁移，不是换个 tokenizer 参数。等真有破万条数据再动。
 
 `data/db/TagDao.kt`：
 
@@ -1261,6 +1351,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -1270,24 +1361,58 @@ interface TagDao {
     @Query("UPDATE tags SET name = :newName WHERE id = :id") suspend fun rename(id: String, newName: String)
     @Query("UPDATE OR REPLACE dream_tags SET tagId = :intoId WHERE tagId = :fromId")
     suspend fun repointDreamTags(fromId: String, intoId: String)
-    @Query("DELETE FROM tags WHERE id = :id") suspend fun delete(id: String)
     @Query("SELECT COUNT(*) FROM tags") suspend fun count(): Int
 
-    /** 建立 梦 ⇄ 标签 关联（Plan 3 的自动打标与 Plan 1 的种子数据都走这里） */
-    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun linkDreamTag(link: DreamTagEntity)
+    @Query("DELETE FROM dream_tags WHERE tagId = :tagId") suspend fun deleteLinksForTag(tagId: String)
+    @Query("DELETE FROM tags WHERE id = :id") suspend fun deleteRow(id: String)
 
     /**
-     * 详情页「标签」tab 的数据源。
-     * 不能用 `dream.tags`——`Dream` 领域模型上没有这个字段，也不该有：
-     * 标签是多对多关系，塞进 Dream 会让每次读梦都多一次联表（设计 §5 的关联表就是为此存在）。
+     * 删标签 = 先断关联、再删行，**必须在同一个事务里**。
+     * 分两步裸写会在中间留下"指向不存在标签"的关联行，下次联表查询就踩空。
      */
+    @Transaction
+    suspend fun delete(id: String) {
+        deleteLinksForTag(id)
+        deleteRow(id)
+    }
+}
+```
+
+`data/db/DreamTagDao.kt`（梦 ⇄ 标签关联表的**唯一写入方**；`TagDao` 只管标签本身）：
+
+```kotlin
+package com.dreamkeeper.data.db
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * **禁止给 `dream_tags` 加外键 CASCADE。**
+ * Task 9 的标签合并走 `UPDATE OR REPLACE`（REPLACE 冲突 = 先删后插），
+ * 一旦有 CASCADE，删那一行时会把它的关联行一起删掉——合并一次丢一批标注，而且不报错。
+ * 关联只能显式清理：`deleteByDream` / `deleteByTag` / `TagDao.delete` 里的事务。
+ */
+@Dao
+interface DreamTagDao {
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun upsertAll(links: List<DreamTagEntity>)
+
+    @Query("DELETE FROM dream_tags WHERE dreamId = :dreamId") suspend fun deleteByDream(dreamId: String)
+
+    /** 详情页「标签」tab 的数据源：联表取标签，按 kind, name 排序 */
     @Query("""
         SELECT tags.* FROM tags
-        JOIN dream_tags ON tags.id = dream_tags.tagId
+        INNER JOIN dream_tags ON tags.id = dream_tags.tagId
         WHERE dream_tags.dreamId = :dreamId
         ORDER BY tags.kind, tags.name
     """)
     fun observeTagsForDream(dreamId: String): Flow<List<TagEntity>>
+
+    @Query("DELETE FROM dream_tags WHERE tagId = :tagId") suspend fun deleteByTag(tagId: String)
 }
 ```
 
@@ -1310,25 +1435,6 @@ interface MediaAssetDao {
 }
 ```
 
-`data/db/GenerationJobDao.kt`（Plan 1 只要两条：写得进、按 dream 查得出）：
-
-```kotlin
-package com.dreamkeeper.data.db
-
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import kotlinx.coroutines.flow.Flow
-
-@Dao
-interface GenerationJobDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(job: GenerationJobEntity)
-    @Query("SELECT * FROM generation_jobs WHERE dreamId = :dreamId ORDER BY createdAt DESC")
-    fun observeByDream(dreamId: String): Flow<List<GenerationJobEntity>>
-}
-```
-
 - [ ] **Step 6: 写 Database**
 
 `data/db/DreamDatabase.kt`：
@@ -1344,7 +1450,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [DreamEntity::class, TagEntity::class, DreamTagEntity::class,
-                MediaAssetEntity::class, GenerationJobEntity::class, DreamFtsEntity::class],
+                MediaAssetEntity::class],
     version = 1,
     exportSchema = true,      // 必须 true：schema json 是 migration 的唯一对照物
 )
@@ -1352,8 +1458,8 @@ import androidx.room.TypeConverters
 abstract class DreamDatabase : RoomDatabase() {
     abstract fun dreamDao(): DreamDao
     abstract fun tagDao(): TagDao
+    abstract fun dreamTagDao(): DreamTagDao
     abstract fun mediaAssetDao(): MediaAssetDao
-    abstract fun generationJobDao(): GenerationJobDao
 
     companion object {
         fun create(context: Context): DreamDatabase =
@@ -1402,7 +1508,7 @@ object SeedData {
             "我在电梯里，电梯一直往上，按不到一楼。数字过了三十还在涨。"))
         db.tagDao().upsert(TagEntity(TAG_EMOTION_FALL, "下坠的预感", TagKind.EMOTION,
             TagSource.AUTO, "电梯一直往上，按不到一楼"))
-        db.tagDao().linkDreamTag(DreamTagEntity(DREAM_ELEVATOR, TAG_EMOTION_FALL))
+        db.dreamTagDao().upsertAll(listOf(DreamTagEntity(DREAM_ELEVATOR, TAG_EMOTION_FALL)))
 
         // 2) 教室：带一个 VIDEO 素材占位（设计 §12「梦 → 视频」的预留口子）
         dreams.upsert(dream(DREAM_CLASSROOM, "2026-10-24", "教室",
@@ -1451,22 +1557,22 @@ object SeedData {
 cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*DreamDaoTest*" --no-daemon
 ```
 
-Expected: `BUILD SUCCESSFUL`，**8 个测试通过**；并确认 `android/app/schemas/com.dreamkeeper.data.db.DreamDatabase/1.json` 已生成（`git status` 里应看到它是未跟踪文件），把它一起提交。
+Expected: `BUILD SUCCESSFUL`，**9 个测试通过**；并确认 `android/app/schemas/com.dreamkeeper.data.db.DreamDatabase/1.json` 已生成（`git status` 里应看到它是未跟踪文件），把它一起提交。
 
-- 若 FTS 查询报 `no such column: dreams_fts.rowid`：把 `@Fts4` 改为 `@Fts4(contentEntity = DreamEntity::class)` 并**去掉** `order` 参数后重试。
-- 若 `full text search finds a word inside the transcript` 红：按 Step 5 的「已知风险」走双字切分兜底，**不要去改测试迁就实现**（改测试等于把中文搜索的 bug 焊进基线）。
+- 若 `like search finds a word inside the transcript` 红：先确认查询里 `LIKE '%'||:term||'%'` 的 `%` 和 `ESCAPE '\'` 都在，再确认测试库里的 `rawTranscript` 真的含「电梯」。**不要去改测试迁就实现**（改测试等于把中文搜索的 bug 焊进基线）。
+- 若 `deleting a tag also removes its dream links` 红：说明 `TagDao.delete` 没有包在 `@Transaction` 里，或者漏删了 `dream_tags`。
 
 - [ ] **Step 9: 提交**
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(data): Room 实体、FTS4 全文索引、生成任务台账与种子数据"
+git add -A; git commit -m "feat(data): Room 实体、LIKE 中文搜索与种子数据"
 git rev-parse --short HEAD
 ```
 
 - [ ] **Step 10: 归档证据**
 
-按 §2 写 `docs/evidence/plan1/task4.md`：short SHA、测试命令与末尾输出（`8 tests completed`）、`app/schemas/.../1.json` 的路径与一句话说明（它是 v1 结构基线）、种子注入后的库快照（若有）、复现步骤。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task4 证据归档"`。
+按 §2 写 `docs/evidence/plan1/task4.md`：short SHA、测试命令与末尾输出（`9 tests completed`）、`app/schemas/.../1.json` 的路径与一句话说明（它是 v1 结构基线）、种子注入后的库快照（若有）、复现步骤。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task4 证据归档"`。
 
 ---
 
@@ -1480,21 +1586,22 @@ git rev-parse --short HEAD
 **Interfaces:**
 - Consumes: Task 4 的 DAO 与实体。
 - Produces:
-  - `data class Dream(val id: String, val date: LocalDate, val title: String?, val rawTranscript: String, val faithfulText: String?, val novelText: String?, val novelChangeLog: String?, val mood: String?, val isDraft: Boolean)`
+  - `data class Dream(val id: String, val date: LocalDate, val title: String?, val rawTranscript: String, val faithfulText: String?, val novelText: String?, val novelChangeLog: String?, val mood: String?, val isDraft: Boolean, val novelVersion: Int = 0, val createdAt: Long = 0L, val updatedAt: Long = 0L, val deletedAt: Long? = null, val transcriptStatus: String = "OK", val rawAudioPath: String? = null, val rawAudioMs: Long? = null)` —— **新增字段一律带默认值、一律追加在末尾**：Task 6/7/8 的测试用位置参数构造 `Dream(id, date, title, ...)`，插在中间会静默错位。
   - `data class Tag(val id: String, val name: String, val kind: String, val source: String, val evidenceText: String?)`
   - `data class MediaAsset(val id: String, val dreamId: String, val type: String, val path: String?, val prompt: String?, val model: String?, val status: String, val createdAt: Long)`
   - `class DreamRepository(private val db: DreamDatabase, private val clock: () -> Long = System::currentTimeMillis)`
     - `fun observeMonth(month: YearMonth): Flow<List<Dream>>`
     - `fun observeAll(): Flow<List<Dream>>`
     - `fun observe(id: String): Flow<Dream?>`
-    - `suspend fun save(dream: Dream)`
+    - `suspend fun save(dream: Dream)` —— **不得覆盖调用方带来的 `createdAt` / `deletedAt`**（见 Step 4 的实现）
     - `suspend fun search(rawQuery: String): List<Dream>`
     - `fun observeTags(): Flow<List<Tag>>`
-    - `fun observeTagsForDream(dreamId: String): Flow<List<Tag>>`（详情页标签 tab）
+    - `fun observeTagsForDream(dreamId: String): Flow<List<Tag>>`（详情页标签 tab，走 `DreamTagDao` 联表）
+    - `suspend fun attachTags(dreamId: String, tagIds: List<String>)`（Plan 3 自动打标与 Task 9 合并的写入口）
     - `fun observeMediaAssets(dreamId: String): Flow<List<MediaAsset>>`（详情页素材 tab）
   - `class AppContainer(context: Context) { val database: DreamDatabase; val repository: DreamRepository }`
 
-- [ ] **Step 1: 写失败的测试（重点测 FTS 查询的转义）**
+- [ ] **Step 1: 写失败的测试（覆盖搜索转义、保存不篡改时间戳、标签联表）**
 
 ```kotlin
 package com.dreamkeeper.data
@@ -1561,6 +1668,46 @@ class DreamRepositoryTest {
         repo.save(d("1", "2026-10-01", "电梯"))
         assertEquals(0, repo.search("   ").size)
     }
+
+    @Test fun `search treats percent as a literal character`() = runTest {
+        repo.save(d("1", "2026-10-01", "进度 100% 就停下了"))
+        repo.save(d("2", "2026-10-02", "完全无关的一条"))
+        // 若 % 没被转义，LIKE '%%%' 会命中所有行——这条就是那个回归
+        assertEquals(listOf("1"), repo.search("100%").map { it.id })
+    }
+
+    @Test fun `search matches a substring in the middle of the novel text`() = runTest {
+        repo.save(d("1", "2026-10-01", "走廊很长").copy(
+            novelText = "走廊很长，尽头是楼道，灯闪了一下。"))
+        // 楼道 只出现在 novelText 的中间：4 列 LIKE 必须能捞出来
+        assertEquals(listOf("1"), repo.search("楼道").map { it.id })
+    }
+
+    @Test fun `save preserves createdAt across updates`() = runTest {
+        repo.save(d("1", "2026-10-15", "电梯"))
+        val first = repo.observe("1").first()!!
+        assertEquals(1000L, first.createdAt)
+
+        // 换一个时钟再存一次：createdAt 是"首次录入时间"，不许被这次补录/编辑改写
+        val later = DreamRepository(db) { 2000L }
+        later.save(first.copy(title = "改过的标题"))
+
+        val after = repo.observe("1").first()!!
+        assertEquals(1000L, after.createdAt)
+        assertEquals(2000L, after.updatedAt)
+        assertEquals("改过的标题", after.title)
+    }
+
+    @Test fun `save preserves deletedAt`() = runTest {
+        repo.save(d("1", "2026-10-15", "电梯"))
+        // 直接置成回收站里的行：save 不能把它悄悄捞回"未删除"
+        db.dreamDao().upsert(db.dreamDao().observeById("1").first()!!.copy(deletedAt = 500L))
+        val trashed = repo.observe("1").first()!!
+        assertEquals(500L, trashed.deletedAt)
+
+        repo.save(trashed)
+        assertEquals(500L, repo.observe("1").first()!!.deletedAt)
+    }
 }
 ```
 
@@ -1580,7 +1727,7 @@ Expected: 编译失败（`Unresolved reference: DreamRepository`）。
 
 - [ ] **Step 4: 写仓库**
 
-`data/DreamRepository.kt` 的关键实现（FTS 转义的细节是这段代码的全部价值）：
+`data/DreamRepository.kt` 的关键实现（**`save()` 不篡改时间戳、`search()` 的 LIKE 转义与求交**是这段代码的全部价值）：
 
 ```kotlin
 package com.dreamkeeper.data
@@ -1614,36 +1761,93 @@ class DreamRepository(
 
     /** 详情页标签 tab：联 dream_tags，绝不能读"Dream 上的 tags"（那个字段不存在也不该存在） */
     fun observeTagsForDream(dreamId: String): Flow<List<Tag>> =
-        tags.observeTagsForDream(dreamId).map { list -> list.map(::tagToDomain) }
+        db.dreamTagDao().observeTagsForDream(dreamId).map { list -> list.map(::tagToDomain) }
+
+    /** 打标 / 合并标签之后的重新关联：先清空这条梦的关联、再整体写入（幂等，可重放） */
+    suspend fun attachTags(dreamId: String, tagIds: List<String>) {
+        db.dreamTagDao().deleteByDream(dreamId)
+        db.dreamTagDao().upsertAll(tagIds.distinct().map { DreamTagEntity(dreamId, it) })
+    }
 
     /** 详情页素材 tab：Plan 1 里通常是空表，空态文案由 UI 决定 */
     fun observeMediaAssets(dreamId: String): Flow<List<MediaAsset>> =
         assets.observeByDream(dreamId).map { list -> list.map(::mediaToDomain) }
 
+    /**
+     * 写入一条梦。
+     *
+     * 两条不许动的规则（都是"静默改数据"的典型）：
+     * 1. `createdAt` 是**首次录入时间**。调用方带了非 0 值就原样保留，只有新建（0L）才用 now。
+     *    以前这里每次都写 `clock()`，于是"补录一句 / 改个标点"就把首次录入时间改成此刻——不可逆。
+     * 2. `deletedAt` 原样透传。以前构造实体时漏了它，于是任何一次编辑都会把回收站里的梦悄悄捞回来。
+     */
     suspend fun save(dream: Dream) {
+        val now = clock()
         dreams.upsert(
             DreamEntity(
                 id = dream.id, ownerId = "local", dreamDate = dream.date,
-                createdAt = clock(), title = dream.title,
+                createdAt = dream.createdAt.takeIf { it > 0L } ?: now,
+                title = dream.title,
                 rawTranscript = dream.rawTranscript, faithfulText = dream.faithfulText,
-                novelText = dream.novelText, novelChangeLog = dream.novelChangeLog,
-                mood = dream.mood, isDraft = dream.isDraft, updatedAt = clock(),
+                novelText = dream.novelText, novelVersion = dream.novelVersion,
+                novelChangeLog = dream.novelChangeLog,
+                mood = dream.mood, isDraft = dream.isDraft,
+                deletedAt = dream.deletedAt,
+                updatedAt = now,
+                rawAudioPath = dream.rawAudioPath, rawAudioMs = dream.rawAudioMs,
+                transcriptStatus = dream.transcriptStatus,
             )
         )
     }
 
-    /** 用户输入 -> FTS4 查询串：按空白切词，每词加引号以转义标点，词间 AND。 */
+    /**
+     * 用户输入 -> LIKE 查询：按空白切词，逐词查 4 列，按 id 求交集。
+     *
+     * 顺序即语义：第一个词的结果决定排序（`dreamDate DESC, createdAt DESC`），
+     * 后面的词只做过滤。所以"电梯 六楼"返回的仍是按日期排的列表，不会因为求交而乱序。
+     */
     suspend fun search(rawQuery: String): List<Dream> {
-        val terms = rawQuery.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+        val terms = rawQuery.trim().split(Regex("\\s+"))
+            .map { normalizeTerm(it) }
+            .filter { it.isNotEmpty() }
+            .distinct()
         if (terms.isEmpty()) return emptyList()
-        val fts = terms.joinToString(" AND ") { "\"" + it.replace("\"", "") + "\"" }
-        return dreams.searchRaw(fts).map(::toDomain)
+
+        var hits: List<Dream>? = null
+        for (term in terms) {
+            val matched = dreams.searchTerm(escapeLike(term)).map(::toDomain)
+            val previous = hits
+            hits = if (previous == null) matched else {
+                val ids = matched.mapTo(HashSet()) { it.id }
+                previous.filter { it.id in ids }   // 首词保序，后续词只做过滤
+            }
+        }
+        return hits.orEmpty()
     }
+
+    /**
+     * 去掉标点与引号：用户搜 `"电梯"！` 时，引号和感叹号是输入习惯，不是要匹配的字符。
+     * 但 `%` 与 `_` **必须留着**——它们是 LIKE 的通配符，要交给 [escapeLike] 转义，
+     * 否则「转义测试」会因为输入被提前洗干净而永远测不到转义。
+     */
+    private fun normalizeTerm(raw: String): String =
+        raw.trim().replace(Regex("[\\p{P}\\p{S}]")) { m ->
+            if (m.value == "%" || m.value == "_") m.value else ""
+        }
+
+    /** `\` `%` `_` 在 LIKE 里都有特殊含义：先转义，再拼进 `'%'||:term||'%'`（SQL 侧配 `ESCAPE '\'`） */
+    private fun escapeLike(term: String): String = term
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
 
     private fun toDomain(e: DreamEntity) = Dream(
         id = e.id, date = e.dreamDate, title = e.title, rawTranscript = e.rawTranscript,
         faithfulText = e.faithfulText, novelText = e.novelText,
         novelChangeLog = e.novelChangeLog, mood = e.mood, isDraft = e.isDraft,
+        novelVersion = e.novelVersion, createdAt = e.createdAt, updatedAt = e.updatedAt,
+        deletedAt = e.deletedAt, transcriptStatus = e.transcriptStatus,
+        rawAudioPath = e.rawAudioPath, rawAudioMs = e.rawAudioMs,
     )
 
     private fun tagToDomain(e: TagEntity) = Tag(e.id, e.name, e.kind, e.source, e.evidenceText)
@@ -1663,10 +1867,19 @@ package com.dreamkeeper.di
 import android.content.Context
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
+import com.dreamkeeper.ui.library.LayoutPrefs
+import com.dreamkeeper.ui.library.SharedPreferencesLayoutPrefs
 
+/**
+ * 组合根：这里是唯一"知道所有实现"的地方，UI 只拿接口。
+ * `layoutPrefs` 放在这里（而不是让界面自己 new）是为了测试能整体替换，
+ * 也避免视图层直接摸 `SharedPreferences`。
+ */
 class AppContainer(context: Context) {
-    val database: DreamDatabase by lazy { DreamDatabase.create(context.applicationContext) }
+    private val appContext = context.applicationContext
+    val database: DreamDatabase by lazy { DreamDatabase.create(appContext) }
     val repository: DreamRepository by lazy { DreamRepository(database) }
+    val layoutPrefs: LayoutPrefs by lazy { SharedPreferencesLayoutPrefs(appContext) }
 }
 ```
 
@@ -1711,26 +1924,26 @@ class DreamKeeperApp : Application() {
 cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*DreamRepositoryTest*" --no-daemon
 ```
 
-Expected: `BUILD SUCCESSFUL`，5 个测试通过（尤其 `search tolerates quotes and punctuation` 必须过）。
+Expected: `BUILD SUCCESSFUL`，9 个测试通过（尤其 `search treats percent as a literal character`、`save preserves createdAt across updates` 必须过——它们盯的是两类会被后续 Plan 悄悄踩回来的坑：通配符注入、时间戳被改写）。
 
 - [ ] **Step 6: 提交**
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(data): 仓库层、FTS 查询转义与种子注入"
+git add -A; git commit -m "feat(data): 仓库层、LIKE 搜索转义与种子注入"
 git rev-parse --short HEAD
 ```
 
 - [ ] **Step 7: 归档证据**
 
-按 §2 写 `docs/evidence/plan1/task5.md`：short SHA、`DreamRepositoryTest` 的 5 个测试通过输出、`Dream`/`Tag`/`MediaAsset` 三个领域类的字段清单（一句话核对与 Task 4 实体一致）、复现步骤。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task5 证据归档"`。
+按 §2 写 `docs/evidence/plan1/task5.md`：short SHA、`DreamRepositoryTest` 的 9 个测试通过输出、`Dream`/`Tag`/`MediaAsset` 三个领域类的字段清单（一句话核对与 Task 4 实体一致）、复现步骤。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task5 证据归档"`。
 
 ---
 
 ## Task 6: 日历首屏（梦匣真正的脸）
 
 **Files:**
-- Create: `.../ui/calendar/CalendarViewModel.kt`, `.../ui/calendar/CalendarScreen.kt`, `.../ui/DreamKeeperRoot.kt`
+- Create: `.../ui/calendar/CalendarViewModel.kt`, `.../ui/calendar/CalendarScreen.kt`, `.../ui/DreamKeeperRoot.kt`, `.../ui/nav/DreamRoute.kt`, `.../ui/theme/Night.kt`, `.../ui/record/RecordUiState.kt`
 - Modify: `.../MainActivity.kt`
 - Test: `android/app/src/test/java/com/dreamkeeper/ui/calendar/CalendarViewModelTest.kt`
 
@@ -1740,7 +1953,15 @@ git rev-parse --short HEAD
   - `data class CalendarUiState(val month: YearMonth, val grid: List<LocalDate?>, val daysWithDreams: Set<LocalDate>, val title: String)`
   - `class CalendarViewModel(repo: DreamRepository, initial: YearMonth) : ViewModel()`，方法 `fun nextMonth()`、`fun prevMonth()`、`fun goToday()`，暴露 `val state: StateFlow<CalendarUiState>`
   - `@Composable fun CalendarScreen(vm: CalendarViewModel, onDayClick: (LocalDate) -> Unit, onRecord: () -> Unit)`
-  - `@Composable fun DreamKeeperRoot(repo: DreamRepository)` —— 底部两 tab（日历 / 全部）+ 全局搜索入口
+  - `@Composable fun DreamKeeperRoot(repo: DreamRepository)` —— 根界面是**真路由**：`NavHost(startDestination = DreamRoute.Calendar.route)`，底部栏只在「日历 / 全部」两个路由显示
+  - `sealed interface DreamRoute { data object Calendar; data object Library; data class Detail(dreamId: String); data object Search; data object Tags; data class Record(entry: RecordEntry); data class FollowUp(dreamId: String) }`
+  - `enum class RecordEntry { HOME_BUTTON, LOCK_TILE, NOTIFICATION, SHORTCUT }`（说梦的四个入口；Plan 1 只用到 `HOME_BUTTON`）
+  - `data class RecordUiState(val elapsedMs: Long = 0, val paused: Boolean = false, val amplitude: Float = 0f)`（Plan 2 填充）
+  - `data class FollowUpUiState(val remainingMs: Int = 30_000, val recording: Boolean = false, val visible: Boolean = false)`（Plan 2/4 填充）
+  - `ui/theme/Night.kt` 的 `NightVoid` / `NightScrim` / `DreamMotion`
+
+> **路由不是"以后再说"**：`Record` / `FollowUp` / `Detail` / `Search` / `Tags` 五个路由在 Plan 1 就要存在（可以为空屏或占位）。Plan 2 加录音、Plan 4 接通知，都只是往既有路由里填内容；等到那时再从 `when (tab)` 改路由，等于把根界面重写一遍。
+> 依赖：`androidx.navigation:navigation-compose`（见 Task 1 的 `libs.versions.toml`）。Plan 1 的 `onRecord` 仍可为空实现，但**路由必须已经能跳**。
 
 - [ ] **Step 1: 写 ViewModel 的失败测试**
 
@@ -1892,42 +2113,172 @@ cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*Calend
 
 Expected: `BUILD SUCCESSFUL`，4 个测试通过。
 
-- [ ] **Step 5: 写日历界面**
+- [ ] **Step 5: 写日历界面 + 真路由**
+
+`ui/theme/Night.kt`（**只放夜间界面要用的 token，不要在这里重定义色板**）：
+
+```kotlin
+package com.dreamkeeper.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+/** 录音中 / 追问全屏页的底：比 Night 更深一档，让全屏页与首页有层级差 */
+val NightVoid = Color(0xFF05070A)
+/** 全屏页之上盖内容时的遮罩（80% 不透明的 NightVoid） */
+val NightScrim = Color(0xCC05070A)
+
+/** 动画时长口径：夜间不做长动画，超过 200ms 的过渡一律砍掉 */
+object DreamMotion {
+    const val Quick = 120      // 月份切换、tab 内容替换
+    const val Standard = 200   // 上下限
+}
+```
+
+`ui/record/RecordUiState.kt`（Plan 2 填内容，Plan 1 只定义类型——先把状态形状定下来，界面才好写）：
+
+```kotlin
+package com.dreamkeeper.ui.record
+
+/** 录音页状态（Plan 2 填充：计时、暂停、振幅） */
+data class RecordUiState(
+    val elapsedMs: Long = 0,
+    val paused: Boolean = false,
+    val amplitude: Float = 0f,
+)
+
+/** 追问窗口状态（Plan 2 录音 + Plan 4 通知栏入口共用；remainingMs 走完 = 追问超时） */
+data class FollowUpUiState(
+    val remainingMs: Int = 30_000,
+    val recording: Boolean = false,
+    val visible: Boolean = false,
+)
+```
+
+`ui/nav/DreamRoute.kt`（**根界面的唯一导航真源**，Plan 2/4 只往里填内容，不再改结构）：
+
+```kotlin
+package com.dreamkeeper.ui.nav
+
+/** 说梦的四个入口：首页大钮 / 锁屏小组件 / 通知 / 快捷方式（Plan 1 只用到 HOME_BUTTON） */
+enum class RecordEntry { HOME_BUTTON, LOCK_TILE, NOTIFICATION, SHORTCUT }
+
+sealed interface DreamRoute {
+    val route: String
+
+    data object Calendar : DreamRoute { override val route = "calendar" }
+    data object Library : DreamRoute { override val route = "library" }
+    data object Search : DreamRoute { override val route = "search" }
+    data object Tags : DreamRoute { override val route = "tags" }
+    data class Detail(val dreamId: String) : DreamRoute { override val route = "detail/$dreamId" }
+    data class Record(val entry: RecordEntry) : DreamRoute { override val route = "record/${entry.name}" }
+    data class FollowUp(val dreamId: String) : DreamRoute { override val route = "followup/$dreamId" }
+}
+```
 
 `ui/calendar/CalendarScreen.kt` 的结构要求（实现细节自由，但这些必须做到）：
 
 - 顶部：左箭头 `‹`、中间 `state.title`、右箭头 `›`；标题下面一行小字「共 N 天有梦」。
 - 星期表头：一 二 三 四 五 六 日，`labelSmall` + `InkFaint`。
-- 7 列网格：有梦的日子在数字下方画一个 4dp 的 `Ember` 圆点；今天用 1dp `Line` 描边圈住；空白格不画。
+- 7 列网格：有梦的日子在数字下方画一个 4dp 的 `Ember` 圆点；**今天用 1.5dp `Ember` 描边圈住**（不要用 `Line`——`Line` 在 Night 上只有 1.34:1，等于看不见，它只配做装饰分隔线）；空白格不画。
 - 点有梦的格子 → `onDayClick(date)`；点没梦的格子 → 什么都不发生（不弹"添加"——添加只有一个入口，就是红钮）。
-- 底部：一大颗圆钮（直径 72dp，`EmberDeep`），文案「说梦」。`onRecord()` 现在先留空实现，Plan 2 接管。
-- 整屏可上下滑动，月份切换用 `AnimatedContent`，**动画时长 ≤ 200ms**（夜间不要长动画）。
+- 整屏可上下滑动；网格的 `verticalScroll` 必须带 `contentPadding = PaddingValues(bottom = 112.dp)`（72 大钮 + 24 底距 + 16 呼吸），否则最后一行会被大钮压住。
+- 底部：一大颗圆钮，文案「说梦」，`onRecord()` 现在先留空实现，Plan 2 接管：
+  ```kotlin
+  Box(
+      modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = 24.dp)
+          .size(72.dp)
+          .border(1.5.dp, Ember, CircleShape)   // 外环：EmberDeep 只有 2.57:1，靠 Ember 边界把按钮"描"出来
+          .background(EmberDeep, CircleShape)
+          .clickable { onRecord() },
+      contentAlignment = Alignment.Center,
+  ) { Text("说梦", color = Paper, style = MaterialTheme.typography.titleMedium) }
+  ```
+  **不要在这里再叠 `navigationBarsPadding()`**：root 的 `Scaffold` 已经把底栏和导航栏 inset 算进 `innerPadding`，再叠一次就是双重避让，按钮会浮在半空。
+- 月份切换用 `AnimatedContent`，`transitionSpec` 用 `tween(DreamMotion.Quick)`——**不许出现裸的魔法数字**（120 只许在 `Night.kt` 里出现一次）。
+- 屏幕文案只留四个：月份标题、`共 N 天有梦`、星期表头、`说梦`。**不加任何说明文字**（没有"点红点查看""长按录音"之类的提示）。
 - 屏幕常亮：`Modifier` 层面不加；常亮在 Plan 4 统一处理。
 
-`ui/DreamKeeperRoot.kt`：
+`ui/DreamKeeperRoot.kt`（`NavHost` + 只在两个主路由显示底部栏）：
 
 ```kotlin
+package com.dreamkeeper.ui
+
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.ui.calendar.CalendarScreen
+import com.dreamkeeper.ui.calendar.CalendarViewModel
+import com.dreamkeeper.ui.nav.DreamRoute
+import com.dreamkeeper.ui.theme.Night
+
 @Composable
 fun DreamKeeperRoot(repo: DreamRepository) {
-    var tab by remember { mutableStateOf(0) }
-    val calendarVm: CalendarViewModel = viewModel { CalendarViewModel(repo) }
+    val nav = rememberNavController()
+    val entry by nav.currentBackStackEntryAsState()
+    val current = entry?.destination?.route
+    val showBottomBar = current == DreamRoute.Calendar.route || current == DreamRoute.Library.route
+
     Scaffold(
+        containerColor = Night,
         bottomBar = {
-            NavigationBar(containerColor = Night) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = {}, label = { Text("日历") })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = {}, label = { Text("全部") })
+            if (showBottomBar) {
+                NavigationBar(containerColor = Night) {
+                    NavigationBarItem(
+                        selected = current == DreamRoute.Calendar.route,
+                        onClick = { nav.navigate(DreamRoute.Calendar.route) { launchSingleTop = true } },
+                        icon = {}, label = { Text("日历") },
+                    )
+                    NavigationBarItem(
+                        selected = current == DreamRoute.Library.route,
+                        onClick = { nav.navigate(DreamRoute.Library.route) { launchSingleTop = true } },
+                        icon = {}, label = { Text("全部") },
+                    )
+                }
             }
-        }
+        },
     ) { padding ->
-        Box(Modifier.padding(padding)) {
-            when (tab) {
-                0 -> CalendarScreen(calendarVm, onDayClick = {}, onRecord = {})
-                else -> LibraryScreen(...)   // Task 7 实现
+        NavHost(
+            navController = nav,
+            startDestination = DreamRoute.Calendar.route,
+            modifier = Modifier.padding(padding),
+        ) {
+            composable(DreamRoute.Calendar.route) {
+                val vm: CalendarViewModel = viewModel { CalendarViewModel(repo) }
+                CalendarScreen(
+                    vm = vm,
+                    onDayClick = { date -> nav.navigate(DreamRoute.Detail(date.toString()).route) },
+                    onRecord = { /* Plan 2：这里换成 nav.navigate(DreamRoute.Record(RecordEntry.HOME_BUTTON).route) */ },
+                )
             }
+            composable(DreamRoute.Library.route) { /* Task 7：LibraryScreen(...) */ }
+            // 下面五个路由 Plan 1 允许是空屏/占位——重点是**路径已经存在**，
+            // Plan 2 的录音与 Plan 4 的通知只往里填内容，不会再动根界面结构。
+            composable(DreamRoute.Search.route) { /* Task 8 */ }
+            composable(DreamRoute.Tags.route) { /* Task 9 */ }
+            composable("detail/{dreamId}") { /* Task 8 */ }
+            composable("record/{entry}") { /* Plan 2：RecordScreen */ }
+            composable("followup/{dreamId}") { /* Plan 2：FollowUpScreen */ }
         }
     }
 }
 ```
+
+> 路由参数用 `navBackStackEntry.arguments?.getString("dreamId")` 取；`DreamRoute.Detail(...).route` 只负责拼路径，解析在各自的 `composable` 块里做。
+
+> `MainActivity` 仍只做一件事：`setContent { DreamKeeperTheme { DreamKeeperRoot(container.repository) } }`。**Plan 1 不解析 intent extra**——从通知进录音是 Plan 4 的活，现在读 extra 只会读到 null 然后写一堆死分支。
 
 - [ ] **Step 6: 接进 MainActivity 并截图验收**
 
@@ -1980,14 +2331,14 @@ git rev-parse --short HEAD
 
 **Files:**
 - Create: `.../ui/library/LibraryViewModel.kt`, `.../ui/library/LibraryScreen.kt`, `.../ui/library/LayoutPrefs.kt`
-- Modify: `.../ui/DreamKeeperRoot.kt`, `android/gradle/libs.versions.toml`, `android/app/build.gradle.kts`
+- Modify: `.../ui/DreamKeeperRoot.kt`, `.../di/AppContainer.kt`（加 `layoutPrefs`）
 - Test: `android/app/src/test/java/com/dreamkeeper/ui/library/LibraryViewModelTest.kt`
 
 **Interfaces:**
 - Produces:
   - `enum class LibraryLayout { TIMELINE, CARDS }`
-  - `interface LayoutPrefs { var layout: LibraryLayout }`（测试用 `FakeLayoutPrefs`，生产用 `DataStoreLayoutPrefs`）
-  - `class DataStoreLayoutPrefs(context: Context) : LayoutPrefs`（DataStore Preferences 落盘，**不是只有接口**）
+  - `interface LayoutPrefs { var layout: LibraryLayout }`（测试用 `FakeLayoutPrefs`，生产用 `SharedPreferencesLayoutPrefs`）
+  - `class SharedPreferencesLayoutPrefs(context: Context) : LayoutPrefs`（`SharedPreferences` 同步读写，**不新增任何依赖**）
   - `data class LibraryUiState(val layout: LibraryLayout, val items: List<Dream>)`
   - `class LibraryViewModel(repo, prefs) : ViewModel()`，方法 `fun setLayout(l: LibraryLayout)`
   - `@Composable fun LibraryScreen(vm: LibraryViewModel, onOpen: (String) -> Unit, onSearch: () -> Unit)`
@@ -2058,22 +2409,9 @@ Expected: 编译失败（`Unresolved reference: LibraryViewModel`）。
 
 - [ ] **Step 3: 实现**
 
-**先加依赖与开关**（否则 `preferencesDataStore` 编译不过）：
+**不新增依赖**：布局偏好只有一个枚举值，`SharedPreferences` 就够，同步读写、没有首帧抖动、没有协程与超时。
 
-```toml
-# android/gradle/libs.versions.toml 的 [versions]
-datastore = "1.1.7"
-
-# [libraries]
-androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
-```
-
-```kotlin
-// android/app/build.gradle.kts 的 dependencies { } 里
-implementation(libs.androidx.datastore.preferences)
-```
-
-> 版本号如果解析失败，去 `https://maven.google.com/androidx/datastore/datastore-preferences/maven-metadata.xml` 挑当前稳定版，别猜。
+> 第一轮这里用的是 DataStore + `runBlocking(100ms)` 读首值——为了一个枚举引入一个依赖、再为它的异步读法加一层阻塞超时，是明显的坏味道。回退到 `SharedPreferences`。
 
 再核对 `buildFeatures`：
 
@@ -2094,50 +2432,31 @@ android {
 package com.dreamkeeper.ui.library
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 
 interface LayoutPrefs { var layout: LibraryLayout }
 
-private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataStore(name = "layout_prefs")
-
-private val KEY_LAYOUT = stringPreferencesKey("library_layout")
-
 /**
- * 生产实现：值放内存缓存里同步读写，落盘走 IO。
+ * 生产实现：`SharedPreferences` 同步读写。
  *
- * 为什么 init 里要 runBlocking：`LayoutPrefs.layout` 是同步属性（ViewModel 构造时就要拿到初值），
- * 而 DataStore 的读是 suspend 的。这里用 100ms 上限把首值读出来，读不到就退回 TIMELINE——
- * 一个偏好值不值得让首屏闪一下视图切换。Plan 2 若发现首帧抖动，改成异步首帧校正。
+ * 为什么不用 DataStore：`LayoutPrefs.layout` 是同步属性（ViewModel 构造时就要拿到初值），
+ * 而 DataStore 的读是 suspend 的——上一版为此在 init 里塞了 `runBlocking(100ms)`，
+ * 一个布局偏好不值得让主线程冒这个险。`SharedPreferences` 首次读盘由系统异步预加载，
+ * 这里的 `getString` 命中内存缓存，代价可忽略。
  */
-class DataStoreLayoutPrefs(context: Context) : LayoutPrefs {
-    private val dataStore = context.applicationContext.layoutDataStore
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+class SharedPreferencesLayoutPrefs(context: Context) : LayoutPrefs {
 
-    @Volatile
-    private var cached: LibraryLayout = runBlocking {
-        withTimeoutOrNull(100) {
-            val raw = runCatching { dataStore.data.first()[KEY_LAYOUT] }.getOrNull()
-            LibraryLayout.entries.firstOrNull { it.name == raw }
-        } ?: LibraryLayout.TIMELINE
-    }
+    private val prefs = context.applicationContext
+        .getSharedPreferences("layout_prefs", Context.MODE_PRIVATE)
 
     override var layout: LibraryLayout
-        get() = cached
+        get() = LibraryLayout.entries.firstOrNull { it.name == prefs.getString(KEY_LAYOUT, null) }
+            ?: LibraryLayout.TIMELINE
         set(value) {
-            cached = value
-            scope.launch { dataStore.edit { it[KEY_LAYOUT] = value.name } }
+            // apply() 异步落盘、立刻更新内存值：杀进程重进仍能读到（Task 7 的验收就是盯这个）
+            prefs.edit().putString(KEY_LAYOUT, value.name).apply()
         }
+
+    private companion object { const val KEY_LAYOUT = "library_layout" }
 }
 ```
 
@@ -2206,20 +2525,25 @@ git rev-parse --short HEAD
 
 - [ ] **Step 8: 归档证据**
 
-按 §2 写 `docs/evidence/plan1/task7.md`：short SHA、DataStore 依赖版本、三张截图路径 + SHA256、人工读图结论（4 条、日期顺序、卡片圆角、重启后仍是卡片）、`task7-logcat.txt`、`pm clear` 复现步骤（含证明幂等的第二次清库结果）。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task7 证据归档"`。
+按 §2 写 `docs/evidence/plan1/task7.md`：short SHA、`SharedPreferences` 的文件名与键名（`layout_prefs` / `library_layout`）、三张截图路径 + SHA256、人工读图结论（4 条、日期顺序、卡片圆角、重启后仍是卡片）、`task7-logcat.txt`、`pm clear` 复现步骤（含证明幂等的第二次清库结果）。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task7 证据归档"`。
 
 ---
 
-## Task 8: 详情页 + 全文搜索
+## Task 8: 详情页 + 搜索（LIKE 中文检索）
 
 **Files:**
 - Create: `.../ui/detail/DetailScreen.kt`, `.../ui/detail/DetailViewModel.kt`, `.../ui/search/SearchScreen.kt`, `.../ui/search/SearchViewModel.kt`
 - Modify: `.../ui/DreamKeeperRoot.kt`
+- Test: `android/app/src/test/java/com/dreamkeeper/ui/detail/DetailViewModelTest.kt`
 
 **Interfaces:**
-- Consumes: `DreamRepository.observe(id)`、`DreamRepository.search(q)`、`DreamRepository.observeTagsForDream(dreamId)`（标签 tab 的唯一数据源）、`DreamRepository.observeMediaAssets(dreamId)`（素材 tab 的唯一数据源）。
+- Consumes: `DreamRepository.observe(id)`、`DreamRepository.search(q)`、`DreamRepository.observeTagsForDream(dreamId)`（标签 tab 的唯一数据源）。**素材不动数据库**：`MediaAsset` 的读取留到 Plan 3，Plan 1 的 `DetailViewModel` 不订阅 `observeMediaAssets`。
 - Produces:
+  - `data class DetailUiState(val dream: Dream? = null, val tags: List<Tag> = emptyList(), val assets: List<MediaAsset> = emptyList(), val novelChangeCount: Int = 0)` —— `assets` 只是签名占位，Plan 1 恒为 `emptyList()`
+  - `class DetailViewModel(repo: DreamRepository, dreamId: String) : ViewModel()`，暴露 `val state: StateFlow<DetailUiState>`（combine 两条 Flow：`observe(id)` / `observeTagsForDream`，`assets` 固定空表）
   - `@Composable fun DetailScreen(dreamId: String, repo: DreamRepository, onBack: () -> Unit)`
+  - `@Composable fun PlaybackBar(audioPath: String?, durationMs: Long?)` —— **Plan 1 传 `null, null`，时长显示 `--:--`**；Plan 2 才接 `MediaPlayer`
+  - `fun novelTabLabel(n: Int): String`（纯函数，放 `DetailScreen.kt` 顶层，便于单测）
   - `@Composable fun SearchScreen(repo: DreamRepository, onOpen: (String) -> Unit, onBack: () -> Unit)`
   - `class SearchViewModel(repo: DreamRepository) : ViewModel()`，`fun onQueryChange(q: String)`，`val results: StateFlow<List<Dream>>`（250ms 防抖）
 
@@ -2245,32 +2569,53 @@ git rev-parse --short HEAD
 必须做到：
 
 - 顶部返回箭头 + 居中日期（如「10月29日 周三」）。
-- **四个 tab**（设计 §11 原文就是四个，不是三个）：**原样** / **小说化·补写N处** / **标签** / **素材**。
+- **四个 tab**（设计 §11 原文就是四个）：**原样** / **小说化**（有补写时带角标） / **标签** / **素材**。
 - tab 内容：
-  - 原样：`dream.originalText`，`bodyLarge`，**行高 30sp**，段落间距 12dp，可滚动。
+  - 原样：`dream.rawTranscript`，`bodyLarge`，**行高 30sp**，段落间距 12dp，可滚动。
   - 小说化：有 `novelText` 就显示正文；没有就显示占位文案「还没有生成。等接上大模型后，这里会有一篇读得通的版本。」
-  - 标签：**不能读 `dream.tags`（`Dream` 没有这个字段，也不该有）**，必须走仓库的联表查询：`repo.observeTagsForDream(dreamId)`；空表显示「暂无标签」。每个标签一个只读胶囊（Plan 1 不在详情页增删标签）。
-  - 素材：读 `repo.observeMediaAssets(dreamId)`；空表显示「还没有素材」，非空先只显示类型与状态（`VIDEO`/`IMAGE` + `PENDING`），Plan 3 才做真实的图/视频展示。
-- tab 标题里的 N 是改动处数，从 `novelChangeLog` 里数出来：
+  - 标签：**不能读 `dream.tags`（`Dream` 没有这个字段，也不该有）**，必须走仓库的联表查询：`DetailViewModel.state.tags`（数据源是 `DreamTagDao.observeTagsForDream` 的 `tags INNER JOIN dream_tags`）；空表显示「暂无标签」。每个标签一个只读胶囊（Plan 1 不在详情页增删标签）。
+  - 素材：**纯 UI 占位，不接 DAO、不接播放器**。一个 16:9 的空槽 + 一行说明：
+    ```kotlin
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+            .background(NightRaised, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) { Text("以后可以在这里把梦做成视频", color = InkDim, style = MaterialTheme.typography.bodyMedium) }
+    ```
+    `DetailUiState.assets` 只是签名占位（Plan 3 用），Plan 1 **恒为空表、不订阅 `observeMediaAssets`、一个也不渲染**——种子里那条 `VIDEO` 记录只是给数据库留的，不显示。
+- tab 标题里的 N 是改动处数，来自 `novelChangeLog`。用**纯函数**算，才能不启动模拟器就测：
 
 ```kotlin
-/** 小说化 tab 的标题：「小说化·补写2处」；没生成过就只写「小说化」 */
-private fun novelTabLabel(dream: Dream): String {
-    val n = dream.novelChangeLog
-        ?.let { Regex("补写 (\\d+) 处").find(it)?.groupValues?.get(1)?.toIntOrNull() }
-        ?: 0
-    return if (n == 0) "小说化" else "小说化·补写${n}处"
-}
+/** 小说化 tab 的标题：「小说化」或「小说化 · 补写 6 处」 */
+fun novelTabLabel(n: Int): String = if (n == 0) "小说化" else "小说化 · 补写 $n 处"
+
+/** 从 novelChangeLog 里数「补写 N 处」；数不出来就按 0 处理（老数据/没生成过） */
+fun novelChangeCount(changeLog: String?): Int = changeLog
+    ?.let { Regex("补写\\s*(\\d+)\\s*处").find(it)?.groupValues?.get(1)?.toIntOrNull() }
+    ?: 0
 ```
 
-- 底部常驻一条播放条（`NightRaised`，圆角 8dp）：播放三角 + 一条占位波形（用 40 根 1dp 竖线高度随机但**固定种子**，不要每帧抖动）+ 时长文字「--:--」。Plan 2 接真实音频。
+  `DetailViewModel` 里 `novelChangeCount = novelChangeCount(entity.novelChangeLog)`，界面直接 `Text(novelTabLabel(state.novelChangeCount))`。
+
+  配两条单测（`DetailViewModelTest`，纯 JVM，不用 Robolectric）：
+
+  ```kotlin
+  @Test fun `novel tab label without rewrites`() = assertEquals("小说化", novelTabLabel(0))
+  @Test fun `novel tab label counts rewrites`() = assertEquals("小说化 · 补写 6 处", novelTabLabel(6))
+  ```
+- 底部常驻一条播放条：`PlaybackBar(audioPath = state.dream?.rawAudioPath, durationMs = state.dream?.rawAudioMs)`。Plan 1 这两个值都是 `null`，所以显示播放三角 + 一条占位波形（40 根 1dp 竖线，高度用固定种子生成，**不要每帧抖动**）+ 时长 `--:--`。**签名就此定死**，Plan 2 只换内部实现，不改调用方：
+  ```kotlin
+  @Composable
+  fun PlaybackBar(audioPath: String?, durationMs: Long?) {
+      val label = durationMs?.let { ms -> "%d:%02d".format(ms / 60_000, (ms / 1000) % 60) } ?: "--:--"
+      // Plan 1：不创建 MediaPlayer，点了也不播（避免空路径崩溃）；Plan 2：audioPath != null 时接 MediaPlayer
+      Row(Modifier.fillMaxWidth().background(NightRaised, RoundedCornerShape(8.dp)).padding(12.dp)) { /* 三角 + 波形 + label */ }
+  }
+  ```
 - 右上角一个 `⋮` 菜单，目前只有「编辑」「删除」两项，点了给 `Snackbar` 提示「Plan 2 实现」。
-- 两个 Flow 的初值给空表，不要 `!!`：
-
-```kotlin
-val tags by repo.observeTagsForDream(dreamId).collectAsState(initial = emptyList())
-val assets by repo.observeMediaAssets(dreamId).collectAsState(initial = emptyList())
-```
+- 两个 Flow 的初值给空表，不要 `!!`（`DetailViewModel` 内部用 `stateIn(initialValue = DetailUiState())` 统一给）。
 
 - [ ] **Step 6: 装到模拟器，用种子数据走一遍**
 
@@ -2288,11 +2633,11 @@ Start-Sleep 5
 
 Expected：
 - 进详情 → **四个 tab** 可切，原样正文可滚动。
-- 打开 `seed-dream-1`（电梯）：标签 tab 里有「坠落（情绪）」胶囊——这是 Task 4 种子里唯一带 `EMOTION` 标签且 `evidenceText` 非空的那条。
-- 打开 `seed-dream-2`（教室）：小说化 tab 显示占位文案；**素材 tab 显示一条 `VIDEO` 占位**（种子里的 `MediaAsset(kind=VIDEO)`）。
-- 打开 `seed-dream-3`：小说化 tab 标题是「小说化·补写2处」，正文非空。
-- 打开 `seed-dream-4` 或任一没有素材的梦：素材 tab 显示「还没有素材」。
-- 点播放条 → 无崩溃（Plan 1 不播放）。
+- 打开 `seed-dream-1`（电梯）：标签 tab 里有「下坠的预感」胶囊（`EMOTION`，种子里的 `evidenceText` 非空）。
+- 打开 `seed-dream-2`（教室）：小说化 tab 显示占位文案；**素材 tab 仍是那个 16:9 空槽 + 「以后可以在这里把梦做成视频」**——种子里的 `VIDEO` 记录不渲染（Plan 1 的素材 tab 是纯 UI 占位）。
+- 打开 `seed-dream-3`：小说化 tab 标题是「小说化 · 补写 2 处」（注意分隔符两边各一个空格，和 `novelTabLabel` 一致），正文非空。
+- 打开 `seed-dream-4`：素材 tab 同样是那个空槽（**不存在「还没有素材」这句文案了**——素材 tab 在 Plan 1 只有一种样子）。
+- 点播放条 → 无崩溃（Plan 1 不创建 `MediaPlayer`）。
 - 搜索「电梯」→ 命中 1 条；搜索「电梯 六楼」→ 命中更少或 0；搜索 `"！` 之类标点 → 不崩溃。
 
 四个 tab 各截一张（**第 4 张 `plan1-task8-tab4-media.png` 是 Task 9「预留口子核对」要引用的那一张，别漏**）：
@@ -2312,13 +2657,13 @@ if (($b -join ',') -ne '137,80,78,71,13,10,26,10') { throw "PNG 魔数校验失�
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(ui): 详情页四 tab 与全文搜索（含防抖与转义）"
+git add -A; git commit -m "feat(ui): 详情页四 tab 与中文搜索（LIKE + 防抖）"
 git rev-parse --short HEAD
 ```
 
 - [ ] **Step 8: 归档证据**
 
-按 §2 写 `docs/evidence/plan1/task8.md`：short SHA、四张 tab 截图路径 + SHA256、人工读图结论（写了哪个梦、哪个 tab、看到了什么文案/胶囊）、`task8-logcat.txt`、复现步骤。**特别写明素材 tab 的两态都截到了：一条 VIDEO 占位 + 空态「还没有素材」**——Task 9 会引用。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task8 证据归档"`。
+按 §2 写 `docs/evidence/plan1/task8.md`：short SHA、四张 tab 截图路径 + SHA256、`DetailViewModelTest` 两条 `novelTabLabel` 断言通过输出、人工读图结论（写了哪个梦、哪个 tab、看到了什么文案/胶囊/空槽）、`task8-logcat.txt`、复现步骤。**特别写明素材 tab 在两条不同的梦上截到的是同一张空槽**（证明它真的没接数据，不是渲染了种子里的 VIDEO）。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task8 证据归档"`。
 
 ---
 
@@ -2336,7 +2681,7 @@ git rev-parse --short HEAD
     db.tagDao().upsert(TagEntity("t1", "电梯", TagKind.OBJECT))
     db.tagDao().upsert(TagEntity("t2", "升降机", TagKind.OBJECT))
     db.tagDao().upsert(TagEntity("t3", "电梯", TagKind.OBJECT).copy(id = "t3", name = "电梯井"))
-    db.tagDao().linkDreamTag(DreamTagEntity("dream-1", "t2"))   // Task 4 已提供：直接写关联表
+    repo.attachTags("dream-1", listOf("t2"))   // 生产读写路径：Task 5 的 attachTags（写 dream_tags 只许走它）
     assertEquals(1, db.tagDao().countTagsOn("dream-1").count { it == "t2" })
     val vm = TagsViewModel(repo, db.tagDao())
     vm.merge(fromId = "t2", intoId = "t1")
@@ -2346,10 +2691,13 @@ git rev-parse --short HEAD
 }
 ```
 
-> 需要在 `TagDao` 补两个查询（`linkDreamTag` 与 `upsert` Task 4 已有，别重复定义）：
+> 需要在 `TagDao` 补两个查询（`upsert` Task 4 已有，别重复定义；写 `dream_tags` 的 `linkDreamTag` 已删除，统一走 `repo.attachTags`）：
 > `@Query("SELECT tagId FROM dream_tags WHERE dreamId = :dreamId") suspend fun countTagsOn(dreamId: String): List<String>` 与
 > `@Query("SELECT * FROM tags WHERE id = :id") suspend fun findById(id: String): TagEntity?`。
 > `countTagsOn` 故意返回 id 列表而不是 `COUNT(*)`——测试要断言「剩哪一个」，只给数字断不出来。
+>
+> 合并的实现是 `db.withTransaction { dao.repointDreamTags(from, into); dao.delete(from) }`。
+> **`dream_tags` 上绝对不能有外键 CASCADE**：`repointDreamTags` 是 `UPDATE OR REPLACE`，REPLACE 冲突时会先删后插，CASCADE 会顺着把关联一起删掉——合并一次就把这条梦的标签全清空，而且不报错。Task 4 的 `DreamTagDao` KDoc 已经把这条写死了。
 
 - [ ] **Step 2: 确认失败 → **Step 3: `merge` 实现为事务**（`db.withTransaction { dao.repointDreamTags(from, into); dao.delete(from) }`）→ **Step 4: 确认通过**
 
@@ -2420,12 +2768,12 @@ Get-ChildItem $ev\plan1-coldstart-*.png | ForEach-Object {
 | §14.1 | 点亮屏幕到开始录音 ≤ 3 步、≤ 3 秒 | Plan 4（锁屏入口/磁贴） | 未开始 |
 | §14.2 | 接电话/切后台/锁屏，音频不丢 | Plan 2（前台服务） | 未开始 |
 | §14.3 | 原样稿 diff 违规次数 = 0 | Plan 2（diff 硬校验） | 未开始 |
-| §14.4 | 小说化 ≥ 8/10「像人写的」，编造 ≤ 10% | Plan 3（生成与评测集） | 未开始 |
-| §14.5 | 1000 条记录日历/列表滚动不掉帧 | **待定**：Plan 1 末或 Plan 2 初，由 Lead 裁 | 未开始 |
+| §14.4 | 小说化 ≥ 8/10「像人写的」，编造 ≤ 10% | Plan 3（生成与评测集）；先 10 条试跑，攒到 20 条再定线 16/20 | 未开始 |
+| §14.5 | 1000 条记录日历/列表滚动不掉帧 | **Plan 2**：开工前补一轮造数压测；Plan 1 **未覆盖**（只有 4 条种子，测不出滚动性能） | 已定推迟（D9） |
 | §14.6 | 飞行模式可录音/转写/入队，恢复网络自动完成 | Plan 3（队列与重试） | 未开始 |
 | §14.7 | 抓包验证全程无音频外传 | Plan 2（隐私验收） | 未开始 |
 
-> §14.3 与 §14.4 的评测集条数在设计文档里一个是 20 条、一个是 10 条（`≥ 8/10`）。**这是待 Lead 裁定的第三件事**，本表不替它决定，照抄原文。§14.5 放 Plan 1 还是 Plan 2 也待定。
+> §14.3 与 §14.4 的评测集条数在设计文档里一个是 20 条、一个是 10 条（`≥ 8/10`）。**已定口径**：先按 10 条试跑、攒到 20 条再把通过线提到 16/20（见偏差 D8）。§14.5 的千条性能验收：Plan 1 **未覆盖**，推迟到 Plan 2 开工前补（见偏差 D9）。
 
 表二：Plan 1 自己做到的（可勾的写 ✅ 并附证据文件）
 
@@ -2434,7 +2782,7 @@ Get-ChildItem $ev\plan1-coldstart-*.png | ForEach-Object {
 | 深色主题 + 无白启动画面 | `task2-*.png`、`plan1-coldstart-*.png` | §14 之外的 Plan 1 目标 |
 | 日历首屏 + 有梦红点 | `task6-*.png` | 同上 |
 | 全部列表两视图 + 偏好持久化 | `task7-*.png` | 同上 |
-| 详情四 tab + 全文搜索 | `task8-tab1..4.png` | 同上 |
+| 详情四 tab + 中文搜索（LIKE） | `task8-tab1..4.png` | 同上 |
 | 标签重命名/合并/删除 | `task9-*.png` | 同上 |
 | 种子幂等（`pm clear` 后仍 4 条） | `task7/task9` 复现步骤 + logcat | 同上 |
 
@@ -2478,7 +2826,8 @@ git rev-parse --short HEAD
 
 1. **规格覆盖**：设计文档 §5 数据模型 → Task 4；§11 界面结构中的日历/全部/详情/搜索/标签 → Task 6-9；§13 技术选型 → Task 1-2。**未覆盖**（有意留给后续计划）：录音、STT、LLM、夜间特则、锁屏入口、回收站、设置页。
 2. **占位符扫描**：Task 6/7/8 的界面步骤给的是「必须做到」的清单而非完整代码——这是**有意**的，因为 Compose 布局的逐行代码在这里会是 300 行噪声，而清单里的每一条都可被截图验证。其余步骤均含可直接粘贴的命令或代码。
-3. **类型一致性**：`Dream` 的 9 个字段在 Task 5 定义、Task 6/7/8 的测试里逐字使用；`DreamEntity` 与 `Dream` 的字段名差异（`dreamDate` vs `date`）只存在于 `toDomain`/`save` 两处，已明确。`DreamEntity` 另外有 5 个 Plan 1 不用的预留字段（`rawAudioPath`/`rawAudioMs`/`faithfulEditedByUser`/`novelEditedByUser`/`remoteId`），全部带默认值且只在末尾追加——因为 3 处 `Dream(...)` 位置参数调用不能错位。`LayoutPrefs` 在 Task 7 定义为接口 + `DataStoreLayoutPrefs` 生产实现，测试用 `FakeLayoutPrefs`。
+3. **类型一致性**：`Dream` 的字段在 Task 5 定义、Task 6/7/8 的测试里使用；`DreamEntity` 与 `Dream` 的字段名差异（`dreamDate` vs `date`）只存在于 `toDomain`/`save` 两处，已明确。`DreamEntity` 的预留字段（`rawAudioPath`/`rawAudioMs`/`faithfulEditedByUser`/`novelEditedByUser`/`remoteId`/`transcriptStatus`）与 `Dream` 的诊断字段（`createdAt`/`updatedAt`/`novelVersion`/`deletedAt`）全部带默认值且只在末尾追加——因为 3 处 `Dream(...)` 位置参数调用不能错位。`LayoutPrefs` 在 Task 7 定义为接口 + `SharedPreferencesLayoutPrefs` 生产实现（**不引入 DataStore**），测试用 `FakeLayoutPrefs`。
+4. **静默改数据的两处已堵**：`save()` 不再覆盖 `createdAt`（首次录入时间）与 `deletedAt`（回收站状态），各配一条回归单测；搜索不再依赖 FTS4，`search("100%")` 与 `search("楼道")` 两条回归覆盖通配符转义与「中间子串」。
 4. **验收范围诚实性**：Task 9 原名「全链路验收」，但 Plan 1 没有录音、生成、夜间入口的代码，叫「全链路」是虚假交付。已改名「Plan 1 库级验收」，并把设计 §14 七条各自归属哪个计划写进 `docs/evidence/plan1/ACCEPTANCE.md`——不把「还没做」写成「已通过」。
 
 ## 后续计划（不写进本文件）
@@ -2498,13 +2847,17 @@ git rev-parse --short HEAD
 | # | 偏差 | 设计文档怎么写 | 计划怎么做 | 状态 |
 |---|---|---|---|---|
 | D1 | SDK 版本 | §13：`compileSdk/targetSdk 36，minSdk 26` | `compileSdk = 37`、`targetSdk = 37`、`minSdk = 26`（Task 1） | **计划为准**（本机 SDK 37 已装、36 未装）；设计 §13 待回写，`minSdk` 定义一致 |
-| D2 | 视觉回归手段 | §13 测试行：`JUnit + Turbine + Robolectric；UI 用 Roborazzi 截图` | 只有 JUnit + Robolectric；**没有 Turbine、没有 Roborazzi、没有 golden 目录**，视觉回归靠人工读截图 + 证据文件（见 Global Constraints「测试策略」） | **pending — 待用户裁定**：要不要现在搭 Roborazzi 基线。搭的话 Task 1/2/6/7/8 都要补 golden 用例，Plan 1 工期增加 |
-| D3 | 详情页 tab 数 | §11：原样 / 小说化·补写N处 / 标签 / 素材（占位）——**四个** | 原计划写「三个 tab」（漏了素材），已按设计改为四个（Task 8 Step 5） | **已消除**，保留此行为记录：设计原文就是四个，是计划写错了 |
+| D2 | 视觉回归手段 | §13 测试行：`JUnit + Turbine + Robolectric；UI 用 Roborazzi 截图` | 只有 JUnit + Robolectric；**没有 Turbine、没有 Roborazzi、没有 golden 目录**，视觉回归靠人工读截图 + 证据文件（见 Global Constraints「测试策略」） | **已定（用户口径）：不搭 Roborazzi**。Plan 1 的界面验收 = 截图 + `read_image` 人眼读 + SHA256 存档；不引入 golden 基建，也不为此加 Task |
+| D3 | 详情页 tab 数 | §11：原样 / 小说化·补写N处 / 标签 / 素材（占位）——**四个** | 原计划写「三个 tab」（漏了素材），已按设计改为四个（Task 8 Step 5），且素材 tab 是纯 UI 占位 | **已消除，不是偏差**：设计原文就是四个，是计划写错了。此行的作用只剩"记录过一次笔误" |
 | D4 | 设置页 / 回收站 | §11 底部导航含「设置」，表格含「设置」「标签管理」两行；§5 有 `deletedAt` 软删除 | Plan 1 只做标签管理；设置页与回收站均不做，归 Plan 4（`deletedAt` 字段已建但无 UI 无写入） | **已声明范围**，非缺陷；读者不应把「Plan 1 完成」理解成设计 §11 全做完 |
-| D5 | 提示词存哪 | §5：`PromptVersion(id, kind, version, body, createdAt) // 提示词进库，便于 A/B 与回滚` | **不建 `PromptVersion` 表**。提示词以 `prompts/` 下的文件为唯一真源，`GenerationJob` 只记 `(promptId, promptVersion, promptHash)` 三个溯源字段 | **待 Lead 确认**——这是本次修订按指示引入的偏差：省一张表换来「提示词改动走 git diff 而不是 SQL」，代价是 A/B 与回滚只能靠版本文件 |
-| D6 | 生成任务的枚举与字段 | §5：`kind = FAITHFUL_CLEANUP \| NOVEL \| TAGGING \| TITLE \| CHANGELOG`；`status = PENDING \| RUNNING \| OK \| FAILED \| CANCELLED`；字段 `provider, model, promptVersion, tokensIn, tokensOut, error, createdAt` | `GenKind = NOVELIZE \| TAGS \| STT`；`GenStatus = PENDING \| RUNNING \| DONE \| FAILED`；字段额外有 `promptId`、`promptHash`、`temperature` | **分阶段实现**：Plan 1 只需这三类任务，其余常量在 Plan 3 开工前补进 `GenKind`/`GenStatus`（只许新增常量，不许改名已有的，否则历史行读不出来） |
+| D5 | 提示词存哪 / 生成任务表 | §5：`PromptVersion(id, kind, version, body, createdAt) // 提示词进库，便于 A/B 与回滚`；§5 另有 `GenerationJob` 表 | **Plan 1 两张表都不建**。`generation_jobs` 与 `prompt_versions` 由 **Plan 3 建表**——迁移基建（`exportSchema` + `schemas/1.json` + `room-testing`）已在 Plan 1 就位，届时 v1→v2 有真实基线可验。提示词以 `prompts/` 下的文件为唯一真源，版本 = 文件名 + sha256（溯源靠 `(promptId, promptVersion, promptHash)`） | **已定（用户口径）**。省两张空表换来"提示词改动走 git diff 而不是 SQL"；A/B 与回滚靠版本文件 + 生成记录里的 hash |
+| D6 | 生成任务的枚举与字段 | §5：`kind = FAITHFUL_CLEANUP \| NOVEL \| TAGGING \| TITLE \| CHANGELOG`；`status = PENDING \| RUNNING \| OK \| FAILED \| CANCELLED`；字段 `provider, model, promptVersion, tokensIn, tokensOut, error, createdAt` | Plan 1 不定义 `GenerationJobEntity`；表与 DAO 全部在 **Plan 3** 建（见 D5）。Plan 3 建表时按此表对齐字段名 | **已定**：Plan 3 建表；枚举常量只许新增、不许改名，否则历史行读不出来 |
 | D7 | 时间字段类型 | §5：`deletedAt: Instant?`、`updatedAt: Instant` | 全部用 `Long`（epoch millis）：`createdAt`/`deletedAt`/`updatedAt` | **计划为准**（Room 存 `Instant` 要额外 TypeConverter，`LocalDate` 已有一个 converter，不叠加）；语义等价，精度到毫秒 |
-| D8 | 评测集条数 | §14.3 写「评测集 **20** 条」；§14.4 写「≥ **8/10** 条」——设计文档自相矛盾 | 计划不裁决，两处都照抄 | **pending — 待 Lead 裁定**（20 还是 10，影响 Plan 3 的评测工作量与通过线） |
-| D9 | §14.5 千条性能验收归属 | §14.5：1000 条记录滚动不掉帧（模拟器 + 真机） | Plan 1 不验（只有 4 条种子，测不出滚动性能）；也没写进 Plan 2/3/4 | **pending — 待 Lead 裁定**：放 Plan 1 末尾补一轮造数压测，还是顺延到 Plan 2（有真实数据写入后） |
+| D8 | 评测集条数 | §14.3 写「评测集 **20** 条」；§14.4 写「≥ **8/10** 条」——设计文档自相矛盾 | **先跑 10 条试跑，攒到 20 条再提高门槛**：`docs/eval/dreams.md` 建 20 个空槽，Plan 3 先用前 10 条跑通评分流程；样本到 20 条后把通过线从 8/10 提到 16/20 | **已定（用户口径）**。设计 §14.3/§14.4 待回写为「10 条试跑 → 20 条定线」 |
+| D9 | §14.5 千条性能验收归属 | §14.5：1000 条记录滚动不掉帧（模拟器 + 真机） | Plan 1 **显式标「未覆盖」**（只有 4 条种子，测不出滚动性能）；推迟到 **Plan 2 开工前**补一轮造数压测 | **已定（用户口径）**：Plan 1 不验、不造数；Plan 2 的第一件事是补这个验收 |
+| D10 | 色温与色值 | 设计未写具体色值，只说"深色为默认" | 保持**冷灰**：Night `#0B0E13` / Paper `#E6EAF2` 不动；只修三处对比度不达标（`InkFaint` → `#7C8698`、"今天"描边 `Line` → `Ember`、M3 `error` → `ErrorText #E08578`），并把注释里的「暖黑/微暖」改成「冷灰」 | **已定（用户口径）**：不动色温；`ThemeContrastTest` 把四条阈值焊进测试 |
+| D11 | 录音编码 | §8 只写"录音"，未指定容器与编码 | **PCM 16kHz 单声道 WAV**，单文件连续录（按红钮 → 追问窗口超时，含静音），路径 `files/audio/<dreamId>.wav` | **已定（用户口径）**：崩溃可恢复优先，接受 ≈1.92MB/分钟；理由见设计 §8.1「音频存储契约」 |
+| D12 | 导航实现 | 设计未指定导航方案 | 引入 `androidx.navigation:navigation-compose`，根界面用 `NavHost`（Task 6），底部栏只在 Calendar/Library 显示 | **已定（用户口径）**：多一个依赖可接受。版本号在 Task 1 标了「未验证」，实现者按仓库可用版本填 |
+| D13 | `transcriptStatus` 字段 | 设计 §5 的 `dreams` 表没有这个字段 | 新增 `transcriptStatus`（`PENDING`/`OK`/`FAILED`，默认 `OK`），用来表达「录音已落盘、文字还没出来」的中间态 | **已回写设计 §5**（本轮同步改了设计文档），因此不再是偏差，登记于此备查 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。

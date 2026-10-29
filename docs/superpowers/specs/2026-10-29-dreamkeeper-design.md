@@ -99,7 +99,8 @@ DreamRecord(
   title: String?,           // 可空，模型可建议
   rawAudioPath: String?,
   rawAudioMs: Long?,
-  rawTranscript: String,    // 不可变
+  rawTranscript: String,    // 不可变（转写没出来时为空串，由 transcriptStatus 解释，不用空串当哨兵）
+  transcriptStatus: String, // PENDING | OK | FAILED，默认 OK
   faithfulText: String?,    // 原样稿
   faithfulEditedByUser: Boolean,
   novelText: String?,       // 小说稿（当前版本）
@@ -137,6 +138,7 @@ AppSettings(provider, baseUrl, model, apiKeyAlias, sttEngine, nightBehavior, ...
 设计说明：
 
 - `dreamDate` 与 `createdAt` 分开：梦属于那一晚，但你可能中午才补记。
+- `transcriptStatus`：**开录即 `PENDING`，转写成功 `OK`，失败 `FAILED`**。断网首跑、本机没有中文离线包、API 26–30 没有 on-device 识别时，「录音已落盘、文字还没出来」是必然出现的中间态；`rawTranscript` 保持非空（字段约束），空串由状态解释——**不能用空串当哨兵**，那会和"真的录到一段静音"混成一件事。
 - `faithfulEditedByUser` / `novelEditedByUser`：用户改过之后，重生成必须**先确认覆盖**，默认另存新版本。
 - 软删除 + 回收站：误删一条梦是灾难级事故。
 - `ownerId` 只留字段不建 UI（见决策表附注）。
@@ -246,8 +248,21 @@ prompts/
   ② 常驻通知上的录音按钮
   ③ 桌面/Long-press 快捷方式
   三者指向同一个 Activity。
-- **不丢录音**：前台服务 + 写文件即时 flush + 启动时扫描孤儿文件恢复。
+- **不丢录音**：前台服务 + 写文件即时 flush + 启动时扫描孤儿文件恢复（细则见 §8.1）。
 - **转写引擎**：优先系统 on-device STT；不可用时按设置退回云端（用自己的 Key）。引擎可换，文字可重转——因为音频留着。
+
+### 8.1 音频存储契约（Plan 2 的实现依据，不得自行改动）
+
+1. **一条梦 = 一个连续文件**。从按下红钮开始，一直录到追问窗口超时（包括中间静音的那段时间）；补录**不换文件、不转码**，只是把新的字节追加到同一个文件末尾。
+2. **路径固定为 `files/audio/<dreamId>.wav`**（app 私有目录，不需要任何存储权限）。`dreamId` 是 UUID，**在开始录音之前就生成**——先有 id，才有落盘路径；反过来（先录、录完再分配 id）一旦进程被杀，文件就成了无名孤儿。
+3. **编码：PCM 16kHz 单声道 WAV**（约 1.92 MB/分钟）。理由只有一个但足够硬：**进程被杀时文件仍然是可播放的完整 WAV**——WAV 头在开录时就写好、之后只是追加 PCM 数据，最坏情况是时长少一点。`MediaRecorder` 的 M4A 在进程被杀时 `moov` box 常常没写，文件根本打不开，而"声音只有一次"这件事经不起这种损失。体积换可靠性，这是已经拍板的取舍。
+4. **回收站 30 天内音频文件保留**：删除是软删除（`deletedAt`），音频**不删**——用户后悔了要能连声音一起恢复。物理清除（超过 30 天或用户点"彻底删除"）时，**数据库行与音频文件成对删除**：先删文件再删行，或先删行再删文件都行，但必须是同一次操作里完成，不许只删一边。
+5. **启动时扫描 `files/audio/`**：对每个文件按文件名解析出 `dreamId`，查库——
+   - 有对应行：正常，什么都不做；
+   - 没有对应行（写入过程中崩溃、或数据库被清过）：**能恢复就恢复**（按文件名 id 把音频挂回一条草稿记录，`transcriptStatus = PENDING`，让用户可以重转或删除），恢复不了才清理；
+   - 反向的孤儿（有 `rawAudioPath` 但文件不在）：把 `rawAudioPath` 置空、`transcriptStatus = FAILED`，不要留一个指向不存在文件的重试入口。
+
+---
 
 ## 9. LLM 接入层
 

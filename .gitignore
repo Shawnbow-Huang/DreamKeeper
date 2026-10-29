@@ -2,6 +2,7 @@
 .gradle/
 build/
 local.properties
+android/local.properties
 .idea/
 *.iml
 captures/
@@ -11,12 +12,17 @@ captures/
 # 本会话工具产物（不属于项目源码）
 .superpowers/
 .scratch/
+.tools/
 
 # 密钥与签名，永不入库
 *.jks
 *.keystore
 keystore.properties
 api-keys.properties
+
+# 评测集：真实梦境原文永不入库（只有空槽位与汇总表进 git）
+docs/eval/*.local.md
+docs/eval/*.local/
 
 # OS
 .DS_Store
