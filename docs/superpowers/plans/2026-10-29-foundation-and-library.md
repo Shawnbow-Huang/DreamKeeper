@@ -2869,9 +2869,11 @@ git rev-parse --short HEAD
 | D21 | Task 3 用例名与夹具不符 | 计划写 `month with 31 days starting on monday has no leading blanks`，夹具却是 `YearMonth.of(2026, 6)`（30 天） | 用例改名为 `month starting on monday has no leading blanks`，断言按 30 天 | **Task 3 实测**：名字错了会误导后来者，以为在测 31 天 |
 | D22 | Task 3 断言强度不足 | 计划用 `assertEquals(0, grid.size % 7)` 证明「无前导空白」 | 改为断言 `grid[0] == 当月 1 号` 且前 N 格全非空 | **Task 3 实测**：35 格在「有 5 格前导空白」时同样满足 `35 % 7 == 0`，原断言抓不住 |
 | D23 | Task 3 用例无判别力 | 计划自带 `week start is configurable` | 换成「月初是周一或周日」的月份，或采纳逐日列对齐断言（Task 3 已实现后者） | **Task 3 实测**：故意写「完全忽略 `weekStart`」的错误实现，该用例仍 PASS（2026-10-01 的 `value=4` 与错误前导巧合相等）。**推论：全绿 ≠ 正确，计划里的断言要能被错误实现打红** |
-| D24 | `monthRange` 区间语义 | 设计只说「按月查询」，计划返回 `Pair<LocalDate, LocalDate>` | 保持闭区间返回，但 **DAO 侧必须自己 `first.toEpochDay() until last.toEpochDay() + 1`** 转半开 | **Task 3 实测**：不写清楚就是「月末差一天」的经典 off-by-one，Task 4 必须照此实现 |
+| D24 | `monthRange` 区间语义 | 设计只说「按月查询」，计划返回 `Pair<LocalDate, LocalDate>` | **原以为要给 DAO 加 `+1` 转半开，实际不需要**：Task 4 的 DAO 用 ISO 字符串闭区间 `dreamDate BETWEEN :fromIso AND :toIso`，`BETWEEN` 本身闭区间，语义已一致。**只有将来改成 epochDay 数值比较时才需要 `until last + 1`** | **Task 5 实测修正**：本行原先写成「DAO 必须自己 +1」，与 Task 4 的实现正好相反。教训：偏差表写的是「我以为的坑」，不是「实测的结论」，登记时就该分清 |
 | D25 | Task 4 测试骨架的 `MediaType.IMAGE.name` | 计划写 `MediaType.IMAGE.name` | 改为直接传 `MediaType.IMAGE` | **Task 4 实测**：`MediaType` 是 `object { const val IMAGE = "IMAGE" }`，String 没有 `.name`。改 enum 会破坏 `SeedData` 与 Produces 契约，故改测试 |
 | D26 | `observeById` 不软删过滤 | 计划未写明 | **保持不过滤**（回收站要能打开已删除的梦），但列表查询一律走 `observeAll`/`observeByMonth` | **Task 4 约定**：Task 5/8 若拿 `observeById` 做列表数据源，会把回收站的梦混进正常列表 |
 | D27 | `dream_tags.tagId` 无索引 | 计划未写索引 | 暂不加索引，接受 Task 9 合并/删除时全表扫 | **Task 4 判断**：千条量级无感；现在加索引会触发 v2 迁移，为未测到的性能问题付迁移成本不划算，破万条再说 |
+| D28 | `gradle-daemon-jvm.properties` 不入库 | Android Studio 同步时自动生成，含 `toolchainVersion=25` 与 10 个平台的 JDK 远程下载地址 | 保留在磁盘（AS 需要），但**加进 `.gitignore`**；JDK 由 `JAVA_HOME` / AS 的 Gradle JDK 设置决定 | **环境相关文件**：它把「用哪个 JDK」钉成 25 并附远程地址，换一台装 JDK 17/21 的机器会触发下载。这类文件不该进公共仓库 |
+| D29 | `save()` 全量重建会重置残留字段 | 计划只点名 `createdAt`/`deletedAt` 两条要保 | 追加：`ownerId`、`faithfulEditedByUser`、`novelEditedByUser`、`remoteId` 也必须 read-modify-write 保留 | **Task 5 实测**：`save()` 里 `ownerId = "local"` 写死、三处编辑标记根本没传，任何一次保存都会把它们重置成默认值。Plan 1 无写入方，所以是「埋着的雷」，Plan 2 接上录音就会炸 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。

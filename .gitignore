@@ -9,6 +9,9 @@ android/local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+# Android Studio 生成的环境相关文件：含本机 JDK 版本与远程下载地址，不入库（见计划 D28）
+gradle/gradle-daemon-jvm.properties
+android/gradle/gradle-daemon-jvm.properties
 
 # 本会话工具产物（不属于项目源码）
 .superpowers/
