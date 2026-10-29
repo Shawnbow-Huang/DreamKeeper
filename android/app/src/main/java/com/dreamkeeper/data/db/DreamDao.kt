@@ -35,6 +35,16 @@ interface DreamDao {
     fun observeById(id: String): Flow<DreamEntity?>
 
     /**
+     * 读一行**当前落库状态**（一次性读取，不是 Flow）。
+     *
+     * `DreamRepository.save()` 的 read-modify-write 靠它拿回 `domain/Dream` 上不存在的列
+     * （`ownerId` / `faithfulEditedByUser` / `novelEditedByUser` / `remoteId`）。
+     * 那些列不参与「用户编辑」，但必须原样保留，否则每次保存都会被重置成默认值。
+     */
+    @Query("SELECT * FROM dreams WHERE id = :id")
+    suspend fun getById(id: String): DreamEntity?
+
+    /**
      * 4 列 LIKE 搜索。
      *
      * **term 必须是已转义的**：`\` → `\\`、`%` → `\%`、`_` → `\_`。否则用户搜 `100%`

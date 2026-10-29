@@ -82,19 +82,25 @@ class DreamRepository(
     /**
      * 写入一条梦。
      *
-     * 两条不许动的规则（都是「静默改数据」的典型，用户不会收到任何提示）：
+     * 三条不许动的规则（都是「静默改数据」的典型，用户不会收到任何提示）：
      * 1. [Dream.createdAt] 是**首次录入时间**：调用方带了非 0 值就原样保留，只有新建（0L）才用 now。
      *    每次都写 `clock()` 的话，「补录一句 / 改个标点」就会把首次录入时间改成此刻——不可逆。
      * 2. [Dream.deletedAt] 原样透传：构造实体时漏掉它，任何一次编辑都会把回收站里的梦悄悄捞回来。
+     * 3. `DreamEntity` 里凡**在 [Dream] 上没有对应字段**的列（当前是 `ownerId`、
+     *    `faithfulEditedByUser`、`novelEditedByUser`、`remoteId`），必须先 `getById` 读回现有行再
+     *    原样写回（read-modify-write）。**新增任何「domain 上不存在」的列，必须在这里显式保留，
+     *    否则第一次编辑就会被抹掉**——用户手改过稿的标记、本地用户归属、云同步 id 都会静默丢失，
+     *    而且没有任何提示。新建一条梦时没有 existing，才走 `"local"` / `false` / `null` 的默认值。
      *
      * `updatedAt` 则相反：它表示「最后一次写入」，每次 save 都由 [clock] 覆盖。
      */
     suspend fun save(dream: Dream) {
         val now = clock()
+        val existing = dreams.getById(dream.id)
         dreams.upsert(
             DreamEntity(
                 id = dream.id,
-                ownerId = "local",
+                ownerId = existing?.ownerId ?: "local",
                 dreamDate = dream.date,
                 createdAt = dream.createdAt.takeIf { it > 0L } ?: now,
                 title = dream.title,
@@ -109,6 +115,9 @@ class DreamRepository(
                 updatedAt = now,
                 rawAudioPath = dream.rawAudioPath,
                 rawAudioMs = dream.rawAudioMs,
+                faithfulEditedByUser = existing?.faithfulEditedByUser ?: false,
+                novelEditedByUser = existing?.novelEditedByUser ?: false,
+                remoteId = existing?.remoteId,
                 transcriptStatus = dream.transcriptStatus,
             )
         )

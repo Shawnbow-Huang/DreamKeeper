@@ -3,6 +3,7 @@ package com.dreamkeeper.data
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dreamkeeper.data.db.DreamDatabase
+import com.dreamkeeper.data.db.DreamEntity
 import com.dreamkeeper.data.db.MediaAssetEntity
 import com.dreamkeeper.data.db.MediaType
 import com.dreamkeeper.data.db.TagEntity
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -29,11 +31,12 @@ import java.time.YearMonth
  * 这里用 Robolectric + 真 SQLite（内存库）跑，不打 mock——仓库的价值全在
  * 「拼出来的 SQL / 实体到底落了什么」，mock 掉数据库就什么也验不到。
  *
- * 四类会被后续 Plan 悄悄踩回来的坑，各有用例钉住：
+ * 五类会被后续 Plan 悄悄踩回来的坑，各有用例钉住：
  * 1. `save()` 改写 `createdAt` / 清掉 `deletedAt`（用户数据完整性）；
  * 2. `search()` 的 LIKE 通配符未转义（`100%` 命中全库）与空查询退化成全量；
  * 3. `observeMonth` 的闭区间在月末差一天；
- * 4. 拿 `observeById` 当列表数据源，把回收站里的梦混进正常列表（D26）。
+ * 4. 拿 `observeById` 当列表数据源，把回收站里的梦混进正常列表（D26）；
+ * 5. `save()` 按 domain 全量重建实体，把 `ownerId` / 手改标记 / `remoteId` 抹回默认值。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -68,6 +71,17 @@ class DreamRepositoryTest {
             mood = null,
             isDraft = false,
         )
+
+    /** 直接落一条实体，用来伪造「domain 上不存在的列已经有值」的存量行。 */
+    private fun entity(id: String, date: String, text: String) = DreamEntity(
+        id = id,
+        dreamDate = LocalDate.parse(date),
+        createdAt = 0L,
+        title = null,
+        rawTranscript = text,
+        faithfulText = text,
+        novelText = null,
+    )
 
     // ---------- 读写与月份区间 ----------
 
@@ -180,6 +194,58 @@ class DreamRepositoryTest {
 
         repo.save(trashed)
         assertEquals(500L, repo.observe("1").first()!!.deletedAt)
+    }
+
+    // ---------- save：domain 上没有的列必须原样保留 ----------
+    // ownerId / 两个编辑标记 / remoteId 在 domain/Dream 上没有对应字段。save() 若只按 domain
+    // 全量重建实体，它们每次都会被重置成默认值——用户手改过稿的标记会静默丢失。
+
+    @Test
+    fun `save keeps both manual edit flags on an existing dream`() = runTest {
+        db.dreamDao().upsert(
+            entity("1", "2026-10-15", "电梯").copy(
+                faithfulEditedByUser = true,
+                novelEditedByUser = true,
+            )
+        )
+
+        repo.save(d("1", "2026-10-15", "电梯"))
+
+        val row = db.dreamDao().getById("1")!!
+        assertTrue("faithfulEditedByUser 被保存重置成 false", row.faithfulEditedByUser)
+        assertTrue("novelEditedByUser 被保存重置成 false", row.novelEditedByUser)
+    }
+
+    @Test
+    fun `save keeps the existing ownerId`() = runTest {
+        db.dreamDao().upsert(entity("1", "2026-10-15", "电梯").copy(ownerId = "u2"))
+
+        repo.save(d("1", "2026-10-15", "电梯"))
+
+        // 本地多用户上线后，谁的梦不能被一次保存改写成 local
+        assertEquals("u2", db.dreamDao().getById("1")!!.ownerId)
+    }
+
+    @Test
+    fun `save keeps remoteId`() = runTest {
+        db.dreamDao().upsert(entity("1", "2026-10-15", "电梯").copy(remoteId = "remote-42"))
+
+        repo.save(d("1", "2026-10-15", "电梯"))
+
+        // 同步接入后，云 id 不能因为一次编辑就丢；丢了会被当成新记录再传一次
+        assertEquals("remote-42", db.dreamDao().getById("1")!!.remoteId)
+    }
+
+    @Test
+    fun `save defaults a brand new dream to local owner and unedited flags`() = runTest {
+        repo.save(d("1", "2026-10-15", "电梯"))
+
+        // 新行没有 existing：走默认值，不能因为 read-modify-write 变成 null/异常
+        val row = db.dreamDao().getById("1")!!
+        assertEquals("local", row.ownerId)
+        assertFalse(row.faithfulEditedByUser)
+        assertFalse(row.novelEditedByUser)
+        assertNull(row.remoteId)
     }
 
     // ---------- 列表 vs 按 id（D26） ----------
