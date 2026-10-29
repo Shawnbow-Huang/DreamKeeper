@@ -2866,5 +2866,9 @@ git rev-parse --short HEAD
 | D18 | 系统栏颜色 | 计划 Task 2 写「在 `themes.xml` 设 `statusBarColor`/`navigationBarColor`」 | `targetSdk 37` 强制 edge-to-edge，这两个属性是**空操作**；Task 2 必须用 `enableEdgeToEdge(SystemBarStyle.dark(TRANSPARENT))` 显式声明，并靠 Compose 背景铺满系统栏区域 | **Task 1 实测**：截图状态栏近黑是 Compose 背景铺过去的结果，不是主题属性生效 |
 | D19 | 自检命令写法 | 计划多处写 `Select-String -Path android\app\src\main -Pattern "FFFFFF|Color.White"` | 统一改 `Get-ChildItem -Recurse -File <目录> \| Select-String -Pattern …` | **Task 2 实测**：`-Path` 传目录时不递归、报「访问被拒绝」并返回空 → 是假阴性，看起来「无命中」其实一个文件都没扫 |
 | D20 | 错误态配色 | 计划与 M3 惯例：容器内文字用 `colorScheme.error` | `error`（`ErrorText #E08578`）只能画在 `Night` 底上；**错误容器（`EmberDeep`）里的文字必须用 `onErrorContainer`（`Paper`）** | **Task 2 实算**：`ErrorText` on `EmberDeep` 仅 2.79:1，不达标；`Paper` on `EmberDeep` 6.24:1。Task 7 写错误态照此执行 |
+| D21 | Task 3 用例名与夹具不符 | 计划写 `month with 31 days starting on monday has no leading blanks`，夹具却是 `YearMonth.of(2026, 6)`（30 天） | 用例改名为 `month starting on monday has no leading blanks`，断言按 30 天 | **Task 3 实测**：名字错了会误导后来者，以为在测 31 天 |
+| D22 | Task 3 断言强度不足 | 计划用 `assertEquals(0, grid.size % 7)` 证明「无前导空白」 | 改为断言 `grid[0] == 当月 1 号` 且前 N 格全非空 | **Task 3 实测**：35 格在「有 5 格前导空白」时同样满足 `35 % 7 == 0`，原断言抓不住 |
+| D23 | Task 3 用例无判别力 | 计划自带 `week start is configurable` | 换成「月初是周一或周日」的月份，或采纳逐日列对齐断言（Task 3 已实现后者） | **Task 3 实测**：故意写「完全忽略 `weekStart`」的错误实现，该用例仍 PASS（2026-10-01 的 `value=4` 与错误前导巧合相等）。**推论：全绿 ≠ 正确，计划里的断言要能被错误实现打红** |
+| D24 | `monthRange` 区间语义 | 设计只说「按月查询」，计划返回 `Pair<LocalDate, LocalDate>` | 保持闭区间返回，但 **DAO 侧必须自己 `first.toEpochDay() until last.toEpochDay() + 1`** 转半开 | **Task 3 实测**：不写清楚就是「月末差一天」的经典 off-by-one，Task 4 必须照此实现 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
