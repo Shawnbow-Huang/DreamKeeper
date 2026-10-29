@@ -310,7 +310,7 @@ prompts/
 | 梦 → 插画 | 同一张表 `type=IMAGE`，字段 `prompt/model` 已就绪 |
 | 多用户 | `ownerId` 字段（已建，无 UI） |
 | 云同步/多端 | 预留 `remoteId`、`updatedAt`；不在 v1 传输 |
-| iOS | 业务逻辑与模型层不依赖 Android 特有 API，提示词与数据结构可直接复用 |
+| iOS | 仓库根目录已中立（`android/` 只是消费者）；提示词、评测集、数据模型可直接复用。**UI、录音、系统集成须重写**——这是选原生的当期成本，不是后期惊喜 |
 
 ## 13. 技术选型与工程约定
 
@@ -327,6 +327,22 @@ prompts/
 | 架构 | **单 module + 包边界**（data / domain / llm / ui） | 一人维护，多 module 拖慢迭代；边界靠包与接口约束，等第二个人再拆 |
 | 测试 | JUnit + Turbine + Robolectric；UI 用 Roborazzi 截图 | JVM 上跑，CI 友好 |
 | 构建 | Gradle CLI 为主，Android Studio 为辅 | 便于自动化验证 |
+
+### 13.1 仓库结构
+
+```
+DreamKeeper/
+├── android/        Android 工程根（settings.gradle.kts 在这一层）
+├── prompts/        提示词（跨平台共享，Android 通过 sourceSets 引入）
+├── docs/
+│   ├── superpowers/specs/   设计文档
+│   └── eval/                评测集：dreams.md / results.md
+└── README.md
+```
+
+**根目录中立，平台目录只是消费者。** 理由不是整齐，而是：提示词与评测集是真正跨平台的资产——同一句「禁止新增人物关系」换到 iOS 意思不变；20 条梦境的打分标准必须两平台共用，否则两个版本会各自漂移。
+
+**暂不创建 `ios/`**：空目录不被 git 跟踪，`.gitkeep` 只是假装已经在做了。真开始时 `mkdir ios` 是一秒钟的事。
 
 **验证闭环（无需人肉点屏）**：Gradle 构建 → `adb install` → uiautomator dump / mobile-mcp 驱动 → `adb exec-out screencap` 截图逐张核对 → `adb logcat` 定位。
 
