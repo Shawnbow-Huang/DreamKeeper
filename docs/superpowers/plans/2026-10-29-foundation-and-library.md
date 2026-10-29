@@ -2794,7 +2794,7 @@ git rev-parse --short HEAD
 
 **Files:**
 - Create: `.../ui/library/LibraryViewModel.kt`, `.../ui/library/LibraryScreen.kt`, `.../ui/library/LayoutPrefs.kt`
-- Modify: `.../ui/DreamKeeperRoot.kt`, `.../di/AppContainer.kt`（加 `layoutPrefs`）
+- Modify: `.../ui/DreamKeeperRoot.kt`, `.../di/AppContainer.kt`（加 `layoutPrefs`）、`.../MainActivity.kt`（把 `layoutPrefs` 从容器一路传进 `DreamKeeperRoot`——不加这一条，实现者要么改清单外的文件，要么自己发明一套 `LocalContext` 方案）
 - Test: `android/app/src/test/java/com/dreamkeeper/ui/library/LibraryViewModelTest.kt`
 
 **Interfaces:**
@@ -2802,9 +2802,11 @@ git rev-parse --short HEAD
   - `enum class LibraryLayout { TIMELINE, CARDS }`
   - `interface LayoutPrefs { var layout: LibraryLayout }`（测试用 `FakeLayoutPrefs`，生产用 `SharedPreferencesLayoutPrefs`）
   - `class SharedPreferencesLayoutPrefs(context: Context) : LayoutPrefs`（`SharedPreferences` 同步读写，**不新增任何依赖**）
-  - `data class LibraryUiState(val layout: LibraryLayout, val items: List<Dream>)`
+  - `data class LibraryItem(val dream: Dream, val tags: List<Tag>)`——**条目必须带 tags**。`DreamCard(dream, tags, onClick)` 要 `List<Tag>`，只给 `List<Dream>` 会逼实现者传 `emptyList()`，标签静默消失（D62）
+  - `data class LibraryUiState(val layout: LibraryLayout, val items: List<LibraryItem> = emptyList())`
   - `class LibraryViewModel(repo, prefs) : ViewModel()`，方法 `fun setLayout(l: LibraryLayout)`
-  - `@Composable fun LibraryScreen(vm: LibraryViewModel, onOpen: (String) -> Unit, onSearch: () -> Unit)`
+  - `@Composable fun LibraryScreen(vm: LibraryViewModel, onOpen: (String) -> Unit)`
+  - 搜索入口**不在本任务**：`DreamRoute.Search` 此刻还是空屏（`DreamKeeperRoot.kt`），现在放放大镜就是「点了没反应的假按钮」，比没有更糟（D61）；由 Task 8 Step 5b 接
 
 - [ ] **Step 1: 写失败测试（只测纯逻辑与仓库组合）**
 
@@ -2817,6 +2819,7 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.domain.Dream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
@@ -2840,7 +2843,11 @@ class LibraryViewModelTest {
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), DreamDatabase::class.java)
-            .allowMainThreadQueries().build()
+            .allowMainThreadQueries()
+            // Room 的查询/事务跑在自己的 executor 上，不固定住就推不动、也等不到值（D53）
+            .setQueryExecutor(dispatcher.asExecutor())
+            .setTransactionExecutor(dispatcher.asExecutor())
+            .build()
         repo = DreamRepository(db)
     }
     @After fun tearDown() { db.close(); Dispatchers.resetMain() }
@@ -2852,24 +2859,37 @@ class LibraryViewModelTest {
         // 必须有这一行（同 Task 6 Step 1 的原因）：state 用 WhileSubscribed 起上游，
         // 没有订阅者时 observeAll() 根本不启动，advanceUntilIdle() 之后 items 还是空表。
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
-        assertEquals(listOf("2","1"), vm.state.value.items.map { it.id })
+        // 只 advanceUntilIdle() 会读到 initialValue（空表）；必须带超时等值（D53）
+        val items = withTimeout(5_000) { vm.state.first { it.items.isNotEmpty() }.items }
+        assertEquals(listOf("2","1"), items.map { it.dream.id })
     }
 
     @Test fun `layout choice is persisted`() = runTest(dispatcher) {
         val prefs = FakeLayoutPrefs()
         val vm = LibraryViewModel(repo, prefs)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
+        withTimeout(5_000) { vm.state.first { it.items.isNotEmpty() } }
         vm.setLayout(LibraryLayout.CARDS)
-        advanceUntilIdle()
-        assertEquals(LibraryLayout.CARDS, vm.state.value.layout)
         assertEquals(LibraryLayout.CARDS, prefs.layout)
+        assertEquals(LibraryLayout.CARDS, withTimeout(5_000) { vm.state.first { it.layout == LibraryLayout.CARDS } }.layout)
     }
 }
 ```
 
 `FakeLayoutPrefs` 定义在同文件末尾：`class FakeLayoutPrefs : LayoutPrefs { override var layout = LibraryLayout.TIMELINE }`
+
+再加**第三条**用例，直接测生产实现（否则 `FakeLayoutPrefs` 之外的持久化逻辑一行都没被覆盖，prefs 文件名或键名写错也全绿）：
+
+```kotlin
+    @Test fun `shared prefs implementation survives a new instance`() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        SharedPreferencesLayoutPrefs(ctx).layout = LibraryLayout.CARDS
+        // 新实例 = 重新读一次盘；Robolectric 的 SharedPreferences 是真的
+        assertEquals(LibraryLayout.CARDS, SharedPreferencesLayoutPrefs(ctx).layout)
+        SharedPreferencesLayoutPrefs(ctx).layout = LibraryLayout.TIMELINE
+        assertEquals(LibraryLayout.TIMELINE, SharedPreferencesLayoutPrefs(ctx).layout)
+    }
+```
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -2920,15 +2940,16 @@ class SharedPreferencesLayoutPrefs(context: Context) : LayoutPrefs {
         get() = LibraryLayout.entries.firstOrNull { it.name == prefs.getString(KEY_LAYOUT, null) }
             ?: LibraryLayout.TIMELINE
         set(value) {
-            // apply() 异步落盘、立刻更新内存值：杀进程重进仍能读到（Task 7 的验收就是盯这个）
-            prefs.edit().putString(KEY_LAYOUT, value.name).apply()
+            // commit() 同步落盘。验收里有「杀进程重进仍是卡片视图」，而 apply() 是异步写：
+            // 刚切完就 am force-stop，写入可能还没落盘，会偶发回退成时间轴。
+            prefs.edit().putString(KEY_LAYOUT, value.name).commit()
         }
 
     private companion object { const val KEY_LAYOUT = "library_layout" }
 }
 ```
 
-`LibraryViewModel` 组合 `repo.observeAll()` 与一个 `MutableStateFlow<LibraryLayout>`（初值取 `prefs.layout`），`setLayout` 同时写回 `prefs`；`state` 用 `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue)`——**与 Task 6 一致**，所以 Step 1 的测试里同样要有 `backgroundScope` 那一行收集者，否则 `observeAll()` 不会启动。
+`LibraryViewModel` 拼标签的写法**照抄 `DayViewModel`**（`android/app/src/main/java/com/dreamkeeper/ui/day/DayViewModel.kt`）：`repo.observeAll().flatMapLatest { dreams -> if (dreams.isEmpty()) flowOf(emptyList()) else combine(dreams.map { repo.observeTagsForDream(it.id) }) { tagLists -> dreams.mapIndexed { i, d -> LibraryItem(d, tagLists[i]) } } }`，再与 `MutableStateFlow<LibraryLayout>`（初值取 `prefs.layout`）combine 成 `LibraryUiState`；`setLayout` 同时写回 `prefs`；`state` 用 `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue)`——**与 Task 6 一致**，所以 Step 1 的测试里同样要有 `backgroundScope` 那一行收集者，否则 `observeAll()` 不会启动。
 
 > `FakeLayoutPrefs` 只出现在测试里（Step 1 已给），不要在生产代码里造第二个实现。
 
@@ -2939,13 +2960,15 @@ Expected: 2 个测试通过。
 - [ ] **Step 5: 写界面**
 
 要求：
-- 顶部一条：标题「全部梦」（`titleLarge`）+ 右侧搜索图标（`onSearch()`）。
-- 右侧一个分段控件切 `时间轴 / 卡片`（两段，选中态用 `Ember` 描边，不用填充色块）。
-- **时间轴**：左侧一条 1dp `Line` 竖线，每条一个 `Ember` 圆点 + 日期（`labelSmall`，`InkFaint`）+ 标题或首行（`bodyMedium`，`Paper`），条目间距 20dp。
-- **卡片流**：每条 = 一行日期（`labelSmall`、`InkFaint`）+ 下面一张 `DreamCard(dream, tags) { onOpen(dream.id) }`；卡片间距 12dp 交给 `LazyColumn` 的 `verticalArrangement`，不要在卡片里再叠外边距。
+- 顶部一条：标题「全部梦」（`titleLarge`）+ 右侧**一个**分段控件（`时间轴 / 卡片`）。**本任务不放搜索图标**（D61）。
+- **分段控件**：两段等宽（各 `weight(1f)`）、整体 `heightIn(min = 48.dp)`、1dp `Line` 描边 + 999dp 圆角；选中段文字 `Paper` + 背景 `EmberDeep`，未选中段文字 `InkDim`、无背景；两段各带 `contentDescription`（「切换到时间轴」/「切换到卡片」）。M3 的 `SegmentedButton` 默认高 40dp，不够 48dp——要么自己用 `Row` 画，要么显式 `heightIn(min = 48.dp)`。
+- **时间轴**：左侧一条 **1.5dp `Ember`** 竖线。**不要用 `Line #232A36`**——它在 Night 上是 1.34:1，肉眼等于看不见，截图上「竖线与圆点对齐」就没有可判对象（D60）。每条 = `Ember` 圆点 + 日期（`labelSmall`，`InkFaint`）+ 标题或首行（`bodyMedium`，`Paper`），每条 `heightIn(min = 48.dp)`、条目之间 20dp。
+- **卡片流**：每条 = 一行日期（`labelSmall`、`InkFaint`）+ 下面一张 `DreamCard(item.dream, item.tags) { onOpen(item.dream.id) }`；卡片间距 12dp 交给 `LazyColumn` 的 `verticalArrangement`，不要在卡片里再叠外边距。
+- **标签必须真的传进去**：`LibraryItem` 已带 `tags`，不许写 `emptyList()`。种子里「下坠的预感」那张电梯卡在这里必须能看到 chip，且与当日列表一致——否则同一份数据在两个列表里长得不一样（D62）。
 - **只许调用 `DreamCard`，不许重写一个**：Task 6 已经把「标题 / 正文首句 / 标签」抽成 `ui/common/DreamCard.kt`（`@Composable fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit)`）。「时间轴 / 卡片流」的差别用日期行和间距表达，**不要**为此复制一份卡片——两份样式迟早会分叉，分叉那天没人记得哪份是对的。
 - 空状态：居中一行 `InkDim` 文案「**还没有梦**」+ 下一行更小的副标题「去日历页，按那个橙色的钮」。**不要箭头**（D38）：这个页面没有说梦钮（唯一的说梦钮在日历页），画一支指向不存在的按钮的箭头是自相矛盾；原稿「按下面那个钮」也是错的，下面只有底部栏。
-- 点任意条目 → `onOpen(dream.id)`。
+- **空态本轮不验收**（D59）：debug 恒播种（`SEED_DEMO_DATA=true`），`pm clear` 之后第一次启动就会重播 4 条，空态在任何截图里都进不去。代码路径要写，但不要为了截它去改播种开关；等能关掉播种的构建（Task 9 的 release 检查）或 Plan 2 再补图。
+- 点任意条目 → `onOpen(item.dream.id)`。
 
 - [ ] **Step 6: 装到模拟器截图验收**
 
@@ -2965,28 +2988,31 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-logcat.ps1 -
 # ② 切到"全部"页并截图
 & $adb shell am start -n com.dreamkeeper/.MainActivity
 Start-Sleep 3
-& $adb shell input tap 400 230                   # 底部"全部"入口，按实际截图调整
+& $adb shell input tap 810 2274                  # 底栏「全部」：1080x2400 下 x≈810、y≈2274（Task 6 实测底栏占 y 2211–2337）
 Start-Sleep 2
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-task7-timeline.png
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\task7-timeline.png
 ```
 
 Expected：
 - `capture-logcat.ps1`：`RESULT: OK`、max TotalTime ≤ 2000、`LAUNCH: Displayed=3`、`CRASHES: 0`。**第一次冷启动比后两次慢是正常的**（要建库 + 写种子），但 max 仍然不许超 2000。
-- `plan1-task7-timeline.png`：**4 条**（不是 3 条——种子在 Task 4 定的是 4 条），左侧竖线与圆点对齐，日期按 **当月 22 / 15 / 8 / 1 号**倒序（`SeedData.DAY_STAIRS/DAY_OLD_HOUSE/DAY_CLASSROOM/DAY_ELEVATOR`）。**不要写死具体某月某日**——种子的月份跟着运行当天走。
-- 点分段控件切卡片后 `plan1-task7-cards.png`：卡片出现圆角与内边距，仍 4 条。
+- `task7-timeline.png`：**4 条**（不是 3 条——种子在 Task 4 定的是 4 条），左侧竖线与圆点对齐，日期按 **当月 22 / 15 / 8 / 1 号**倒序（`SeedData.DAY_STAIRS/DAY_OLD_HOUSE/DAY_CLASSROOM/DAY_ELEVATOR`）。**不要写死具体某月某日**——种子的月份跟着运行当天走。
+- 点分段控件切卡片后 `task7-cards.png`：卡片出现圆角与内边距，仍 4 条。
 - 杀掉进程重进（`am force-stop` 再 `am start`），**仍是卡片视图**（证明偏好已落盘，不是只活在内存里）。
 - 再跑一次 `pm clear` + 重启，列表回到 4 条而不是 8 条（幂等，证明 `count() == 0` 判断生效；`seedIfEmpty` 的写入在 `withTransaction` 里，见 D36）。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-task7-cards.png
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\task7-cards.png
 
 & $adb shell am force-stop com.dreamkeeper
 & $adb shell am start -n com.dreamkeeper/.MainActivity
 Start-Sleep 4
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-task7-cards-after-restart.png
+# startDestination 是日历页：重启后必须先点一次「全部」，否则截到的是日历，判不了偏好有没有落盘
+& $adb shell input tap 810 2274
+Start-Sleep 2
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\task7-cards-after-restart.png
 
 # ③ 近白像素闸门：判据 nearWhite 必须 = 0
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\plan1-task7-*.png -TopOffset 100 -MaxRatio 0
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\task7-*.png -TopOffset 100 -MaxRatio 0
 ```
 
 Expected：`check-near-white.ps1` 对三张图各自 `nearWhite=0`，退出码 0。
@@ -3442,5 +3468,9 @@ git rev-parse --short HEAD
 | D56 | 提示词 v1 / v1.1 都不输出 `quote` 字段 | D41 要求 changeLog 每条带显式 `quote`（精确子串 4–40 字，`indexOf` 取首个） | 新增 `prompts/novel.v1.2.md`（sha256_8 `6bc530c8`）：每条改成 `type` / `detail` / `quote` 三键，`detail` 只写改动、`quote` 逐字复制原文片段，找不到就整条丢弃；v1、v1.1 原文件一字不改留档（`f7dfb8d6` / `dc5f1374`） | 靠正则从 `detail` 里抠「」是脆弱约定：模型漏写引号就静默失去高亮，也无法确定性校验；显式字段可 `quote in rawTranscript` 直接判定。D55 定的「v1.x 内允许不破坏既有键的增量」是这次改版号的依据 |
 | D57 | 底部栏出现「无内容的灰药丸」 | Task 6 brief 让 `NavigationBarItem(icon = {})` 用空图标 | 改成自绘底部栏：`Row` 两个 48dp 可点区，选中 `Paper` / 未选中 `InkDim`，选中项下方 2dp `Ember` 短横线；不用 `NavigationBar` | M3 的 `NavigationBarItem` 会给选中项画 indicator pill，`icon` 为空时那块药丸里什么都没有，视觉上像渲染错误。自绘还能少一层依赖、更贴夜间极简 |
 | D58 | 截图里「今天」圈在 29 号 | 无（计划未提设备时区） | 模拟器时区是 GMT，`LocalDate.now()` 取的是设备时区 → 圈错位。执行 `settings put global auto_time_zone 0` + `setprop persist.sys.timezone Asia/Shanghai` + `service call alarm 3 s16 Asia/Shanghai`，`adb shell date` 显示 `CST 2026-10-30` 后重拍三张图；代码日期逻辑未改 | 「今天」必须跟设备本地日期走，不能为了截图改代码。以后每次拍带 `今天` 的图前先核 `adb shell date` |
+| D59 | 「全部」页的空态在截图上永远出不来 | debug 恒播种（`SEED_DEMO_DATA=true`），`pm clear` 后首次启动立刻重播 4 条 | Task 7 只保证空态代码路径存在，**本轮不验收空态截图**；留给能关掉播种的构建（Task 9 release 检查）或 Plan 2，并在 `task7.md` 里写明「空态未验收」 | 为了截一张空态图去改播种开关，等于让被验证的构建和被交付的构建不是同一个；宁可少一张图，也不要一张「改了配置才成立」的图 |
+| D60 | 时间轴竖线用 `Line #232A36` 等于看不见 | 计划原先指定 1dp `Line` 作时间轴骨架 | 竖线与圆点改 **1.5dp `Ember`**（6.44:1），`Line` 继续只做 1dp 分隔线 | 设计师实算：`Line` 在 `Night` 上只有 1.34:1。invisible 的骨架线会让「竖线与圆点对齐」这条验收无从判定，而 near-white 闸门照样通过——这是「验收通过但功能等于没做」的典型 |
+| D61 | Task 7 顶部放了一个点不动的搜索放大镜 | 计划的 Task 7 要求 `LibraryScreen(..., onSearch)`，但 `DreamRoute.Search` 要到 Task 8 才有内容 | 搜索入口从 Task 7 移除，`LibraryScreen` 签名去掉 `onSearch`，由 Task 8 Step 5b 接入 | 计划自己在 Task 8 写过「不要放一个点了没反应的假放大镜——那是『看起来坏了』，比没有更糟」，Task 7 却违反了自己。计划内的自相矛盾以更严的那条为准 |
+| D62 | 列表项只带 `Dream`，标签在卡片流里静默消失 | 原 Interfaces 定的是 `items: List<Dream>`，而 `DreamCard(dream, tags, onClick)` 需要 `List<Tag>` | 改成 `data class LibraryItem(val dream: Dream, val tags: List<Tag>)`，拼标签照抄 `DayViewModel` 的 `combine(dreams.map { repo.observeTagsForDream(it.id) })`；新增「标签必须真的传进去」验收条目 | 实现者面对「需要 tags 但手上没有」时，最省事的写法就是传 `emptyList()`——能编译、能过测试、near-white 照样 0，只有人眼看图才发现同一张卡片在当日列表有 chip、在全部列表没有 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
