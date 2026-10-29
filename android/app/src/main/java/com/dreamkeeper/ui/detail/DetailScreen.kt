@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -161,6 +162,7 @@ fun DetailScreen(
                         PlaybackBar(
                             audioPath = state.dream?.rawAudioPath,
                             durationMs = state.dream?.rawAudioMs,
+                            onAction = { message -> scope.launch { snackbarHost.showSnackbar(message) } },
                         )
                     }
                 }
@@ -170,7 +172,18 @@ fun DetailScreen(
         SnackbarHost(
             hostState = snackbarHost,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp),
-        )
+        ) { data ->
+            // M3 默认 Snackbar 用 inverseSurface，在深色主题里是一块发白的板子——
+            // 夜里晃眼，也过不了近白像素闸门。这里显式压回夜间色。
+            Snackbar(
+                snackbarData = data,
+                containerColor = NightRaised,
+                contentColor = Paper,
+                actionColor = Ember,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
     }
 }
 
@@ -218,14 +231,14 @@ private fun DetailTopBar(
                     text = { Text("编辑", style = MaterialTheme.typography.bodyMedium, color = Paper) },
                     onClick = {
                         menuOpen = false
-                        onAction("Plan 2 实现")
+                        onAction("编辑还没做，之后会有")
                     },
                 )
                 DropdownMenuItem(
                     text = { Text("删除", style = MaterialTheme.typography.bodyMedium, color = ErrorText) },
                     onClick = {
                         menuOpen = false
-                        onAction("Plan 2 实现")
+                        onAction("删除还没做，之后会有")
                     },
                 )
             }
@@ -374,7 +387,7 @@ private fun MediaTab() {
                     color = InkDim,
                 )
                 Text(
-                    "Plan 2 开始接模型",
+                    "先留个位置",
                     style = MaterialTheme.typography.labelSmall,
                     color = InkFaint,
                 )
@@ -410,9 +423,8 @@ private fun MissingDream(onBack: () -> Unit, modifier: Modifier = Modifier) {
  * Plan 1 传 `null, null`：不创建 `MediaPlayer`（空路径会崩），时长显示 `--:--`。
  * 波形高度由固定公式生成，不能每帧随机——那看着像坏了。
  */
-@Suppress("UNUSED_PARAMETER")
 @Composable
-fun PlaybackBar(audioPath: String?, durationMs: Long?) {
+fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Unit = {}) {
     val label = durationMs?.let { ms -> "%d:%02d".format(ms / 60_000, (ms / 1000) % 60) } ?: "--:--"
     val barHeights = remember { List(WAVE_BARS) { i -> (6 + (i * 7 + 3) % 15).dp } }
 
@@ -423,7 +435,9 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?) {
             .background(NightRaised)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable {
-                // Plan 2：audioPath != null 时在这里接 MediaPlayer。Plan 1 点了不播、也不崩
+                // Plan 2：audioPath != null 时在这里接 MediaPlayer。
+                // Plan 1 点了必须给一句人话——按钮不响等于坏了。
+                onAction(if (audioPath == null) "这条梦还没有录音" else "播放还没做，之后会有")
             }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
