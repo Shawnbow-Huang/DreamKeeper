@@ -1,0 +1,26 @@
+package com.dreamkeeper.di
+
+import android.content.Context
+import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.data.db.DreamDatabase
+
+/**
+ * 手写依赖容器：Plan 1 明确不引 Hilt/Koin（设计 §2「尽量少的依赖」），
+ * 所以这里就是最朴素的 `by lazy` 单例，进程内一份。
+ *
+ * 只放**真正常驻**的依赖：数据库与仓库。界面偏好（`LayoutPrefs`）在 Task 7 才出现，
+ * 现在写进来会引一个还不存在的类型，故留到那时再加（偏差已登记在 task-5-report.md）。
+ *
+ * 用 `context.applicationContext` 而不是传进来的 Activity/Application：数据库与仓库的生命周期
+ * 跟进程走，持有 Activity 引用就是内存泄漏的标准姿势。
+ */
+class AppContainer(context: Context) {
+
+    private val appContext: Context = context.applicationContext
+
+    /** 进程内唯一的 Room 实例；`DreamDatabase.create` 内部没有 `fallbackToDestructiveMigration` */
+    val database: DreamDatabase by lazy { DreamDatabase.create(appContext) }
+
+    /** 界面/ViewModel 只拿这一个入口，不自己 new DAO */
+    val repository: DreamRepository by lazy { DreamRepository(database) }
+}

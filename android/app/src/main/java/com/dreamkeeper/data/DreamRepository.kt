@@ -1,0 +1,214 @@
+package com.dreamkeeper.data
+
+import androidx.room.withTransaction
+import com.dreamkeeper.data.db.DreamDatabase
+import com.dreamkeeper.data.db.DreamEntity
+import com.dreamkeeper.data.db.DreamTagEntity
+import com.dreamkeeper.data.db.MediaAssetEntity
+import com.dreamkeeper.data.db.TagEntity
+import com.dreamkeeper.domain.Dream
+import com.dreamkeeper.domain.DreamCalendar
+import com.dreamkeeper.domain.MediaAsset
+import com.dreamkeeper.domain.Tag
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import java.time.YearMonth
+
+/**
+ * 领域模型与数据库之间的**唯一**翻译层。
+ *
+ * 界面/ViewModel 只拿 [Dream] / [Tag] / [MediaAsset]，不接触任何 `*Entity` 或 DAO；
+ * 仓库负责三件容易出人命的事：
+ * 1. 写入时守住「首次录入时间」与软删除标记（见 [save]）；
+ * 2. 用户搜索词 → LIKE 安全参数的转义与切词（见 [search]）；
+ * 3. 列表查询一律走 `observeAll` / `observeMonth`，`observeById` 只用于详情（含回收站，见 D26）。
+ *
+ * [clock] 可注入是为了让单测做确定性断言；仓库内部**不许**直接调 `System.currentTimeMillis()`。
+ */
+class DreamRepository(
+    private val db: DreamDatabase,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
+    private val dreams = db.dreamDao()
+    private val tags = db.tagDao()
+    private val assets = db.mediaAssetDao()
+
+    /**
+     * 按月查询（闭区间）。`DreamCalendar.monthRange` 返回「月首、月末」两天，
+     * 而 `DreamDao.observeByMonth` 的 `dreamDate BETWEEN :fromIso AND :toIso` 是闭区间
+     * （列存 `yyyy-MM-dd`，字典序等价日期序），所以两端原样传下去即可。
+     *
+     * **不要**改写成 `first..<last` 或 epochDay 的 `until`：那会丢掉每月最后一天（D24）。
+     */
+    fun observeMonth(month: YearMonth): Flow<List<Dream>> {
+        val (first, last) = DreamCalendar.monthRange(month)
+        return dreams.observeByMonth(first.toString(), last.toString())
+            .map { list -> list.map(::toDomain) }
+    }
+
+    /** 全部未删除的梦（列表数据源之一） */
+    fun observeAll(): Flow<List<Dream>> = dreams.observeAll().map { list -> list.map(::toDomain) }
+
+    /**
+     * 按 id 观察单条梦。**不过滤 `deletedAt`**：回收站要能打开一条已删除的梦（D26）。
+     * 因此它只能用于详情页；列表必须走 [observeAll] / [observeMonth]，否则回收站的梦会混进正常列表。
+     */
+    fun observe(id: String): Flow<Dream?> = dreams.observeById(id).map { it?.let(::toDomain) }
+
+    fun observeTags(): Flow<List<Tag>> = tags.observeAll().map { list -> list.map(::tagToDomain) }
+
+    /** 详情页「标签」tab：联 `dream_tags` 取标签；`Dream` 上没有也不该有 `tags` 字段 */
+    fun observeTagsForDream(dreamId: String): Flow<List<Tag>> =
+        db.dreamTagDao().observeTagsForDream(dreamId).map { list -> list.map(::tagToDomain) }
+
+    /**
+     * 打标 / 合并标签之后的重新关联：先清空这条梦的关联、再整体写入（幂等，可重放）。
+     *
+     * 两步**必须在同一事务里**：中途失败会留下「这条梦一个标签都没有」的半截状态，
+     * 而标签是用户手动整理过的数据，不能因为一次写失败就丢光。
+     */
+    suspend fun attachTags(dreamId: String, tagIds: List<String>) {
+        val unique = tagIds.distinct()
+        db.withTransaction {
+            db.dreamTagDao().deleteByDream(dreamId)
+            db.dreamTagDao().upsertAll(unique.map { DreamTagEntity(dreamId, it) })
+        }
+    }
+
+    /** 详情页「素材」tab：Plan 1 里通常是空表，空态文案由 UI 决定 */
+    fun observeMediaAssets(dreamId: String): Flow<List<MediaAsset>> =
+        assets.observeByDream(dreamId).map { list -> list.map(::mediaToDomain) }
+
+    /**
+     * 写入一条梦。
+     *
+     * 两条不许动的规则（都是「静默改数据」的典型，用户不会收到任何提示）：
+     * 1. [Dream.createdAt] 是**首次录入时间**：调用方带了非 0 值就原样保留，只有新建（0L）才用 now。
+     *    每次都写 `clock()` 的话，「补录一句 / 改个标点」就会把首次录入时间改成此刻——不可逆。
+     * 2. [Dream.deletedAt] 原样透传：构造实体时漏掉它，任何一次编辑都会把回收站里的梦悄悄捞回来。
+     *
+     * `updatedAt` 则相反：它表示「最后一次写入」，每次 save 都由 [clock] 覆盖。
+     */
+    suspend fun save(dream: Dream) {
+        val now = clock()
+        dreams.upsert(
+            DreamEntity(
+                id = dream.id,
+                ownerId = "local",
+                dreamDate = dream.date,
+                createdAt = dream.createdAt.takeIf { it > 0L } ?: now,
+                title = dream.title,
+                rawTranscript = dream.rawTranscript,
+                faithfulText = dream.faithfulText,
+                novelText = dream.novelText,
+                novelVersion = dream.novelVersion,
+                novelChangeLog = dream.novelChangeLog,
+                mood = dream.mood,
+                isDraft = dream.isDraft,
+                deletedAt = dream.deletedAt,
+                updatedAt = now,
+                rawAudioPath = dream.rawAudioPath,
+                rawAudioMs = dream.rawAudioMs,
+                transcriptStatus = dream.transcriptStatus,
+            )
+        )
+    }
+
+    /**
+     * 用户输入 → LIKE 查询：按空白切词，逐词查 4 列（title / rawTranscript / faithfulText /
+     * novelText），按 id 求**交集**（每个词都要命中，任一列命中即可）。
+     *
+     * 顺序即语义：第一个词的结果决定排序（DAO 里是 `dreamDate DESC, createdAt DESC`），
+     * 后面的词只做过滤。所以「电梯 六楼」返回的仍是按日期排的列表，不会因为求交而乱序。
+     *
+     * 转义责任在这里：DAO 的 `searchTerm` 只负责 `LIKE '%'||:term||'%' ESCAPE '\'`，
+     * 传进去的 term 必须是已经转义的。空查询（或清洗后一个词都不剩）直接返回空列表，
+     * **不许**退化成「返回全部」——那是搜索框里最常见的「看着像坏了」的 bug。
+     */
+    suspend fun search(rawQuery: String): List<Dream> {
+        val terms = rawQuery.trim()
+            .split(TERM_SEPARATOR)
+            .map(::normalizeTerm)
+            .filter { it.isNotEmpty() }
+            .distinct()
+        if (terms.isEmpty()) return emptyList()
+
+        var hits: List<Dream>? = null
+        for (term in terms) {
+            val matched = dreams.searchTerm(escapeLike(term)).map(::toDomain)
+            val previous = hits
+            hits = if (previous == null) {
+                matched
+            } else {
+                val ids = matched.mapTo(HashSet()) { it.id }
+                previous.filter { it.id in ids }   // 首词保序，后续词只做过滤
+            }
+        }
+        return hits.orEmpty()
+    }
+
+    /**
+     * 去掉标点与引号：用户搜 `"电梯"！` 时，引号和感叹号是输入习惯，不是要匹配的字符。
+     *
+     * 但 `%` 与 `_` **必须留着**——它们是 LIKE 的通配符，要交给 [escapeLike] 转义；
+     * 否则「通配符注入」的回归用例会因为输入被提前洗干净而永远测不到转义。
+     */
+    private fun normalizeTerm(raw: String): String =
+        raw.trim().replace(PUNCTUATION_OR_SYMBOL) { match ->
+            if (match.value == "%" || match.value == "_") match.value else ""
+        }
+
+    /**
+     * `\`、`%`、`_` 在 LIKE 里都有特殊含义：先转义，再拼进 `'%'||:term||'%'`（SQL 侧配 `ESCAPE '\'`）。
+     *
+     * 顺序不能反：反斜杠必须**最先**转义，否则后面 `%` → `\%` 新插入的反斜杠会被二次转义成 `\\%`，
+     * 语义就从「字面百分号」变成「字面反斜杠 + 通配符」。
+     */
+    private fun escapeLike(term: String): String = term
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+
+    private fun toDomain(e: DreamEntity) = Dream(
+        id = e.id,
+        date = e.dreamDate,
+        title = e.title,
+        rawTranscript = e.rawTranscript,
+        faithfulText = e.faithfulText,
+        novelText = e.novelText,
+        novelChangeLog = e.novelChangeLog,
+        mood = e.mood,
+        isDraft = e.isDraft,
+        novelVersion = e.novelVersion,
+        createdAt = e.createdAt,
+        updatedAt = e.updatedAt,
+        deletedAt = e.deletedAt,
+        transcriptStatus = e.transcriptStatus,
+        rawAudioPath = e.rawAudioPath,
+        rawAudioMs = e.rawAudioMs,
+    )
+
+    private fun tagToDomain(e: TagEntity) = Tag(e.id, e.name, e.kind, e.source, e.evidenceText)
+
+    private fun mediaToDomain(e: MediaAssetEntity) = MediaAsset(
+        id = e.id,
+        dreamId = e.dreamId,
+        type = e.type,
+        path = e.path,
+        prompt = e.prompt,
+        model = e.model,
+        status = e.status,
+        createdAt = e.createdAt,
+    )
+
+    private companion object {
+        /**
+         * 空白切词。Java/Kotlin 的 `\s` 只覆盖 ASCII 空白，不含全角空格 U+3000
+         * （中文输入法偶尔会产出的那个），所以单独列出，免得「电梯　六楼」被当成一个词。
+         */
+        val TERM_SEPARATOR = Regex("[\\s\\u3000]+")
+
+        /** Unicode 的「标点 + 符号」；`%`（Po）与 `_`（Pc）由 [normalizeTerm] 单独放行 */
+        val PUNCTUATION_OR_SYMBOL = Regex("[\\p{P}\\p{S}]")
+    }
+}
