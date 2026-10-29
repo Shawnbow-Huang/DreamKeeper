@@ -1,0 +1,23 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 本会话工具产物（不属于项目源码）
+.superpowers/
+.scratch/
+
+# 密钥与签名，永不入库
+*.jks
+*.keystore
+keystore.properties
+api-keys.properties
+
+# OS
+.DS_Store
+Thumbs.db
