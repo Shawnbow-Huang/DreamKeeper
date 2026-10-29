@@ -3368,12 +3368,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -
 **冷启动无白帧**：原稿是"连拍 0/150/300ms 三帧"，那三帧只能靠裸 `adb exec-out screencap -p > 文件` 抓，而 PowerShell 5.1 会把 PNG 写成 UTF-16 坏文件（见 §2 与 Global Constraints 的禁令），所以**这条路已经封了**。改成三条能真正执行的证据：
 
 1. `capture-logcat.ps1` 的 `STARTUP: runs=3 … max=…ms ≤ 2000` + `LAUNCH: Displayed=3`——`Displayed` 是系统自己量的"第一帧真正画出来的时刻"，比截图的时刻更准。
-2. `capture-screen.ps1` 抓启动后第一张图，再过 `check-near-white.ps1 -TopOffset 0 -MaxRatio 0`——`-TopOffset 0` 是**从屏幕最顶上**开始采样（别的任务用 `-TopOffset 100` 跳过状态栏），近白像素必须 = 0。
+2. `capture-screen.ps1` 抓启动后第一张图，再过 `check-near-white.ps1 -TopOffset 100 -MaxRatio 0`——`-TopOffset 100` 跳过状态栏（D82：`-TopOffset 0` 会把系统状态栏的白字算进来，96/72,000 = 0.133% 直接判红），近白像素必须 = 0。
 3. 真要逐帧，用录屏而不是连拍截图：`& $adb shell screenrecord --time-limit 5 /sdcard/cold.mp4`，再 `& $adb pull /sdcard/cold.mp4 docs\evidence\plan1\`，人眼看前 1 秒。录屏不涉及 PS 重定向，不受上面的禁令约束。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-coldstart-first.png
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\plan1-coldstart-first.png docs\evidence\plan1\plan1-final-home.png -TopOffset 0 -MaxRatio 0
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\plan1-coldstart-first.png docs\evidence\plan1\plan1-final-home.png -TopOffset 100 -MaxRatio 0
 ```
 
 > 判据：两张图 `nearWhite=0`，操作者仍要 read_image 看一遍——背景应是 `#0B0E13`（`NightVoid`），Splash 与首屏同色。截图时刻做不到毫秒级对齐，这一点如实写进证据文件，不要假装抓到了 0ms。
@@ -3392,7 +3392,7 @@ Select-String -Path android\app\build\generated\source\buildConfig\release\com\d
 逐条确认（每条都要截图或命令输出作证）：
 
 - [ ] 冷启动 2 秒内看到日历（`capture-logcat.ps1 -Runs 3` 的 `STARTUP max` < 2000；**不要**再用 `am start -W` 的单次 TotalTime，一次的数字不算数）
-- [ ] 冷启动无白帧（`plan1-coldstart-first.png` + `plan1-final-home.png` 经 `check-near-white.ps1 -TopOffset 0 -MaxRatio 0` 全 `nearWhite=0`，且人工看过背景是 `#0B0E13`）
+- [ ] 冷启动无白帧（`plan1-coldstart-first.png` + `plan1-final-home.png` 经 `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 全 `nearWhite=0`，且人工看过背景是 `#0B0E13`）
 - [ ] **release 的 `BuildConfig.SEED_DEMO_DATA == false`**（D37；`Select-String` 输出贴进证据）
 - [ ] 日历上下切 12 个月，不闪白、不崩
 - [ ] 全部列表两种视图切换正常，杀进程重进保留偏好
@@ -3576,5 +3576,8 @@ git rev-parse --short HEAD
 | D84 | 标签胶囊点击暂不做筛选 | Task 9 只做标签的管理（改名/合并/删除）；点胶囊按标签筛梦属于 Plan 2，本轮若做成死点击会让人以为坏了 | 点击弹「按标签筛梦还没做，之后会有」，Plan 2 接真筛选 | 避免出现「点了没反应」的假按钮，这条规则和 D80（说梦钮）同源 |
 | D83 | §14.7 无音频外传改用累计计数器口径 | 原定「空闲 5 分钟前后 delta」，两次实现都因 BPF 表解析失败没读到行（过程留证 `task9-14-7-network.txt`，三次失败都写进去了） | 改判据：`dumpsys package` 无 INTERNET 权限 + 进程 uid 在网络计数表整行缺席（自开机 rx/tx = 0）+ 16 分钟空闲窗进程未重启 | 只证「App 没有网络能力」，不覆盖 R3（系统 STT 可能走网络）——这一条必须写在结论旁边，不许当成「音频永不出机」的完整证明 |
 | D82 | 近白闸门必须排除状态栏区域 | Task 9 实测 `-TopOffset 0` 会因状态栏白字（96/72,000 = 0.133%）判红；状态栏是系统画的，不是我们的界面 | 判据固定为 `scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0`，并在证据表里写清「排除状态栏区」；Task 2/6/7/8/9 的图统一口径。原始数字保留在 ACCEPTANCE §5，不藏 | 否则每次验收都要人工解释一次「这个白不是我们的」；口径不一致会让跨任务对比失效 |
+| D85 | 终审三处「假空态 / 假无结果」 | 独立 reviewer 指出：`DayViewModel`/`LibraryViewModel` 的 `initialValue` 把「还没读到」当成「没有梦」，进页面先闪空态；`SearchScreen` 在 250ms 防抖窗口内就报「没有找到」。修法：两个 UiState 末尾追加 `loaded`（默认 false，读到才 true），搜索加 `searching`（输入词 ≠ 已查词即为真）。补 6 条用例，并做一次变异验证（`initialValue` 假装 loaded → 新用例红）。 |
+| D86 | ACCEPTANCE 两处数字与实物不符 | `ACCEPTANCE.md` 的 HEAD 写 `073afbc`（那是 Task 9 快照时点，其后还有 `cd94b78`/`d4b7fee`/`4fbea1e` 与终审修复）；「`logcat` 20,258 行」没有对应文件（存盘的是 1,217 行）。按实物更正，保留原话并加更正标记。 |
+| D87 | 终审 P2 未修项（留 Plan 2/3） | `save()` 的 `createdAt` 不读 `existing.createdAt`（Plan 2 编辑页会踩到）；`YearMonth.now()`/`LocalDate.now()` 未注入时钟（跨午夜「今天圈」不刷新）；路由名手写在 NavHost，改名字没有编译期保护；`DreamCardTextTest` 用同一个函数算期望（弱断言）；`LibraryViewModel` 每条梦各开一个 tag flow（N+1，千条时是 §14.5 隐患）。 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。

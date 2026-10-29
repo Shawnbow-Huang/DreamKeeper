@@ -42,6 +42,13 @@
 | 5 | 导出 .txt（+.docx/.pdf） | Plan 3 | ⬜ |
 | 6 | 美学增强（生图模型） | Plan 4 / 独立一轮 | ⬜ |
 
+## 三·五、Plan 1 终审（whole-branch final review）
+
+- **Lead 独立走查**（`docs/evidence/plan1/FINAL-WALKTHROUGH.md`，commit `4fbea1e`）：干净安装 + `pm clear` 复位，手动走 6 屏（日历 → 当日 → 详情 → 全部 → 标签 → 搜索），近白闸门 6/6 为 0，`FATAL EXCEPTION` / `ANR` 零命中，截图与 sha8 全部落库。中文检索走 `dk_prefill_search` 实测命中「电梯」。
+- **硬约束自审**（逐条实测，非引用文档）：`AndroidManifest.xml` 零 `uses-permission`；`android/app/src/main` 零 `FFFFFF`/`Color.White`；无 Hilt/Koin/DataStore/Roborazzi/Turbine；无 `fallbackToDestructiveMigration`；导航只有 `navigation-compose 2.9.8`；`namespace/applicationId com.dreamkeeper`、`compileSdk 37 / targetSdk 37 / minSdk 26`。
+- **复核数字**：11 测试类 / 95 用例 / 0 失败；schema v1 自 `17d4831` 起零 diff；`docs/superpowers/**`、`prompts/**`、`app/schemas/**` 零改动。
+- ⏳ 独立 reviewer subagent 的整支审查仍在跑（P0/P1 分级 + file:line）；它回来若有阻断项，先修再合。
+
 ## 四、刚完成
 
 - ✅ **Plan 1 收尾**（`f208d00` + `cd94b78`）：标签页、`mergeTags` 事务、种子补到 4 个标签（电梯/升降机同义）、「说梦」钮不再是哑键；Lead 独立复跑 95/95、schema 无 diff、禁区零改动。

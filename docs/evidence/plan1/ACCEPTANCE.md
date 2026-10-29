@@ -8,7 +8,7 @@
 
 | 项 | 值 |
 |---|---|
-| 分支 / HEAD | `plan1-foundation` / `073afbc`（本文件与 Task 9 改动随后一次性提交，见 `git log -1`） |
+| 分支 / HEAD | `plan1-foundation` / `073afbc`（**这是 Task 9 当轮快照时点**；该轮改动随后提交为 `cd94b78`，之后还有 `d4b7fee`/`4fbea1e` 与终审 P1 修复。本表数字不随后续提交变动，见 D86） |
 | APK | `android/app/build/outputs/apk/debug/app-debug.apk` |
 | APK 字节 | 12,436,053 |
 | **APK sha256** | `A621948807A420020A97A6F4C5CD99FB58571547F1216BA0DFF83D0A34D954FE` |
@@ -17,7 +17,7 @@
 | 设备 / 系统 | emulator-5554 / Android 17（API 36），1080×2400，density 420 |
 | 单测 | 11 个测试类 / **95 用例 / 0 失败 / 0 错误**（`app/build/test-results/testDebugUnitTest/*.xml` 计数，XML 时间戳晚于 APK） |
 | schema | `git diff --exit-code -- android/app/schemas` → **退出码 0**（一行未变） |
-| 崩溃 | `adb logcat -d` 20,258 行，`FATAL` 匹配 **0** 行 |
+| 崩溃 | 存盘的 `task9-logcat.txt` **1,217 行**（`capture-logcat.ps1 -Runs 3`）+ 现场 `logcat -d` 全量 dump，`FATAL EXCEPTION` / `ANR` 匹配 **0** 行（原写的「20,258 行」没有对应文件，按 D86 更正） |
 
 ## 1. §14 验收标准（九列，逐条）
 
