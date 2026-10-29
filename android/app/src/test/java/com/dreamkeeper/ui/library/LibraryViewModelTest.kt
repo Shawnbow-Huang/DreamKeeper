@@ -93,6 +93,28 @@ class LibraryViewModelTest {
         SharedPreferencesLayoutPrefs(ctx).layout = LibraryLayout.TIMELINE
         assertEquals(LibraryLayout.TIMELINE, SharedPreferencesLayoutPrefs(ctx).layout)
     }
+
+    /** 终审 P1-2：同 DayViewModelTest，首帧不许把「还没读到」画成「还没有梦」。 */
+    @Test fun `stays unloaded before the first emission, loaded after`() = runTest(dispatcher) {
+        repo.save(Dream("1", LocalDate.of(2026, 10, 1), null, "a", "a", null, null, null, false))
+        val vm = LibraryViewModel(repo, FakeLayoutPrefs())
+
+        assertFalse("没有订阅者时只有 initialValue，它是「还没读到」", vm.state.value.loaded)
+
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        val s = withTimeout(5_000) { vm.state.first { it.loaded } }
+        assertTrue(s.loaded)
+        assertEquals(listOf("1"), s.items.map { it.dream.id })
+    }
+
+    /** 库里真的没有梦时也要 loaded=true：那时才该显示「还没有梦」。 */
+    @Test fun `an empty library is loaded but empty`() = runTest(dispatcher) {
+        val vm = LibraryViewModel(repo, FakeLayoutPrefs())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        val s = withTimeout(5_000) { vm.state.first { it.loaded } }
+        assertTrue(s.loaded)
+        assertTrue(s.items.isEmpty())
+    }
 }
 
 class FakeLayoutPrefs : LayoutPrefs { override var layout = LibraryLayout.TIMELINE }

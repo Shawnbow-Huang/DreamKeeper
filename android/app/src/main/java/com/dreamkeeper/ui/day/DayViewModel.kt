@@ -15,6 +15,11 @@ data class DayUiState(
     val date: LocalDate,
     val title: String,
     val items: List<DayItem> = emptyList(),
+    /**
+     * 是否已经真正读过库。`items` 为空有两种含义：「这天确实没有梦」与「还没读到」，
+     * 只看 `isEmpty()` 会让进入有梦的日子先闪一下「这天没有梦」（终审 P1-1）。
+     */
+    val loaded: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -27,13 +32,14 @@ class DayViewModel(
         .flatMapLatest { dreams ->
             if (dreams.isEmpty()) {
                 // combine() 不接受空列表，必须走这个分支
-                flowOf(DayUiState(date, titleOf(date), emptyList()))
+                flowOf(DayUiState(date, titleOf(date), emptyList(), loaded = true))
             } else {
                 combine(dreams.map { repo.observeTagsForDream(it.id) }) { tagLists ->
                     DayUiState(
                         date = date,
                         title = titleOf(date),
                         items = dreams.mapIndexed { i, d -> DayItem(d, tagLists[i]) },
+                        loaded = true,
                     )
                 }
             }

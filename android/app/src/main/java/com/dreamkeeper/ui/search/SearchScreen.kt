@@ -67,6 +67,7 @@ fun SearchScreen(
     val vm: SearchViewModel = viewModel { SearchViewModel(repo, initialQuery = initialQuery) }
     val query by vm.query.collectAsStateWithLifecycle()
     val results by vm.results.collectAsStateWithLifecycle()
+    val searching by vm.searching.collectAsStateWithLifecycle()
     val trimmed = query.trim()
 
     Column(modifier = Modifier.fillMaxSize().background(Night)) {
@@ -92,6 +93,9 @@ fun SearchScreen(
 
         when {
             trimmed.isEmpty() -> CenteredHint("搜一个词，梦会自己找回来")
+
+            // 还在防抖窗口里或查询在飞：不能报「没有找到」，那是把「还没查」说成「查过了」（终审 P1-3）
+            searching -> CenteredHint("在找…")
 
             results.isEmpty() -> CenteredHint("没有找到含「$trimmed」的梦")
 

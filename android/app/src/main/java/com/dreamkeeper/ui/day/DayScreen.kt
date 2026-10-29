@@ -70,7 +70,10 @@ fun DayScreen(
             Spacer(modifier = Modifier.size(48.dp))
         }
 
-        if (state.items.isEmpty()) {
+        if (!state.loaded) {
+            // 首帧：还没读到库。留白比「这天没有梦」准确（终审 P1-1）
+            Box(modifier = Modifier.fillMaxSize())
+        } else if (state.items.isEmpty()) {
             // 空态：两行，不给箭头——箭头暗示「这里还有一层」，但这里就是尽头
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(

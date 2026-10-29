@@ -27,6 +27,11 @@ data class LibraryItem(val dream: Dream, val tags: List<Tag>)
 data class LibraryUiState(
     val layout: LibraryLayout,
     val items: List<LibraryItem> = emptyList(),
+    /**
+     * 是否已经真正读过库。`items` 为空有两种含义：「真的还没有梦」与「还没读到」，
+     * 只看 `isEmpty()` 会让进入「全部」的第一帧闪一下空态（终审 P1-2）。
+     */
+    val loaded: Boolean = false,
 )
 
 /**
@@ -48,7 +53,11 @@ class LibraryViewModel(
      */
     private val layout = MutableStateFlow(prefs.layout)
 
-    private val items: Flow<List<LibraryItem>> = repo.observeAll().flatMapLatest { dreams ->
+    /**
+     * `null` = 还没读到；`emptyList()` = 读到了、确实没有梦。
+     * 两者在界面上的含义完全相反，所以不在这一层就把空表当成「空态」。
+     */
+    private val items: Flow<List<LibraryItem>?> = repo.observeAll().flatMapLatest { dreams ->
         if (dreams.isEmpty()) {
             // combine() 不接受空列表，必须走这个分支
             flowOf(emptyList())
@@ -65,7 +74,7 @@ class LibraryViewModel(
      * 否则等到超时也只有 initialValue。
      */
     val state: StateFlow<LibraryUiState> = combine(layout, items) { l, list ->
-        LibraryUiState(layout = l, items = list)
+        LibraryUiState(layout = l, items = list.orEmpty(), loaded = list != null)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

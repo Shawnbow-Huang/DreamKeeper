@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -130,5 +131,50 @@ class SearchViewModelTest {
         runCurrent()
         advanceUntilIdle()
         assertEquals(listOf("1"), vm.results.value.map { it.id })
+    }
+
+    /**
+     * 终审 P1-3：防抖窗口内必须是「在找…」，不能是「没有找到」。
+     * 只看 `results.isEmpty()` 的话，从敲第一个字起就会假报 250ms 以上的「没有找到」。
+     */
+    @Test
+    fun `searching is true inside the debounce window and false once results land`() = runTest(dispatcher) {
+        repo.save(dream("1", 1, "电梯", "电梯里有人"))
+
+        val vm = SearchViewModel(repo, StandardTestDispatcher(testScheduler))
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.searching.collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.results.collect {} }
+
+        assertFalse("初始没在搜", vm.searching.value)
+
+        vm.onQueryChange("电梯")
+        runCurrent()
+        assertTrue("输入了但还没查完，必须算「在找」", vm.searching.value)
+
+        advanceTimeBy(251)
+        runCurrent()
+        assertEquals(listOf("1"), vm.results.value.map { it.id })
+        assertFalse("结果到了就不在找了", vm.searching.value)
+    }
+
+    /** 清空输入框 = 回到「搜一个词」，不算在找，也不算没找到。 */
+    @Test
+    fun `clearing the field stops searching`() = runTest(dispatcher) {
+        repo.save(dream("1", 1, "电梯", "电梯里有人"))
+
+        val vm = SearchViewModel(repo, StandardTestDispatcher(testScheduler))
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.searching.collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.results.collect {} }
+
+        vm.onQueryChange("电梯")
+        advanceTimeBy(251)
+        runCurrent()
+        assertFalse(vm.searching.value)
+
+        vm.onQueryChange("")
+        advanceTimeBy(251)
+        runCurrent()
+        assertFalse(vm.searching.value)
+        assertTrue(vm.results.value.isEmpty())
     }
 }

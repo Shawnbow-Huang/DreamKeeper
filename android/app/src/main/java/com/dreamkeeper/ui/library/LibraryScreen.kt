@@ -72,7 +72,10 @@ fun LibraryScreen(
     Column(modifier = Modifier.fillMaxSize().background(Night)) {
         LibraryHeader(layout = state.layout, onLayout = vm::setLayout, onOpenTags = onOpenTags)
 
-        if (state.items.isEmpty()) {
+        if (!state.loaded) {
+            // 首帧：还没读到库。留白比「还没有梦」准确（终审 P1-2）
+            Box(modifier = Modifier.fillMaxSize())
+        } else if (state.items.isEmpty()) {
             EmptyLibrary()
         } else {
             when (state.layout) {

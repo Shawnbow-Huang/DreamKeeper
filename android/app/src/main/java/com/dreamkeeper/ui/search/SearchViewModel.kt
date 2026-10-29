@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
@@ -36,6 +37,9 @@ class SearchViewModel(
 
     private val _query = MutableStateFlow(initialQuery)
 
+    /** 最近一次**真的查过**的词。与输入框内容不同 = 防抖窗口内或查询在飞。 */
+    private val appliedQuery = MutableStateFlow(initialQuery.trim())
+
     /** 输入框当前内容。界面用它画光标/占位文案，结果只从 [results] 来。 */
     val query: StateFlow<String> = _query.asStateFlow()
 
@@ -44,13 +48,34 @@ class SearchViewModel(
     val results: StateFlow<List<Dream>> = _query
         .debounce(250)
         // 空查询不是「搜全部」：repo.search("") 本身也返回空表，这里提前短路省一次查库
-        .mapLatest { q -> if (q.isBlank()) emptyList() else repo.search(q.trim()) }
+        .mapLatest { q ->
+            if (q.isBlank()) {
+                appliedQuery.value = ""
+                emptyList()
+            } else {
+                repo.search(q.trim()).also { appliedQuery.value = q.trim() }
+            }
+        }
         .flowOn(dispatcher)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+
+    /**
+     * 有字但还没查完（防抖窗口内、或查询正在跑）。
+     *
+     * 界面必须分开这两种「没有结果」：还没查 → 「在找…」；查完了确实没有 → 「没有找到」。
+     * 只看 `results.isEmpty()` 会让新搜索从一开始就假报「没有找到」（终审 P1-3）。
+     */
+    val searching: StateFlow<Boolean> = combine(_query, appliedQuery) { typed, applied ->
+        typed.trim() != applied
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = false,
+    )
 
     fun onQueryChange(q: String) {
         _query.value = q
