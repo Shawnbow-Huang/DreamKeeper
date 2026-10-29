@@ -543,7 +543,7 @@ Expected: `capture-screen.ps1` 打印 `RESULT: OK path=… dims=1080x2400 sha256
 
 ```powershell
 cd D:\DreamKeeper
-git add -A
+git add <本任务 Files 清单里的路径>
 git commit -m "chore(android): Gradle 9.8.2 + AGP 9.5.0 工程骨架，可构建可安装"
 git rev-parse --short HEAD
 ```
@@ -784,7 +784,7 @@ Expected: `RESULT: OK`；文字为浅灰 `#E6EAF2`（不是纯白），背景近
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(ui): 梦匣深色色板与主题（含启动画面与深底图标），禁止纯白"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(ui): 梦匣深色色板与主题（含启动画面与深底图标），禁止纯白"
 git rev-parse --short HEAD
 ```
 
@@ -912,7 +912,7 @@ Expected: `BUILD SUCCESSFUL`，5 个测试通过。
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(domain): 日历月视图排布逻辑与测试"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(domain): 日历月视图排布逻辑与测试"
 git rev-parse --short HEAD
 ```
 
@@ -1640,7 +1640,7 @@ Expected: `BUILD SUCCESSFUL`，**11 个测试通过**（原来的 9 条 + `obser
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(data): Room 实体、LIKE 中文搜索与种子数据"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(data): Room 实体、LIKE 中文搜索与种子数据"
 git rev-parse --short HEAD
 ```
 
@@ -2012,7 +2012,7 @@ Expected: `BUILD SUCCESSFUL`，9 个测试通过（尤其 `search treats percent
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(data): 仓库层、LIKE 搜索转义与种子注入"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(data): 仓库层、LIKE 搜索转义与种子注入"
 git rev-parse --short HEAD
 ```
 
@@ -2582,7 +2582,7 @@ Expected：`check-near-white.ps1` 对三张图各自打印 `RESULT: OK … nearW
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(ui): 日历首屏（月份切换、有梦红点、说梦大钮）"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(ui): 日历首屏（月份切换、有梦红点、说梦大钮）"
 git rev-parse --short HEAD
 ```
 
@@ -2797,7 +2797,7 @@ Expected：`check-near-white.ps1` 对三张图各自 `nearWhite=0`，退出码 0
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(ui): 全部梦境列表（时间轴/卡片流切换并记忆）"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(ui): 全部梦境列表（时间轴/卡片流切换并记忆）"
 git rev-parse --short HEAD
 ```
 
@@ -2991,7 +2991,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(ui): 详情页四 tab 与中文搜索（LIKE + 防抖）"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(ui): 详情页四 tab 与中文搜索（LIKE + 防抖）"
 git rev-parse --short HEAD
 ```
 
@@ -3134,7 +3134,7 @@ Select-String -Path android\app\src\main\java\com\dreamkeeper\data\db\*.kt -Patt
 # ② 数据库里有这张表（运行期实证）
 & $adb shell "run-as com.dreamkeeper sqlite3 databases/dreamkeeper.db '.tables'" 2>$null
 # 或：把 db 拉出来看
-& $adb exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db | Set-Content -Encoding Byte .\dreamkeeper.db
+cmd /c "`"$adb`" exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db > D:\DreamKeeper\.scratch\dreamkeeper.db"
 # ③ remoteId 字段真的在代码里
 git grep -n "remoteId" android/app/src/main
 ```
@@ -3149,7 +3149,7 @@ git grep -n "remoteId" android/app/src/main
 
 ```powershell
 cd D:\DreamKeeper
-git add -A; git commit -m "feat(ui): 标签管理页（重命名/合并/删除）与 Plan 1 库级验收"
+git add <本任务 Files 清单里的路径>; git commit -m "feat(ui): 标签管理页（重命名/合并/删除）与 Plan 1 库级验收"
 git tag plan1-done
 git rev-parse --short HEAD
 & $adb logcat -d | Out-File -Encoding utf8 "D:\DreamKeeper\docs\evidence\plan1\task9-logcat.txt"
@@ -3228,5 +3228,7 @@ git rev-parse --short HEAD
 | D40 | 录音中断语义（G1/G2） | §8.1-5 原写「启动扫描 `files/audio/`……有对应行：正常，什么都不做」；§14.2 只写「音频不丢」，没有判据 | **G1**：来电/焦点被抢期间读不到 PCM → **补等长零字节**，时间轴不断；`rawAudioMs` 定义为 `(文件字节数 - 44) / 32`（文件真实时长，含补零），**不用墙钟**。**G2**：WAV 头开录写 `0xFFFFFFFF` 占位，**松手时与启动扫描时都要回填**；扫描对「已有对应行」的文件也必须**校验并修复头**（原文「什么都不做」会漏修） | **已回写设计 §8.1-5 与 §14.2 判据**（「通话前后内容连续、通话期间为等长静音」）。**Plan 2 待验风险（各一行）**：R1 `targetSdk 37` 下 microphone 型前台服务**不能**从锁屏/磁贴后台直起，须先拉起可见 Activity，验收用 `logcat` 过滤 `ForegroundServiceStartNotAllowed`；R2 长录音 1.92MB/min、1h≈115MB，需剩余空间闸门；R3 系统 STT 无 on-device 中文包时会退回**网络识别**（=音频出机），Plan 2 必须抽象 `SttEngine` 接口 + API 33+ 可用性检查，不可用就 `PENDING` 排队 |
 | D41 | 逐段对照不引入字符偏移 | §6.2：`changeLog: [{type, detail}]`；tab 标题「小说化 · 补写 6 处」 | Plan 3 的 `changeLog` 每条**增加 `quote` 字段**：**必须是原样稿里的精确子串，4–40 字**；界面用 `rawTranscript.indexOf(quote)` 定位并高亮**首个**匹配；tab 标题的 N = `changeLog` **数组长度** | **已回写设计 §6.2**。三条理由：①字符偏移在原样稿被编辑后全部错位，而 `quote` 是自校验的（找不到就不高亮，而不是高亮错行）；②长度区间 4–40 字保证「可唯一命中」又不至于整段复述；③**「补写 N 处」字样必须保留**——UI 有正则依赖（`补写\s*(\d+)\s*处`），改文案会让「逐段对照」入口静默消失。Plan 1 里 `novelChangeCount()` 的正则只是过渡桥，Plan 3 换成 `changeLog.size` |
 | D42 | `docs/eval/` 口径不统一 | §7.2 ④ 三条评分写成「1–5 / 有·无 / 有·无」 | `docs/eval/README.md` 是「三项各 1–5 分」，`results.md` 的列名与表头却是「有没有…」+ 缺一列「原样整理违规次数」 | **已改 `docs/eval/results.md`**：三项统一 **1–5 分**（不再混用「有/无」），并加一列「原样整理违规次数（目标 0）」；与 `README.md` 的说法逐句核对过。设计 §7.2 ④ 同步改成 1–5 | **已改**。同一份口径在三处（设计 / README / results）漂移是文档类项目最常见的腐烂方式：改一处的读者以为改全了 |
+| D43 | 任务提交步骤用 `git add -A` | 各 Task 的提交步骤写 `git add -A` | 改成 `git add <本任务 Files 清单里的路径>`（全计划 9 处已替换，`git add -A` 命中数 = 0） | **Lead 裁定**：`git add -A` 会把工作区里别人的改动一起提交（Task 5 期间就差点把专家产出混进同一个 commit，已 `reset --soft` 拆开） |
+| D44 | Task 9 拉数据库用 `Set-Content -Encoding Byte` | `& $adb exec-out run-as ... cat databases/dreamkeeper.db | Set-Content -Encoding Byte` | 换成 `cmd /c "… exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db > D:\DreamKeeper\.scratch\dreamkeeper.db"`（二进制安全），并校验 SQLite 魔数 `53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33` | PS 5.1 没有 `-Encoding Byte`、PS 7 的 `Set-Content` 按文本处理会改换行；与截图那条是同一个坑 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
