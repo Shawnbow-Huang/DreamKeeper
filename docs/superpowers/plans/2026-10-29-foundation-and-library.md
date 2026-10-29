@@ -3282,9 +3282,36 @@ git rev-parse --short HEAD
 
 ## Task 9: 标签管理页 + Plan 1 库级验收
 
+### 0. 派工前修订（Lead 按三位专家预审裁定，覆盖下文任何冲突）
+
+**0.1 入口与路由。** 标签页入口 = 「全部」页（`LibraryScreen`）顶栏右侧一个 48dp 文字按钮「标签」；页面走独立路由 `DreamRoute.Tags`，**自带「‹」返回**。同时删掉 `DreamKeeperRoot.kt:132` 那个 `/* Task 9 */` 空 composable。**不要**加第三个底栏 tab——底部栏白名单只有日历/全部（`DreamKeeperRoot.kt:65,159-181`），多一个会变成「点进去底栏消失、无返回」的黑屏死路。
+
+**0.2 依赖接线（不加就会编译红）。** `TagsViewModel` 需要 `TagDao`，但 `DreamKeeperRoot` 现在只收 `repo + layoutPrefs`（`DreamKeeperRoot.kt:58-61`）、`MainActivity.kt:33-38` 也一样，`AppContainer.kt:24` 的 `database` 从没接线。→ Files 必须包含 `di/AppContainer.kt`、`MainActivity.kt`、`DreamKeeperRoot.kt`。**合并事务放仓库层**：`DreamRepository.mergeTags(fromId, intoId)`——该文件已 `import androidx.room.withTransaction`，`:75-81` 的 `attachTags` 就是同一模式。
+
+**0.3 合并的正确写法。** 事务里先 `UPDATE OR REPLACE dream_tags SET tagId = :into WHERE tagId = :from`，再删源标签行。同一个梦同时挂着 from/into 时，REPLACE 会先删后插收敛成一行；普通 `UPDATE` 在这一行上会 `UNIQUE constraint failed`。三条护栏：①`fromId == intoId` 立刻早退（否则等于把标签连同关联一起删了）；②`intoId` 不存在时不改库、返回 false；③**重命名撞名绝不能用 `upsert`**——`tags.name` 有唯一索引且 `upsert` 走 REPLACE，会删掉旧标签行、把它的关联留成孤儿，`INNER JOIN` 之后标签静默消失。撞名必须先 `findByName` 查到再弹二次确认。不许加外键/CASCADE（现在 `DreamTagEntity` 根本没有 `foreignKeys`，加上就是 schema 变更 → v2）。
+
+**0.4 测试数据必须能证伪。** 至少三条梦：dream-1 只挂 t2、dream-2 已挂 t1、dream-3 **同时**挂 t1+t2。断言三者都收敛成 `[t1]`、dream-3 在 `dream_tags` 只剩一行、t2 行已删。只有这种数据才能逼出 `OR REPLACE`——只造「dream-1 挂 t2」的话，写成普通 `UPDATE`、或漏掉 `WHERE tagId`、或干脆全表 DELETE 都能通过。`countTagsOn` 放 `DreamTagDao`（不放 `TagDao`，那文件自己写着只管标签本身），断言单元素或加 `ORDER BY`。
+
+**0.5 测试脚手架照抄。** `LibraryViewModelTest.kt:37-43`：`Dispatchers.setMain(dispatcher)` + `setQueryExecutor/setTransactionExecutor(dispatcher.asExecutor())`。`merge` 若是 `viewModelScope.launch`，不这么配就是 Room 跑真线程、`advanceUntilIdle()` 推虚拟时钟（D53），偶发绿。
+
+**0.6 界面。** 顶栏 48dp「‹」+ 标题「标签」；按 **人物 → 地点 → 物品 → 动作 → 情绪 → 其他** 顺序分组——用 `TagKind` 常量顺序，**不许** `ORDER BY kind`（那是字符串序，会从「动作」开头）；胶囊 `combinedClickable`、点击区 `heightIn(min = 48.dp)`（视觉 36dp 靠内边距，点区必须另撑）；边框用 `InkDim`，**不用** `Line`（1.34:1，看不见）；长按出 3 项菜单（重命名 / 合并到… / 删除），菜单底色 `NightRaised`、删除项用 `ErrorText`，**不许**用 M3 默认底色（`surfaceContainerHigh` 在夜间是紫灰板，`Snackbar` 已经在 D70 踩过一次）；合并选择器用 `ModalBottomSheet` + `imePadding()`，**不许** `AlertDialog`（独立 window 拿不到 `Scaffold` 的 innerPadding，键盘一弹就盖住输入框）。空态：「还没有标签」／「打上标签后，会按人物、地点、物品…分组显示在这里」。
+
+**0.7 文案。** 菜单项就叫「重命名 / 合并到… / 删除」；撞名对话框「已有同名标签，要合并吗？」+「合并 / 取消」；删除确认「删除标签不会删掉梦，只去掉标注」。**任何地方不许出现「Plan N」这类内部进度号**（D71）。
+
+**0.8 种子要够演示。** `SeedData` 现在只有 1 个标签，合并根本演示不出来。本轮补到 4 个跨 kind 的标签，含一对同义（「电梯」/「升降机」），仍走 `db.withTransaction` + 固定 id。Files 加 `SeedData.kt`。
+
+**0.9 构建与验收顺序。** 先 `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`；**必须显式跑 `:app:assembleDebug`**——`testDebugUnitTest` 不产 APK，不重新打包的话 8 条 UI 验收验的是 Task 8 的旧包；`assembleRelease` 用来验 `SEED_DEMO_DATA=false`，但**先删 `app/build/generated/source/buildConfig/release`** 再生成，否则陈旧即通过；schema 判据：构建后 `git diff --exit-code -- android/app/schemas` 必须无差异。
+
+**0.10 证据规范。** 命名一律 `task9-*.png`（磁盘上全是 `taskN-` 前缀，D51 只改了正文）；日志拆两个文件——`task9-logcat.txt`（原始 dump）+ `task9-report.txt`（`capture-logcat.ps1 -ReportFile` 落的 `STARTUP/LAUNCH/CRASHES` 判据行），**不许**再用 `Out-File` 覆盖同一个文件；`check-near-white.ps1` 的位置参数只有一个，多图写成 `-Path a.png,b.png`；冷启动首帧判据把 `-Step` 降到 1（6px 步长会整块漏掉细白边）。每张图记 APK sha256 + `adb shell date`；**旧构建的图只能标「历史构建 · 仅供回归对照」，不许当本轮证据**。判别串：四 tab 文案「原样/小说化/标签/素材」、种子日期 = 当月 1/8/15/22、卡片不重复首句（D63）。
+
+**0.11 `ACCEPTANCE.md` 的列。** `§编号 | 判据原文（逐字抄设计 §14）| 归属计划 | 证据文件 | sha256(8) | 构建绑定(APK sha256) | 复跑命令 | 结论(绿/红/未覆盖) | 未覆盖原因+补测时点`。七条现状必须如实：§14.1 **未覆盖 · Plan 4**（且冷启动 909ms **不是**本条证据——它计的是点击到开录）；§14.2 未开始 · Plan 2；§14.3 等样本 · Plan 2（**禁止**拿 `check-ai-flavor.py` 冒充 diff 违规检查，D54）；§14.4 自动门已就位但人评分未做 · Plan 3；§14.5 未覆盖（D9）· Plan 2 开工前补造数与 gfxinfo；§14.6 未开始 · Plan 3；**§14.7 本轮可出负向证据**——`dumpsys package com.dreamkeeper | Select-String INTERNET` 为空 + 空闲 5 分钟上行 0 B，并注明只证「无网络能力」，不覆盖 R3 的系统 STT 网络回退。
+
+**0.12 顺手修的一个真 bug。** 日历「说梦」钮 `onRecord` 是空 lambda（点了没反应，违反 D68）。本轮改成点击提示「录音还没做，之后会有」，并与 Task 9 截图一起验收。
+
+
 **Files:**
 - Create: `.../ui/tags/TagsScreen.kt`, `.../ui/tags/TagsViewModel.kt`
-- Modify: `.../ui/DreamKeeperRoot.kt`（设置入口/二级页）, `.../ui/library/LibraryScreen.kt`
+- Modify: `.../ui/DreamKeeperRoot.kt`（删空桩、接 `DreamRoute.Tags`）、`.../ui/library/LibraryScreen.kt`（顶栏「标签」入口）、`.../di/AppContainer.kt`（暴露 `tagDao`）、`MainActivity.kt`（传参）、`.../data/DreamRepository.kt`（`mergeTags`）、`.../data/db/TagDao.kt` / `DreamTagDao.kt`（查重与按梦统计）、`.../data/db/SeedData.kt`（4 个跨 kind 标签）、`.../ui/DreamKeeperRoot.kt`（说梦钮空 lambda 改提示）
 - Test: `android/app/src/test/java/com/dreamkeeper/ui/tags/TagsViewModelTest.kt`
 
 - [ ] **Step 1: 写「合并标签」的失败测试**
@@ -3537,5 +3564,13 @@ git rev-parse --short HEAD
 | D70 | 播放条点了没反应 + snackbar 在夜间是一块白板 | Plan 1 没有音频，`PlaybackBar` 原来 `onClick = {}`（注释写「点了不播、也不崩」）；M3 `Snackbar` 默认 `inverseSurface`，深色主题下渲染成近白板子 | ①`PlaybackBar` 增加 `onAction: (String) -> Unit`，`audioPath == null` 时点它提示「这条梦还没有录音」，非空时提示「播放还没做，之后会有」；②`SnackbarHost` 用自定义 `Snackbar(containerColor = NightRaised, contentColor = Paper, actionColor = Ember)` | 一个按钮点了什么都不发生，用户会以为 App 坏了；而近白的 snackbar 既晃眼又过不了「近白像素 = 0」这条闸门。两条都是**用户当场就能看见**的问题，不该留到 Plan 2 |
 | D71 | 用户可见文案里漏了内部计划号 | 详情页溢出菜单提示「Plan 2 实现」、素材空槽副标题「Plan 2 开始接模型」 | 一律改成不含进度号的人话：「编辑还没做，之后会有」「删除还没做，之后会有」「先留个位置」 | 「Plan 2」是我们的排期，不是用户的信息。写进产品文案等于把内部账本摊给用户看，也立刻过期 |
 | D72 | 搜索只有 LIKE 子串；debug 预填钩子只吃一次 | Task 8 定案 `LIKE '%'||:term||'%'` 逐词求交；`dk_prefill_search` 只在 VM 构造时读取 | 两条都**留着不动**，在 ACCEPTANCE 与本文档写明限制：①LIKE 在千条内毫秒级，破万再换索引；②钩子只服务自动化截图，真机从搜索页再搜走 UI 输入，不受影响 | 为「精确语义」现在就上分词或倒排，是本阶段最贵的过度设计；钩子的唯一用户是截图脚本，处理 `onNewIntent` 没有收益 |
+| D73 | 标签页没有入口，且模型拿不到 DAO | 底栏只有日历/全部，`DreamRoute.Tags` 是空桩（`DreamKeeperRoot.kt:132`）；`TagsViewModel` 需要的 `TagDao` 在 `AppContainer.kt:24` 没接线 | 入口放「全部」页顶栏的 48dp 文字按钮「标签」，独立路由自带返回；`AppContainer` 暴露 `tagDao`，`MainActivity` → `DreamKeeperRoot` → `TagsScreen` 逐层传 | 把标签页做成第三个底栏 tab，会导致「进去后底栏消失、又没返回」的黑屏死路；而给 Root 加一个第二参数比加导航层便宜 |
+| D74 | 合并标签必须用 `UPDATE OR REPLACE` | `dream_tags` 主键是 `(dreamId, tagId)`；同一篇梦同时挂 from/into 时，普通 `UPDATE` 会撞唯一约束抛 `UNIQUE constraint failed` | 事务内 `UPDATE OR REPLACE dream_tags SET tagId = :into WHERE tagId = :from`，再删源标签；`from == into` 早退、`into` 不存在返回 false | REPLACE 的语义正是「冲突就换掉」，在这里恰好等于「两标签合成一个」。测试数据必须造出「同时挂两个」的那条梦，否则这条修法不会被逼出来 |
+| D75 | 改标签名不许走 `upsert` | `tags.name` 有唯一索引，`upsert` 走 REPLACE 会删掉旧标签行、把它的 `dream_tags` 留成孤儿，`INNER JOIN` 之后标签静默消失 | 重命名前先 `findByName`；撞名弹「已有同名标签，要合并吗？」，确认后走 `mergeTags` | 「静默丢数据」是最难查的一类 bug：界面上看只是某个梦少了个标签。用 merge 表达合并，语义也更准确 |
+| D76 | 种子的标签只有一个，验收演不出来 | `SeedData` 只播 1 个标签，`pm clear` 也变不出第二个，合并与分组顺序都无法截图 | 本轮补到 4 个跨 kind 标签（含同义的「电梯」/「升降机」），固定 id + `withTransaction` | 验收要求「可合并、合并后原标签消失」，数据不支持就只能靠实施者偷偷改种子或伪造截图——两条都比改种子贵 |
+| D77 | 截图验的可能是旧包 | `testDebugUnitTest` 不产 APK，`app-debug.apk` 停留在 Task 8 那次构建（Task 9 之后没再打包） | 验收前显式 `:app:assembleDebug`；`assembleRelease` 前先删 `app/build/generated/source/buildConfig/release` 防陈旧通过 | 「最后一次构建」不是「这次构建」。不显式打包，截图与 APK sha 对不上，证据链从根上就断了 |
+| D78 | ACCEPTANCE 的表头缺两列，会写成假绿 | 只写「证据文件 + 结论」时，无法判断证据是哪次构建、能不能复跑；Plan 1 有 4 条验收天生补不了 | 表头固定九列：`§编号 / 判据原文 / 归属计划 / 证据文件 / sha256(8) / 构建绑定(APK sha256) / 复跑命令 / 结论 / 未覆盖原因+补测时点`；「未覆盖」必须同时写原因和补测时点 | 没有「构建绑定」列，半年后没人知道那张图是哪个包拍的；没有「补测时点」，「未覆盖」就等于「忘了」 |
+| D79 | §14.7「抓包无音频外传」现在就能出证据 | Plan 1 的 `AndroidManifest.xml` 零 `uses-permission`，APK 连 INTERNET 都没有；原计划把它整条推给 Plan 2/3 | 本轮出负向证据：`dumpsys package com.dreamkeeper | Select-String INTERNET` 为空 + 空闲 5 分钟上行 0 B，并注明只证「无网络能力」，不覆盖 R3 的系统 STT 网络回退 | 能现在证明的事推到以后，等于少一条已经到手的证据；但也不能因此宣称「音频永不出机」已被完整证明——那是两件事 |
+| D80 | 说梦钮点了没反应 | `DreamKeeperRoot` 的 `onRecord` 是空 lambda（`/* Plan 2 */`），主界面最大的按钮是一块死按钮 | 点击给一句人话「录音还没做，之后会有」；录音本体仍归 Plan 2 | 与 D68/D70 同宗：Plan 1 允许「还没做」，不允许「点了什么都不发生」。用户摸到死按钮只会以为 App 坏了 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
