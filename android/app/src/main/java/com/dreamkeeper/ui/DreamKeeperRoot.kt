@@ -1,13 +1,29 @@
 package com.dreamkeeper.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,7 +35,10 @@ import com.dreamkeeper.ui.calendar.CalendarViewModel
 import com.dreamkeeper.ui.day.DayScreen
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.nav.DreamRoute
+import com.dreamkeeper.ui.theme.Ember
+import com.dreamkeeper.ui.theme.InkDim
 import com.dreamkeeper.ui.theme.Night
+import com.dreamkeeper.ui.theme.Paper
 import java.time.LocalDate
 
 /**
@@ -39,18 +58,10 @@ fun DreamKeeperRoot(repo: DreamRepository) {
         containerColor = Night,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(containerColor = Night) {
-                    NavigationBarItem(
-                        selected = current == DreamRoute.Calendar.route,
-                        onClick = { nav.navigate(DreamRoute.Calendar.route) { launchSingleTop = true } },
-                        icon = {}, label = { Text("日历") },
-                    )
-                    NavigationBarItem(
-                        selected = current == DreamRoute.Library.route,
-                        onClick = { nav.navigate(DreamRoute.Library.route) { launchSingleTop = true } },
-                        icon = {}, label = { Text("全部") },
-                    )
-                }
+                DreamBottomBar(
+                    currentRoute = current,
+                    onNavigate = { route -> nav.navigate(route) { launchSingleTop = true } },
+                )
             }
         },
     ) { padding ->
@@ -89,5 +100,78 @@ fun DreamKeeperRoot(repo: DreamRepository) {
             composable("record/{entry}") { /* Plan 2：RecordScreen */ }
             composable("followup/{dreamId}") { /* Plan 2：FollowUpScreen */ }
         }
+    }
+}
+
+/**
+ * 自绘底部栏——**不用** M3 `NavigationBar` / `NavigationBarItem`。
+ *
+ * `NavigationBarItem` 在选中时会在 icon 槽位上方画一颗 32×32 的指示药丸。Plan 1 的底部栏
+ * 只有文字没有图标，按 brief 写 `icon = {}` 之后那颗药丸就是一块**没有内容的灰色胶囊**
+ * （Task 6 截图里「日历」上方那一块）。M3 没有关掉它的开关，所以这里用一个 `Row` +
+ * 两个等宽可点区域重画：选中 = `Paper` 文字 + 下方 2dp `Ember` 短横线，未选中 = `InkDim`。
+ *
+ * 两条腿要一起看：`navigationBarsPadding()` 让底栏自身垫开手势导航条，
+ * 于是 Scaffold 把它们一起算进 `innerPadding`，子页不用再避让第二次。
+ */
+@Composable
+private fun DreamBottomBar(
+    currentRoute: String?,
+    onNavigate: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Night)
+            .navigationBarsPadding(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BottomBarTab(
+            label = "日历",
+            selected = currentRoute == DreamRoute.Calendar.route,
+            onClick = { onNavigate(DreamRoute.Calendar.route) },
+        )
+        BottomBarTab(
+            label = "全部",
+            selected = currentRoute == DreamRoute.Library.route,
+            onClick = { onNavigate(DreamRoute.Library.route) },
+        )
+    }
+}
+
+/** 等宽的一个 tab：整块可点，48dp 触控下限，选中时文字 `Paper` + 下方 20×2dp `Ember` 指示线 */
+@Composable
+private fun RowScope.BottomBarTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .heightIn(min = 48.dp)
+            .clickable { onClick() }
+            .semantics {
+                contentDescription = label
+                this.selected = selected
+            }
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (selected) Paper else InkDim,
+        )
+        // 指示线始终占位：未选中时画成 Night（与底栏同色，看不见），
+        // 这样切换选中不会让文字上下跳 6dp。不引透明色，配色只取 Color.kt 里的常量。
+        Box(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .width(20.dp)
+                .height(2.dp)
+                .background(if (selected) Ember else Night),
+        )
     }
 }
