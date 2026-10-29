@@ -3033,6 +3033,61 @@ git rev-parse --short HEAD
 
 ## Task 8: 详情页 + 搜索（LIKE 中文检索）
 
+> **0. 派工前修订（Lead 按三位专家预审裁定，本节覆盖下文冲突处，以本节为准）**
+>
+> **0.1 搜索用 `mapLatest`，不是 `flatMapLatest`**：`DreamRepository.search` 是 `suspend fun search(rawQuery: String): List<Dream>`（`android/app/src/main/java/com/dreamkeeper/data/DreamRepository.kt:142`），`flatMapLatest` 的 transform 必须返回 `Flow`，照下文写必编译失败。正解：
+>
+> ```kotlin
+> val results: StateFlow<List<Dream>> = query
+>     .debounce(250)
+>     .mapLatest { q -> if (q.isBlank()) emptyList() else repo.search(q) }
+>     .flowOn(dispatcher)
+>     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+> ```
+>
+> **0.2 防抖测试必须卡边界，否则等于没测**：只 `advanceTimeBy(300)` 再断言，把 `debounce` 删掉或改成 2000 一样绿。必须：
+>
+> ```kotlin
+> vm.onQueryChange("电梯"); advanceTimeBy(249); runCurrent()
+> assertTrue(vm.results.value.isEmpty())          // 250ms 之前不许出结果
+> advanceTimeBy(2); runCurrent()
+> assertEquals(listOf("seed-dream-1"), vm.results.value.map { it.id })
+> ```
+>
+> 写完自己验证一次：把 `debounce(250)` 改成 `debounce(2_000)`，这条测试必须变红，再改回来。测试脚手架同 Task 6/7：`@RunWith(RobolectricTestRunner::class)` + `Dispatchers.setMain(dispatcher)` + 建库时 `.setQueryExecutor(dispatcher.asExecutor()).setTransactionExecutor(dispatcher.asExecutor())`，且注入 VM 的 `dispatcher` 与 `runTest` 的调度器**共用同一个 testScheduler**（协程 1.10.2 的 `advanceTimeBy` 不执行落在目标时刻的任务，末尾一律配 `runCurrent()`）。
+>
+> **0.3 `DetailViewModel` 必须有自己的测试**（下文只测了 `novelTabLabel`，等于没测这个类）：
+> ① 种子 id 进 `combine` 后 `state.dream` 与 `state.tags` 都非空（证明两条流都接上了）；
+> ② `novelChangeCount` 从 `补写 2 处：…` 抽出 `2`，且 `补 写 3 处`（中间带空格）也能抽出 `3`——D41 的契约就靠这个正则；
+> ③ 不存在的 id → `state.dream == null`，界面显示「找不到这条梦」+ 可返回（不许白屏）。
+>
+> **0.4 两个路由桩必须填**：`DreamKeeperRoot.kt` 里 `DreamRoute.Detail` 与 `DreamRoute.Search` 的 composable 目前是空桩。必须写：详情取 `backStackEntry.arguments?.getString("dreamId")`、`onBack = { nav.popBackStack() }`；搜索 `onOpen = { id -> nav.navigate(DreamRoute.Detail(id).route) }`、`onBack` 同上。不写这两处，搜索页能进但**点结果没反应**。
+>
+> **0.5 Files 追加三处**（下文清单漏了）：`android/app/src/main/java/com/dreamkeeper/ui/calendar/CalendarScreen.kt`（把 `onSearch` 一路传进 `MonthHeader`）、`android/app/src/test/java/com/dreamkeeper/ui/search/SearchViewModelTest.kt`、`android/app/src/test/java/com/dreamkeeper/ui/detail/DetailViewModelTest.kt`。
+>
+> **0.6 搜索入口不用图标库**：仓库从未用过 `Icons.*`，`material-icons` 也没进依赖，`Icons.Outlined.Search` 编译不过。改在月头下面加一个 **48dp 高的假输入框**：`NightRaised` 底 + 1dp `Line` 边 + 999dp 圆角 + 左侧 `InkFaint` 文案「搜索梦里的词」，整行 `clickable` 且 `semantics { contentDescription = "搜索" }`（证据脚本靠这个描述定位，读屏也靠它）。
+>
+> **0.7 tab 行规格**：四等分、每格 `heightIn(min = 48.dp)` + 整格可点 + `selected` 语义；选中 = `Paper` 文字 + 下方 2dp `Ember` 短横线（沿用底栏的语言），未选中 = `InkDim`。文案固定「原样 / 小说化 / 标签 / 素材」，`maxLines = 1`。**「补写 N 处」不进 tab 文案**（1080 宽四等分每格约 94dp，「小说化 · 补写 2 处」必被截断，见 D66）：改放到小说化 tab 内容顶部一行 caption「补写 2 处 · 查看」，只用一处的 N。
+>
+> **0.8 素材空槽与播放条必须看得见**：`NightRaised` 与 `Night` 只有约 1.07:1，纯底色等于没画。空槽 = `NightRaised` + **1dp `InkDim` 边** + 16:9 + 居中两行文案「以后可以在这里把梦做成视频」/「Plan 2 开始接模型」；播放条 = `NightRaised` + 1dp `Line` 边，三角 `Paper`、40 根竖线 `InkDim`、时长 `InkFaint` `--:--`。**不要用 `Line` 画轨道**（1.34:1 隐形）。
+>
+> **0.9 正文与常驻条的关系**：正文左右内边距 16dp（与其它屏一致）、行高 30sp、段间距 12dp；播放条放在滚动区**之外**常驻，滚动区底部留 16dp，不许盖住最后两行。
+>
+> **0.10 `SearchScreen` 三态**（下文没写，实施者会即兴）：未输入 → 「搜一个词，梦会自己找回来」；有输入无结果 → 「没有找到含「X」的梦」；有结果 → 每行「日期 + 标题或首句」，命中词用 `buildAnnotatedString` 染成 `Ember`。**未输入与无结果必须是两句话**，否则一进页面就像搜不到东西。
+>
+> **0.11 debug 搜索预填钩子（D67）**：`MainActivity` 读 `intent.getStringExtra("dk_prefill_search")`，**仅 `BuildConfig.DEBUG` 为真时**生效：把该串作为初始 query 传给 `SearchScreen` 并直接导航到搜索页。用途只有一个——`adb shell input text` 输入不了中文（KeyCharacterMap 只映射 ASCII），靠这个钩子才能拍到真实的中文检索截图。**不许用它写死任何结果**，结果仍由 `repo.search` 实际查出。
+>
+> **0.12 Step 6 证据改用 uiautomator 定位 + ABORT 校验**（硬编码坐标会拍错页：四等分边界是 0/270/540/810，`x=800` 落在第三个 tab；无梦日期格子没有 clickable，点 540/620 是空操作）。拍之前先 `adb shell wm size` 确认 1080x2400、`pm clear` 重装；用「文案定位 + 点不到就 ABORT」的写法：`Tap`/`Shot` 两个函数先 `uiautomator dump` 取 bounds、再点中心、再校验目标文案确实出现在屏幕上，否则记 `task8-capture.log` 并中止。要拍到的图（全部 `task8-` 前缀，近白闸门扫 `task8-*.png`）：
+> - `task8-tab1-original` / `task8-tab1-scrolled`（原样 tab 滚动前后各一张）
+> - `task8-tab2-novel`（无小说稿的占位）与 `task8-tab2-novel-dream3`（`老房子`，图里必须能看到「补写 2 处」）
+> - `task8-tab3-tags`（能看到「下坠的预感」胶囊）
+> - `task8-tab4-media`（`电梯`）与 `task8-tab4-media-dream4`（`一直在下楼梯`，同一空槽）
+> - `task8-search`（`--es dk_prefill_search 电梯`，必须看到含「电梯」的结果行）
+> - `task8-logcat-after.txt`：**交互之后**再 dump logcat（不是启动前）
+>
+> 拍不到就写「未取」并说明原因，不许用一张别的页面冒充。
+>
+
 **Files:**
 - Create: `.../ui/detail/DetailScreen.kt`, `.../ui/detail/DetailViewModel.kt`, `.../ui/search/SearchScreen.kt`, `.../ui/search/SearchViewModel.kt`
 - Modify: `.../ui/DreamKeeperRoot.kt`
@@ -3475,5 +3530,7 @@ git rev-parse --short HEAD
 | D63 | 没有标题的梦在卡片上把同一句话画两遍 | `DreamCard` 原先写 `heading = title ?: firstSentence`、`body = firstSentence`，标题缺失时两行取同一个字符串 | 抽出纯函数 `cardText(title, text): CardText`：有标题 → (标题, 首句)；无标题 → (首句, **首句之后的剩余正文**，不足 4 字则空)。新增 `DreamCardTextTest` 7 条（先红：`Unresolved reference 'cardText'`），重拍卡片与当日两处截图 | 种子里「一直在下楼梯，每一层都一样。」正好是无标题的单句梦，两种行样式各画一遍，像复制粘贴。**验收只看条数/顺序/圆角，永远抓不到重复内容**——这类问题只能靠人读图 |
 | D64 | Task 7 brief 第二条测试按原文写必然超时 | brief 给的骨架是「空库 + `first { it.items.isNotEmpty() }`」 | 实施者补了一条种子梦再断言，其余不动；`asExecutor` 与 `withTimeout` 两条修正在 brief 里已生效 | 我把 Task 6 的 `withTimeout` 写法搬进 Task 7 时，忘了那条测试的库是空的——等不到非空列表只能超时。**修 bug 的补丁本身也要在目标场景里跑一遍** |
 | D65 | 分段控件定宽 152dp | brief 只要求「两段等宽」，没给宽度来源 | 实施者用 `.width(152.dp) + .height(IntrinsicSize.Min)`：`weight` 需要父级有界宽度，否则标题会被挤成 0 宽 | 未做 1.3x 大字号走查，「时间轴」在大字号下可能截断；后续若改成 `Row` 内 `weight` 需先给父级固定宽度 |
+| D66 | 「小说化 · 补写 N 处」放不进详情页 tab | D41 把「补写 N 处」定为 tab 文案，但四等分 tab 每格约 94dp，该串在 15sp 下约 120dp | tab 文案固定「原样 / 小说化 / 标签 / 素材」（`maxLines = 1`）；「补写 N 处 · 查看」下沉为小说化 tab 内容顶部的一行 caption，N 仍只出现一处，仍可点进逐段对照（Plan 3 接） | 契约要的是「补写几处必须写出来并且能查账」，没规定必须写在 tab 上。硬塞进 94dp 只会得到一个省略号，等于**更看不见**；下沉到内容顶部反而更醒目 |
+| D67 | 中文检索没法用 adb 输入，搜索结果拍不到 | `adb shell input text` 只映射 ASCII（KeyCharacterMap），「电梯」会静默丢弃 | `MainActivity` 增加 debug-only 钩子：`intent.getStringExtra("dk_prefill_search")` 在 `BuildConfig.DEBUG` 为真时作为搜索页初始 query 并直接导航过去；结果仍由 `repo.search` 实际查出 | 没有它，搜索这一条的截图只能靠装第三方 ADBKeyboard，或者拿一张空搜索页冒充「命中」。钩子只在 debug 构建存在，release 不受影响，且它不改查询逻辑——喂进去的还是用户会打的字符串 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
