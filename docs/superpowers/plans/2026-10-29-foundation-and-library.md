@@ -2864,5 +2864,7 @@ git rev-parse --short HEAD
 | D16 | Maven 仓库顺序 | 计划只依赖默认 `gradlePluginPortal()`/`google()`/`mavenCentral()` | `settings.gradle.kts` 两处 `repositories` 前置 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`，`google()`/`mavenCentral()` 保留作回退 | **Task 1 实测**：`repo.maven.apache.org` 在本机停滞，腾讯镜像实测 8294 KB/s |
 | D17 | 占位界面主题 | 计划 Task 1 写「占位界面用 `MaterialTheme`」 | 改为显式常量 `Color(0xFF0B0E13)` / `Color(0xFFE6EAF2)`，不用 `MaterialTheme` / `Surface` | **Task 1 实测**：Material3 `Surface` 不透明近白，覆盖 `windowBackground`，白闪直接违反夜间硬约束 |
 | D18 | 系统栏颜色 | 计划 Task 2 写「在 `themes.xml` 设 `statusBarColor`/`navigationBarColor`」 | `targetSdk 37` 强制 edge-to-edge，这两个属性是**空操作**；Task 2 必须用 `enableEdgeToEdge(SystemBarStyle.dark(TRANSPARENT))` 显式声明，并靠 Compose 背景铺满系统栏区域 | **Task 1 实测**：截图状态栏近黑是 Compose 背景铺过去的结果，不是主题属性生效 |
+| D19 | 自检命令写法 | 计划多处写 `Select-String -Path android\app\src\main -Pattern "FFFFFF|Color.White"` | 统一改 `Get-ChildItem -Recurse -File <目录> \| Select-String -Pattern …` | **Task 2 实测**：`-Path` 传目录时不递归、报「访问被拒绝」并返回空 → 是假阴性，看起来「无命中」其实一个文件都没扫 |
+| D20 | 错误态配色 | 计划与 M3 惯例：容器内文字用 `colorScheme.error` | `error`（`ErrorText #E08578`）只能画在 `Night` 底上；**错误容器（`EmberDeep`）里的文字必须用 `onErrorContainer`（`Paper`）** | **Task 2 实算**：`ErrorText` on `EmberDeep` 仅 2.79:1，不达标；`Paper` on `EmberDeep` 6.24:1。Task 7 写错误态照此执行 |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
