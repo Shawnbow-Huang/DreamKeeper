@@ -20,6 +20,7 @@
 - **不使用多 module**；不引入 Hilt/Koin（用简单的手写容器）；不引入 Navigation-Compose 之外的导航框架。
 - **导航必须是真路由**：根界面用 `androidx.navigation:navigation-compose` 的 `NavHost`，**不要再手搓 `when (tab)`**。底部栏只在 `Calendar` / `Library` 两个路由显示；`Record` / `FollowUp` / `Detail` / `Search` / `Tags` 路由现在就建好（Plan 1 允许先不导航过去，但路由定义必须在）。
 - **测试策略（有意的取舍）**：业务逻辑与 DAO 用 JVM 单测（JUnit4 + Robolectric）；Compose 界面靠「构建 → 安装 → 截图」验收，不写 UI 单元测试。理由：Robolectric 下跑 Compose 断言收益低于维护成本。**视觉回归靠人工读截图**：本工程没有 Roborazzi、没有 Turbine、没有 golden 目录，也没有任何自动图像比对。每张截图都必须逐张打开看（agent 用 read_image），并把「看到了什么」写进证据文件（见 §2）。
+- **机队纪律 · JAVA_HOME**：跑**任何** gradle 命令之前，先在当前 PowerShell 会话里 `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`。不设就报 `ERROR: JAVA_HOME is not set` 并以非零码退出，一个字节都不编译。本机没有第二份 JDK（`0. 环境事实` 里的 OpenJDK 25.0.4 就是 Android Studio 自带的 jbr），也没有 `cmdline-tools`——所以这不是「环境没配好、以后再说」，而是每条构建命令的前置条件。**每段构建命令都要自带这一行**：文档里的代码块随时可能被人单独复制出去跑，不能依赖「上一段设过了」。
 - **机队纪律 · adb**：`adb` **不在 PATH**，绝对路径是 `C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe`。PowerShell 的 `>` 会把二进制重定向污染成 UTF-16LE——实测裸 `adb exec-out screencap -p > x.png` 产出 2,651,774 字节、头部 `FF FE FD FF 50 00 4E 00 ...`，PIL 报 `UnidentifiedImageError`。所以**禁止**裸 `adb ... > file`，截图必须走 `cmd /c` 的二进制安全重定向（每个 Task 的截图步骤都已写成这个形式）：
 
   ```powershell
@@ -153,8 +154,8 @@ D:\DreamKeeper\
 - APK：D:\DreamKeeper\android\app\build\outputs\apk\debug\app-debug.apk
 - APK SHA256：<Get-FileHash 输出>
 - 截图：
-  - docs/evidence/plan1/plan1-taskN-a.png  SHA256: <...>  人工读图结论：<一句话，写清看到了什么>
-  - docs/evidence/plan1/plan1-taskN-b.png  SHA256: <...>  人工读图结论：<...>
+  - docs/evidence/plan1/taskN-<slug>.png  SHA256: <...>  人工读图结论：<一句话，写清看到了什么>
+  - docs/evidence/plan1/taskN-<slug2>.png  SHA256: <...>  人工读图结论：<...>
 - logcat：docs/evidence/plan1/taskN-logcat.txt（`adb logcat -c` 之后跑的，只含本场景）
 - 复现步骤：
   1. <命令/操作，逐条，能照着复现>
@@ -177,13 +178,13 @@ $adb="C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 ```powershell
 cd D:\DreamKeeper
 # ① 截图 + PNG 魔数/IHDR/IEND 三重校验，顺手打印 SHA256
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-taskN-a.png
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\taskN-<slug>.png -Serial emulator-5554
 
 # ② 冷启动 ×3 + 崩溃与耗时闸门（判据：TotalTime ≤ 2000ms、Displayed=3、CRASHES: 0）
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-logcat.ps1 -Runs 3 -OutFile docs\evidence\plan1\taskN-logcat.txt
 
 # ③ 近白像素闸门（判据：nearWhite 必须 = 0，故显式 -MaxRatio 0，不用脚本默认的 1%）
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\plan1-taskN-*.png -TopOffset 100 -MaxRatio 0
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\taskN-*.png -TopOffset 100 -MaxRatio 0
 ```
 
 三个脚本的判据口径（跑完照抄这三个数字进 `taskN.md`）：
@@ -191,13 +192,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1
 - `capture-logcat.ps1` → `STARTUP: runs=… max=…ms` 里 max ≤ 2000、`LAUNCH: Displayed=3`、`CRASHES: 0`、末行 `RESULT: OK`。
 - `check-near-white.ps1` → 每张图 `nearWhite=0`（`-MaxRatio 0` 下任何一颗近白像素都会红）。
 
+> **截图命名约定：`taskN-<slug>.png`**（`N` = 任务号，`slug` = 这张图验什么，如 `task6-calendar.png` / `task6-calendar-empty.png` / `task6-day.png`）。**不要**再用 `plan1-taskN-a/b/c.png`：`a/b/c` 读的人得先翻证据文件才知道哪张是哪张，`slug` 自带语义，任务号也不会和 Plan 号混。Task 1–5 已归档的 `plan1-*.png` **保留原名**（重命名会让 `taskN.md` 里登记的 SHA256 与归档对不上），**Task 6 起一律 `taskN-<slug>.png`**。
+
 > **禁止裸 `adb exec-out screencap -p > 文件`**（这是那条禁令的唯一执行方式）：PowerShell 5.1 按 UTF-16LE 写重定向，PNG 直接变成 2.6MB 的坏文件（头部 `FF FE FD FF …`），PIL 报 `UnidentifiedImageError`。要手工兜底也只许用 Global Constraints 里那个 `cmd /c` 写法。三个脚本都在 `scripts/` 下、已自测（`-SelfTest` 有红/绿双向夹具），**不要改脚本去迁就命令**。
 
 **算哈希**：
 
 ```powershell
 Get-FileHash D:\DreamKeeper\android\app\build\outputs\apk\debug\app-debug.apk -Algorithm SHA256
-Get-FileHash D:\DreamKeeper\docs\evidence\plan1\plan1-taskN-a.png -Algorithm SHA256
+Get-FileHash D:\DreamKeeper\docs\evidence\plan1\taskN-<slug>.png -Algorithm SHA256
 ```
 
 **两次提交**（顺序不能反，否则 `taskN.md` 里写不出本轮代码的 SHA）：
@@ -2025,14 +2028,14 @@ git rev-parse --short HEAD
 ## Task 6: 日历首屏（梦匣真正的脸）
 
 **Files:**
-- Create: `.../ui/calendar/CalendarViewModel.kt`, `.../ui/calendar/CalendarScreen.kt`, `.../ui/day/DayViewModel.kt`, `.../ui/day/DayScreen.kt`, `.../ui/DreamKeeperRoot.kt`, `.../ui/nav/DreamRoute.kt`, `.../ui/theme/Night.kt`, `.../ui/record/RecordUiState.kt`
-- Modify: `.../MainActivity.kt`
-- Test: `android/app/src/test/java/com/dreamkeeper/ui/calendar/CalendarViewModelTest.kt`、`android/app/src/test/java/com/dreamkeeper/ui/day/DayViewModelTest.kt`
+- Create: `.../ui/calendar/CalendarViewModel.kt`, `.../ui/calendar/CalendarScreen.kt`, `.../ui/day/DayViewModel.kt`, `.../ui/day/DayScreen.kt`, `.../ui/common/DreamCard.kt`, `.../ui/DreamKeeperRoot.kt`, `.../ui/nav/DreamRoute.kt`, `.../ui/theme/Night.kt`, `.../ui/record/RecordUiState.kt`
+- Modify: `.../MainActivity.kt`、`.../data/db/DreamDao.kt`、`.../data/DreamRepository.kt`、`.../data/db/SeedData.kt`（后三个**磁盘上还没有**本任务要的 `observeDay` / 相对日期 + 事务 / 结构化改动清单，见 Step 0、D47、D48）
+- Test: `android/app/src/test/java/com/dreamkeeper/ui/calendar/CalendarViewModelTest.kt`、`android/app/src/test/java/com/dreamkeeper/ui/day/DayViewModelTest.kt`、`android/app/src/test/java/com/dreamkeeper/data/DreamDaoTest.kt`（新增两条 `observeDay` 用例）
 
 **Interfaces:**
 - Consumes: `DreamRepository`、`DreamCalendar.monthGrid`、`Dream`。
 - Produces:
-  - `data class CalendarUiState(val month: YearMonth, val grid: List<LocalDate?>, val daysWithDreams: Set<LocalDate>, val title: String)`
+  - `data class CalendarUiState(val month: YearMonth, val grid: List<LocalDate?>, val daysWithDreams: Map<LocalDate, Int>, val title: String)`（**`Map` 而不是 `Set`**：日格的 `contentDescription` 要报条数——「2026年10月15日，1 条梦记」——`Set` 只说得出「有/没有」，说不出「几条」，见 D46）
   - `class CalendarViewModel(repo: DreamRepository, initial: YearMonth) : ViewModel()`，方法 `fun nextMonth()`、`fun prevMonth()`、`fun goToday()`，暴露 `val state: StateFlow<CalendarUiState>`
   - `@Composable fun CalendarScreen(vm: CalendarViewModel, onDayClick: (LocalDate) -> Unit, onSearch: () -> Unit, onRecord: () -> Unit)`（`onSearch` 本轮不实现，见 D39）
   - `data class DayUiState(val date: LocalDate, val title: String, val items: List<DayItem>)`、`data class DayItem(val dream: Dream, val tags: List<Tag>)`
@@ -2044,9 +2047,118 @@ git rev-parse --short HEAD
   - `data class RecordUiState(val elapsedMs: Long = 0, val paused: Boolean = false, val amplitude: Float = 0f)`（Plan 2 填充）
   - `data class FollowUpUiState(val remainingMs: Int = 30_000, val recording: Boolean = false, val visible: Boolean = false)`（Plan 2/4 填充）
   - `ui/theme/Night.kt` 的 `NightVoid` / `NightScrim` / `DreamMotion`
+  - `@Composable fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit)`（`ui/common/DreamCard.kt`，**Task 6 建、Task 7 复用**）
+  - `fun firstSentence(text: String?): String`（`ui/common/DreamCard.kt` 顶层纯函数：取第一个 `。` / `！` / `？` / `；` 或满 40 字截断，末尾补 `…`）
 
 > **路由不是"以后再说"**：`Day` / `Record` / `FollowUp` / `Detail` / `Search` / `Tags` 六个路由在 Plan 1 就要存在（可以为空屏或占位）。Plan 2 加录音、Plan 4 接通知，都只是往既有路由里填内容；等到那时再从 `when (tab)` 改路由，等于把根界面重写一遍。
 > **导航依赖已经落地，本任务不再有「加依赖」这一步**（D34）：`androidx.navigation:navigation-compose:2.9.8` 已由 Lead 手工补进 `android/gradle/libs.versions.toml` 与 `app/build.gradle.kts`，并验证过编译。版本只有一处权威口径——`libs.versions.toml` 的 `navigation-compose` 条目；**不要**在这份计划里再抄版本号，也不要重复加依赖。Plan 1 的 `onRecord` 仍可为空实现，但**路由必须已经能跳**。
+
+- [ ] **Step 0: 先补磁盘上缺的三处生产代码（TDD，先红后绿）**
+
+Task 4 / Task 5 的计划里写了 `observeDay` 与「相对当月」的种子，**但磁盘上的代码没有**（D47、D48）：`DreamDao.kt` 没有 `observeDay`，`DreamRepository.kt` 没有 `observeDay`，`SeedData.kt` 还是写死 `2026-10-20/24/27/28`、没有事务、`novelChangeLog` 还是一句散文。Task 6 的 `DayViewModel` 直接依赖这三处，所以**本任务先把它们补齐**，否则后面每一步都编译不过。
+
+**0a（RED）** 把两条 `observeDay` 用例加进 `android/app/src/test/java/com/dreamkeeper/data/DreamDaoTest.kt`（Task 4 Step 8 的计划文本里有、磁盘上没有）：
+
+```kotlin
+@Test
+fun `observeDay does not leak the same day number from another month`() = runTest {
+    // 三条里只有 2026-11-08 属于要查的那天：12-08 是另一个月，11-09 是第二天
+    dao.upsert(dream("1", "2026-11-08"))
+    dao.upsert(dream("2", "2026-12-08"))
+    dao.upsert(dream("3", "2026-11-09"))
+
+    assertEquals(listOf("1"), dao.observeDay("2026-11-08").first().map { it.id })
+}
+
+@Test
+fun `observeDay excludes soft deleted dreams`() = runTest {
+    dao.upsert(dream("1", "2026-11-08").copy(deletedAt = 1L))
+    dao.upsert(dream("2", "2026-11-08"))
+
+    assertEquals(listOf("2"), dao.observeDay("2026-11-08").first().map { it.id })
+}
+```
+
+（`dream(id, date)` 用文件里现成的那个私有构造器；`upsert`、`first()`、`assertEquals` 的 import 也已经在文件头。）
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*DreamDaoTest*" --no-daemon
+```
+
+Expected: **编译失败**（`Unresolved reference: observeDay`）。这就是 RED——**不要**先把实现写了再补测试。
+
+**0b（GREEN）** 给 `DreamDao` 加一个查询（放在 `observeByMonth` 下面，不要动已有方法）：
+
+```kotlin
+/**
+ * 当日列表（设计 §11 的中间层，D35）。等值匹配 `dreamDate = :dateIso`，**不用 BETWEEN**：
+ * 跨月不串靠的是「不同月份的同一天号是两个不同的字符串」，比区间更直接。
+ * `deletedAt IS NULL` 必须有：软删的梦不进当日列表。
+ * 排序按 `createdAt DESC`（同一天里后补录的在前）。
+ */
+@Query("""
+    SELECT * FROM dreams
+    WHERE deletedAt IS NULL AND dreamDate = :dateIso
+    ORDER BY createdAt DESC
+""")
+fun observeDay(dateIso: String): Flow<List<DreamEntity>>
+```
+
+`DreamRepository` 加一行（与 `observeMonth` 同构，翻译层只做 `toDomain`）：
+
+```kotlin
+/** 当日列表。`date.toString()` 就是 `dreamDate` 列的 `yyyy-MM-dd` 存储格式，不需要再格式化 */
+fun observeDay(date: LocalDate): Flow<List<Dream>> =
+    dreams.observeDay(date.toString()).map { list -> list.map(::toDomain) }
+```
+
+`DreamRepository.kt` 现在只 import 了 `YearMonth`，**记得补 `import java.time.LocalDate`**。
+
+再跑一次 0a 的命令 → Expected: `BUILD SUCCESSFUL`，`DreamDaoTest` **17 条通过**（磁盘现有 15 条 + 新增 2 条；计划 Task 4 Step 8 写的「11 条」是旧口径，以磁盘为准）。
+
+**0c** 把 `data/db/SeedData.kt` 对齐到 Task 4 Step 7 的版本（磁盘上还是旧版），三处一起改：
+
+1. **日期按当月算**：四条种子取 `YearMonth.now()` 的 **1 / 8 / 15 / 22** 号，用 `month.atDay(day)` 生成，**不许**再出现 `"2026-10-20"` 这类字面量。理由照抄进文件头注释：写死月份的话，**11 月 1 号起当月 0 个红点**——「共 4 天有梦」变成「共 0 天有梦」，Task 7 的列表、Task 8 的详情截图一起假绿（界面全正常，只是空，最难查）。
+2. **整体包事务**：`count()` 判断与四条 `upsert` 全部放进 `db.withTransaction { }`，提前退出用 `return@withTransaction`。分开写的话，首启被杀会留下**永久半套种子**（`count` 已经非 0，剩下几条永远不补）。
+3. **改动清单结构化**：不再手写一句散文，改成「结构化条目 → 渲染成字符串」：
+
+```kotlin
+/**
+ * 种子里「改动清单」的结构化形状：一条 = 类型 + 动作 + 目标。
+ * 只活在播种代码里——`Dream.novelChangeLog` 是 `String?`、列类型是 TEXT，是 Task 5 定下的契约；
+ * 为一条种子去改 domain 类型，会连带改 Task 8 的 `novelChangeCount` 与 `DreamRepositoryTest` 的两处断言（D48）。
+ */
+private data class ChangeLogEntry(val type: String, val action: String, val target: String)
+
+/** 压成 Plan 1 的存储契约：「补写 N 处：a、b」（D41 要求「补写 N 处」字样必须保留） */
+private fun renderChangeLog(entries: List<ChangeLogEntry>): String =
+    "补写 ${entries.size} 处：" + entries.joinToString("、") { it.target }
+```
+
+   播种处写成：
+
+```kotlin
+novelChangeLog = renderChangeLog(
+    listOf(
+        ChangeLogEntry("SCENE", "补写", "走廊的光"),
+        ChangeLogEntry("SCENE", "补写", "声音的方向"),
+    )
+),
+```
+
+   **不要**为此新增列、改 `DreamEntity`、加 TypeConverter：`novelChangeLog` 仍是 `String?` 的 TEXT 列，`renderChangeLog` 产出的字符串与旧种子**逐字相同**（`"补写 2 处：走廊的光、声音的方向"`），所以 `DreamRepositoryTest` 与 Task 8 的 `novelChangeCount` 都不用改。到 Plan 3 把该列换成真 JSON 数组 + `quote` 时，`ChangeLogEntry` 与 `renderChangeLog` 一起删（D41）。
+
+**0d** 跑一次数据层全量，确认 0b / 0c 没碰坏别的：
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*DreamDaoTest*" --tests "*DreamRepositoryTest*" --no-daemon
+```
+
+Expected: `BUILD SUCCESSFUL`，`DreamDaoTest` 17 条 + `DreamRepositoryTest` 全部通过（种子不在测试路径上，测试自己造数据）。
+
+> 为什么不把这三处塞回 Task 4 / Task 5：那两个任务已经提交、证据已归档，回改会让「Task 4/5 已完成」这句话失真。在 Task 6 开头补一段「还债 Step」并登记 D47 / D48，是账面上最诚实的做法——**计划文本写过的，代码里也必须有**。
 
 - [ ] **Step 1: 写 ViewModel 的失败测试**
 
@@ -2060,8 +2172,10 @@ import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.domain.Dream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -2084,57 +2198,87 @@ class CalendarViewModelTest {
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), DreamDatabase::class.java)
-            .allowMainThreadQueries().build()
+            // Room 的查询/事务都在**它自己的 executor** 上跑，不在 `Dispatchers.Main` 上（D53）：
+            // 不把这两个 executor 钉到 `dispatcher`，`advanceUntilIdle()` 推的是测试调度器，
+            // 而 Room 的发射在另一条线程——等多久都等不到，断言只能读到 initialValue。
+            .setQueryExecutor(dispatcher.asExecutor())
+            .setTransactionExecutor(dispatcher.asExecutor())
+            .allowMainThreadQueries()
+            .build()
         repo = DreamRepository(db)
     }
 
     @After fun tearDown() { db.close(); Dispatchers.resetMain() }
 
-    // ↓ 下面每个用例里的这一行都不能删（D-实现写法-1）：
+    // 每个用例里的这一行都不能删（D53）：
     //   backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-    //   原因见代码块后面的说明。
+    // `WhileSubscribed` 要「有人订阅」才启动上游；没有收集者，`repo.observeMonth()` 根本不会跑。
+    // 它和 `withTimeout { state.first { … } }` 是**两件事**：这一行负责「启动上游」，
+    // `first { 谓词 }` 负责「等到状态真的变成期望值」。只留前者 → 读到 initialValue；
+    // 只留后者 → 上游没启动，`first` 一直等到超时。
 
     @Test fun `starts on the given month and shows dots only for that month`() = runTest(dispatcher) {
+        repo.save(Dream("1", LocalDate.of(2026, 9, 30), null, "上月最后一天", "上月最后一天", null, null, null, false))
+        repo.save(Dream("2", LocalDate.of(2026, 10, 1), null, "本月第一天", "本月第一天", null, null, null, false))
         val vm = CalendarViewModel(repo, YearMonth.of(2026, 10))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
-        assertEquals("2026年10月", vm.state.value.title)
-        assertEquals(31, vm.state.value.grid.filterNotNull().size)
+
+        // 等到「红点数 = 1」为止：初始值是 0，读到 1 说明 Room 的月度查询真的发射了
+        val s = withTimeout(5_000) { vm.state.first { it.daysWithDreams.size == 1 } }
+        assertEquals("2026年10月", s.title)
+        assertEquals(31, s.grid.filterNotNull().size)
+        assertEquals(1, s.daysWithDreams[LocalDate.of(2026, 10, 1)])
+        assertFalse(LocalDate.of(2026, 9, 30) in s.daysWithDreams)   // 上个月的 30 号不许串进来
     }
 
     @Test fun `next and prev month change the title`() = runTest(dispatcher) {
         val vm = CalendarViewModel(repo, YearMonth.of(2026, 12))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
-        vm.nextMonth(); advanceUntilIdle()
-        assertEquals("2027年1月", vm.state.value.title)
-        vm.prevMonth(); vm.prevMonth(); advanceUntilIdle()
-        assertEquals("2026年11月", vm.state.value.title)
+
+        vm.nextMonth()
+        withTimeout(5_000) { vm.state.first { it.title == "2027年1月" } }
+        vm.prevMonth(); vm.prevMonth()
+        withTimeout(5_000) { vm.state.first { it.title == "2026年11月" } }
     }
 
     @Test fun `goToday returns to the current month`() = runTest(dispatcher) {
         val vm = CalendarViewModel(repo, YearMonth.of(2020, 1))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
-        vm.goToday(); advanceUntilIdle()
-        assertEquals(YearMonth.now(), vm.state.value.month)
+
+        vm.goToday()
+        withTimeout(5_000) { vm.state.first { it.month == YearMonth.now() } }
     }
 
     @Test fun `day with a dream is exposed in daysWithDreams`() = runTest(dispatcher) {
         repo.save(Dream("1", LocalDate.of(2026, 10, 15), null, "电梯", "电梯", null, null, null, false))
         val vm = CalendarViewModel(repo, YearMonth.of(2026, 10))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
-        assertTrue(LocalDate.of(2026, 10, 15) in vm.state.value.daysWithDreams)
-        assertFalse(LocalDate.of(2026, 10, 16) in vm.state.value.daysWithDreams)
+
+        // 这一条**必须**等 Room 发射：初始状态里 daysWithDreams 是空的，
+        // `first { 15 号在里面 }` 会一直挂到数据真的从库里出来为止
+        val s = withTimeout(5_000) { vm.state.first { LocalDate.of(2026, 10, 15) in it.daysWithDreams } }
+        assertEquals(1, s.daysWithDreams[LocalDate.of(2026, 10, 15)])
+        assertFalse(LocalDate.of(2026, 10, 16) in s.daysWithDreams)
     }
+}
 ```
 
-> **为什么必须有 `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }` 这一行**：生产代码的 `state` 是 `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)` —— `WhileSubscribed` 的意思是「**有人订阅**才启动上游」。测试里只 `advanceUntilIdle()` 然后读 `vm.state.value`，**从来没有人订阅**，上游那串 `repo.observeMonth()` 根本不会启动，`state.value` 永远是 `initialValue`。于是用例会红在「`daysWithDreams` 是空集 / 标题还是初始月」这种地方，看起来像业务逻辑写错，实际是没订阅。
+> **测试要同时做两件事，缺一不可**（D53）：
 >
-> 修法有两条，**只许选第一条**：① 生产代码保留 `WhileSubscribed`，测试里挂一个后台收集者（上面这行 `backgroundScope` + `UnconfinedTestDispatcher`，后者保证收集立刻生效、不用再 `advance`）；② 把生产代码改成 `SharingStarted.Eagerly` —— **禁止**，那是为了测试变绿而改生产语义，`WhileSubscribed` 存在的意义就是「界面不可见时不订阅数据库」。
+> **① 让上游真的启动。** 生产代码的 `state` 是 `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)`——「**有人订阅**才启动上游」。只 `advanceUntilIdle()` 再读 `vm.state.value`，从来没有人订阅，`repo.observeMonth()` 根本不会跑，`state.value` 永远是 `initialValue`，于是红在「`daysWithDreams` 是空集 / 标题还是初始月」，看起来像业务逻辑写错。所以每个用例都要挂 `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }`。
 >
-> 同理，**不要**把断言删掉或改成 `assertTrue(true)` 让它变绿。这一行是测试的脚手架，不是被测行为。
+> **② 把 Room 的 executor 钉到测试调度器上。** 只做 ① 还不够：Room 的查询与失效通知跑在**它自己的 executor** 上（默认是一组真实线程），不在 `Dispatchers.Main` 上。`advanceUntilIdle()` 推的是测试调度器，Room 那条线程不归它管——**虚拟时钟等不到真实线程**。表现是时快时慢：慢机器上 `state.value` 还是 initial，快机器上偶尔能读到，于是 CI 偶发绿。
+>
+>   ```kotlin
+>   .setQueryExecutor(dispatcher.asExecutor())
+>   .setTransactionExecutor(dispatcher.asExecutor())
+>   ```
+>
+>   `asExecutor()` 是 `kotlinx-coroutines-test` 给的桥：交给 Room 的「线程池」其实就是 `dispatcher` 本身，于是 Room 的查询回来也落在测试调度器上，`runTest` 的自动推进能把它推到。
+>
+> **③ 断言改成「等到期望值」而不是「读一眼现值」。** `withTimeout(5_000) { vm.state.first { it.title == "2026年10月" } }`：挂起直到条件成立（或在 5s 虚拟时间后红），而不是赌 `advanceUntilIdle()` 之后那一刻的值刚好是对的。`state` 是 `StateFlow`，`first { }` 先看当前值、不满足就等下一次发射，正好覆盖「initialValue → 库里的值」这一段。
+>
+> 修法只有这一条：① + ②，再把 ③ 的断言换上。**不要**把生产代码改成 `SharingStarted.Eagerly`——那是为了让测试变绿而改生产语义，`WhileSubscribed` 存在的意义就是「界面不可见时不订阅数据库」。也**不要**删断言或改成 `assertTrue(true)`。
 
 - [ ] **Step 1b: 写当日列表的失败测试**
 
@@ -2150,8 +2294,10 @@ import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.domain.Dream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -2173,7 +2319,11 @@ class DayViewModelTest {
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), DreamDatabase::class.java)
-            .allowMainThreadQueries().build()
+            // 与 CalendarViewModelTest 同理：Room 的发射在真实 executor 上，必须钉到测试调度器（D53）
+            .setQueryExecutor(dispatcher.asExecutor())
+            .setTransactionExecutor(dispatcher.asExecutor())
+            .allowMainThreadQueries()
+            .build()
         repo = DreamRepository(db)
     }
 
@@ -2184,9 +2334,11 @@ class DayViewModelTest {
         repo.save(Dream("2", LocalDate.of(2026, 11, 9), null, "第二天", "第二天", null, null, null, false))
         val vm = DayViewModel(repo, LocalDate.of(2026, 11, 8))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
-        advanceUntilIdle()
-        assertEquals(listOf("1"), vm.state.value.items.map { it.dream.id })
-        assertEquals("11月8日 周日", vm.state.value.title)
+
+        // 初始状态 items 是空的，等到「列表非空」= 等 Room 真的把 11-08 那条发射出来
+        val s = withTimeout(5_000) { vm.state.first { it.items.isNotEmpty() } }
+        assertEquals(listOf("1"), s.items.map { it.dream.id })
+        assertEquals("11月8日 周日", s.title)
     }
 }
 ```
@@ -2196,6 +2348,7 @@ class DayViewModelTest {
 - [ ] **Step 2: 跑测试确认失败**
 
 ```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*CalendarViewModelTest*" --no-daemon
 ```
 
@@ -2203,7 +2356,7 @@ Expected: 编译失败（`Unresolved reference: CalendarViewModel`）。
 
 - [ ] **Step 3: 写 ViewModel**
 
-要点：月份状态用 `MutableStateFlow<YearMonth>`，与仓库 `flatMapLatest` 组合；标题格式 `"${year}年${monthValue}月"`。**`WhileSubscribed(5_000)` 是刻意的，不要为了测试方便改成 `Eagerly`**（理由见 Step 1 的说明）。
+要点：月份状态用 `MutableStateFlow<YearMonth>`，与仓库 `flatMapLatest` 组合；标题格式 `"${year}年${monthValue}月"`；红点用 `Map<LocalDate, Int>`（`dreams.groupingBy { it.date }.eachCount()`）——日格的 `contentDescription` 要报「几条梦记」，`Set` 说不出条数（D46）。**`WhileSubscribed(5_000)` 是刻意的，不要为了测试方便改成 `Eagerly`**（理由见 Step 1 的说明）。
 
 ```kotlin
 package com.dreamkeeper.ui.calendar
@@ -2222,7 +2375,7 @@ data class CalendarUiState(
     val month: YearMonth,
     val title: String,
     val grid: List<LocalDate?>,
-    val daysWithDreams: Set<LocalDate>,
+    val daysWithDreams: Map<LocalDate, Int>,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -2240,7 +2393,7 @@ class CalendarViewModel(
                     month = m,
                     title = "${m.year}年${m.monthValue}月",
                     grid = DreamCalendar.monthGrid(m),
-                    daysWithDreams = dreams.map { it.date }.toSet(),
+                    daysWithDreams = dreams.groupingBy { it.date }.eachCount(),
                 )
             }
         }
@@ -2251,7 +2404,7 @@ class CalendarViewModel(
                 month = initialMonth,
                 title = "${initialMonth.year}年${initialMonth.monthValue}月",
                 grid = DreamCalendar.monthGrid(initialMonth),
-                daysWithDreams = emptySet(),
+                daysWithDreams = emptyMap(),
             ),
         )
 
@@ -2325,10 +2478,11 @@ class DayViewModel(
 - [ ] **Step 4: 跑测试确认通过**
 
 ```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --tests "*CalendarViewModelTest*" --tests "*DayViewModelTest*" --no-daemon
 ```
 
-Expected: `BUILD SUCCESSFUL`，5 个测试通过（日历 4 条 + 当日列表 1 条）。
+Expected: `BUILD SUCCESSFUL`，5 个测试通过（日历 4 条 + 当日列表 1 条）。`DreamDaoTest` 的 17 条在 Step 0d 已经单独跑过，这里只跑两个 ViewModel 测试。
 
 - [ ] **Step 5: 写日历界面 + 真路由**
 
@@ -2403,27 +2557,54 @@ sealed interface DreamRoute {
 `ui/calendar/CalendarScreen.kt` 的结构要求（实现细节自由，但这些必须做到）：
 
 - 顶部：左箭头 `‹`、中间 `state.title`、右箭头 `›`；标题下面一行小字「共 N 天有梦」。
+- **点月标题 = 回今天**：`Text(state.title)` 外面包一层 `Modifier.clickable { vm.goToday() }`，命中区补到 ≥48dp（`.heightIn(min = 48.dp)`），并加 `Modifier.semantics { contentDescription = "回到今天" }`。**没有这个入口，`goToday()` 在界面上等于不存在**——ViewModel 有方法、测试有断言，用户却没有任何办法回到当月；翻到下个月以后也回不去，只能重启 App 重走一遍播种。不要额外做「今天」按钮、也不要改文案：标题就是最自然的位置，也不会让「屏上文案」多出一类。
 - 星期表头：一 二 三 四 五 六 日，`labelSmall` + `InkFaint`。
-- 7 列网格：有梦的日子在数字下方画一个 4dp 的 `Ember` 圆点；**今天用 1.5dp `Ember` 描边圈住**（不要用 `Line`——`Line` 在 Night 上只有 1.34:1，等于看不见，它只配做装饰分隔线）；空白格不画。
-- 点有梦的格子 → `onDayClick(date)`；点没梦的格子 → 什么都不发生（不弹"添加"——添加只有一个入口，就是红钮）。
-- **本轮不做搜索入口**（D39）：设计 §11 要求搜索固定在日历顶部，但 Task 6 还没有搜索页。Task 8 再往这个顶栏加搜索图标（命中区 ≥48dp）并接到 `Search` 路由。**现在不要放一个点了没反应的假放大镜**——那是"看起来坏了"，比没有更糟。
-- 整屏可上下滑动；网格的 `verticalScroll` 必须带 `contentPadding = PaddingValues(bottom = 112.dp)`（72 大钮 + 24 底距 + 16 呼吸），否则最后一行会被大钮压住。
+- **7 列网格用 `LazyVerticalGrid`，不要用 `Modifier.verticalScroll`**（D45）：`verticalScroll` 的签名只有 `(state, enabled, flingBehavior, userScrollEnabled)`，**没有 `contentPadding` 参数**，照原计划写就是编译红；改用 `.padding(...)` 也不是同一个东西——padding 是容器内边距，不随内容滚动留白，最后一行照样会被大钮压住。
+
+  ```kotlin
+  LazyVerticalGrid(
+      columns = GridCells.Fixed(7),
+      contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 112.dp),
+      modifier = Modifier.fillMaxWidth().weight(1f),
+  ) {
+      // items(state.grid.size) { i -> DayCell(state.grid[i]) }
+  }
+  ```
+
+  - `contentPadding` 的 `bottom = 112.dp` 是**给底部大钮留的滚动余量**：72（钮）+ 24（底距）+ 16（呼吸）= 112。少了它，当月最后一行日期会永远被钮盖住，而且**滚到底也还是盖住**。
+  - `start / end = 8.dp`：见下面的 48dp 算式，它同时是「日格够宽」的输入。
+  - 头部（箭头 + 标题 + 共 N 天）与星期表头**不放进网格**：它们是固定的，只有日期网格滚动。
+- **每个日格 ≥48dp**（触控下限）。算式：屏宽 360dp − 左右各 8dp 内边距 = 344dp，÷ 7 列 = **49.1dp/格** ≥ 48dp。所以日格写 `Modifier.fillMaxWidth().heightIn(min = 48.dp)`，**不要**写死 `height(48.dp)`（49.1 会被压成 48、格子变形），也不要靠 `weight` 让内容把高度缩下去。把这条算式写进代码注释——48 不是拍脑袋，是「360dp 窄屏上仍达标」推出来的（D46）。
+- 有梦的日子在数字下方画一个 4dp 的 `Ember` 圆点；**今天用 1.5dp `Ember` 描边圈住**（不要用 `Line`——`Line` 在 Night 上只有 1.34:1，等于看不见，它只配做装饰分隔线）；空白格不画。
+- **每个日格都要有 `contentDescription`**（TalkBack 要念、截图脚本靠它认格子）：
+
+  ```kotlin
+  private fun dayDescription(date: LocalDate, count: Int?): String =
+      if (count == null || count == 0) "${date.year}年${date.monthValue}月${date.dayOfMonth}日，无记录"
+      else "${date.year}年${date.monthValue}月${date.dayOfMonth}日，${count} 条梦记"
+  ```
+
+  有梦：`"2026年10月15日，1 条梦记"`；空日：`"2026年10月16日，无记录"`。**这就是 `daysWithDreams` 必须是 `Map<LocalDate, Int>` 的原因**：`Set` 只能说「有/没有」，说不出「几条」。
+- 点有梦的格子 → `onDayClick(date)`；点没梦的格子 → 什么都不发生（不弹「添加」——添加只有一个入口，就是红钮）。
+- **本轮不做搜索入口**（D39）：设计 §11 要求搜索固定在日历顶部，但 Task 6 还没有搜索页。Task 8 再往这个顶栏加搜索图标（命中区 ≥48dp）并接到 `Search` 路由。**现在不要放一个点了没反应的假放大镜**——那是「看起来坏了」，比没有更糟。
 - 底部：一大颗圆钮，文案「说梦」，`onRecord()` 现在先留空实现，Plan 2 接管：
+
   ```kotlin
   Box(
       modifier = Modifier
           .align(Alignment.BottomCenter)
           .padding(bottom = 24.dp)
           .size(72.dp)
-          .border(1.5.dp, Ember, CircleShape)   // 外环：EmberDeep 只有 2.57:1，靠 Ember 边界把按钮"描"出来
+          .border(1.5.dp, Ember, CircleShape)   // 外环：EmberDeep 只有 2.57:1，靠 Ember 边界把按钮「描」出来
           .background(EmberDeep, CircleShape)
           .clickable { onRecord() },
       contentAlignment = Alignment.Center,
   ) { Text("说梦", color = Paper, style = MaterialTheme.typography.titleMedium) }
   ```
-  **不要在这里再叠 `navigationBarsPadding()`**：root 的 `Scaffold` 已经把底栏和导航栏 inset 算进 `innerPadding`，再叠一次就是双重避让，按钮会浮在半空。
+
+  **不要在这里再叠 `navigationBarsPadding()`**：root 的 `Scaffold` 已经把底栏和导航栏 inset 算进 `innerPadding`，再叠一次就是双重避让，按钮会浮在半空。**它和网格的 `contentPadding bottom = 112.dp` 是配套的**：钮叠在内容上方（`Box` 的后者盖前者），所以内容必须自己留出被盖住的那一段——112dp 就是为此算的，改钮的尺寸或底距时这个数要一起改。
 - 月份切换用 `AnimatedContent`，`transitionSpec` 用 `tween(DreamMotion.Quick)`——**不许出现裸的魔法数字**（120 只许在 `Night.kt` 里出现一次）。
-- 屏幕文案只留四个：月份标题、`共 N 天有梦`、星期表头、`说梦`。**不加任何说明文字**（没有"点红点查看""长按录音"之类的提示）。这条验收在 Task 8 加搜索图标后仍然成立——图标不是文字。
+- **除底部栏的「日历」「全部」外，屏上只有 4 类文案**：月份标题、`共 N 天有梦`、星期表头、`说梦`。**不加任何说明文字**（没有「点红点查看」「长按录音」之类的提示）。底部栏那两个字是 `Scaffold` 画的，不是这一屏——原判据写「屏上只有 4 类文案」会自相矛盾（截图上明明还看得见「日历」「全部」）。这条验收在 Task 8 加搜索图标后仍然成立——图标不是文字。
 - 屏幕常亮：`Modifier` 层面不加；常亮在 Plan 4 统一处理。
 
 `ui/DreamKeeperRoot.kt`（`NavHost` + 只在两个主路由显示底部栏）：
@@ -2520,63 +2701,80 @@ fun DreamKeeperRoot(repo: DreamRepository) {
 `ui/day/DayScreen.kt` 的结构要求（设计 §11 的第二层；D35）：
 
 - 顶部：左箭头 `‹` 返回（`onBack`）、中间 `state.title`（如「11月8日 周日」）。**没有月份切换**——这里是一天，不是一个月。
-- 列表：`LazyColumn`，每条梦一张卡片，卡片内容三行：
-  1. 标题：`dream.title`；无标题时用正文首句（种子里的「楼梯」那条就是无标题，必须被覆盖到）。
-  2. 正文首句：`firstSentence(dream.rawTranscript)`（取到第一个 `。`/`！`/`？`/`；` 或满 40 字截断，末尾补 `…`）。抽成一个纯函数放在本文件顶层，**Task 7 的行组件直接复用**。
-  3. 标签：`item.tags` 逐个画小 chip（`InkDim` 文字 + `NightRaised` 底）；没有标签就不画这一行、也不留空白。
-- 卡片：圆角 12dp、`NightRaised` 底、内边距 16dp、卡片间距 12dp，整张卡可点 → `onOpen(dream.id)`。
+- 列表：`LazyColumn`，每条梦一张 **`DreamCard`**（见下），整张卡可点 → `onOpen(dream.id)`。
 - 空态：居中两行——`InkDim` 文案「这天没有梦」+ 更小的副标题「回日历页看看别的日子」。**不要箭头**（理由同 Task 7 的空态）。
 - 底部：**没有**说梦钮，也**没有**底部栏（`showBottomBar` 只在 Calendar/Library 为真）。
-- 文案只留：日期标题、卡片里的标题/首句/标签、「这天没有梦」。不加"共 N 条梦"之类——一天几条梦，数卡片比读数字快。
+- 文案只留：日期标题、卡片里的标题/首句/标签、「这天没有梦」。不加「共 N 条梦」之类——一天几条梦，数卡片比读数字快。
 
-> **Task 7 的行组件可复用 `DayScreen` 的卡片**：两处都是「标题 / 正文首句 / 标签」，样式完全一致。Task 7 允许直接把卡片抽成 `@Composable fun DreamCard(dream, tags, onClick)` 放到 `ui/components/`，DayScreen 改为调用它；如果 Task 6 先写完卡片，Task 7 只做"把卡片拔出来"这一件事，**不要写第二份长得一样的卡片**。
+`ui/common/DreamCard.kt`（**Task 6 就建好，Task 7 直接调**，别等 Task 7 再抽）：
+
+```kotlin
+@Composable
+fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit)
+```
+
+- 三行：① 标题 `dream.title`，无标题时用首句（种子里「楼梯」那条就是无标题，必须被覆盖到）；② 正文首句；③ 标签 chips（`InkDim` 文字 + `NightRaised` 底），没有标签就**不画这一行、也不留空白**。
+- 首句取 **`dream.faithfulText`**，不是 `rawTranscript`：原样整理稿才是用户会读的那一版；只有 `faithfulText` 为 null（还没整理）时才退回 `rawTranscript`。抽成顶层纯函数 `fun firstSentence(text: String?): String`：取到第一个 `。` / `！` / `？` / `；`（含标点）或满 **40 字**截断，截断时末尾补 `…`，null/空白返回 `""`。**Task 7 复用这个函数**，不许各写一份。
+- 卡片：圆角 12dp、`NightRaised` 底、内边距 16dp、整张卡 `clickable { onClick() }`；**卡片自己不叠外边距**——间距 12dp 由调用方的 `LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp))` 给，卡片里再写 12dp 就变成 24dp。
+
+> **Task 7 的卡片流只许调用 `DreamCard`，不许重写一个**：Task 6 已经把「标题 / 正文首句 / 标签」抽成 `ui/common/DreamCard.kt`，Task 7 的时间轴与卡片流都用它（日期行放在卡片外面，不要为此复制一份卡片）。两份样式迟早会分叉，而且分叉的那天没人会记得哪份是对的。
 
 > `MainActivity` 仍只做一件事：`setContent { DreamKeeperTheme { DreamKeeperRoot(container.repository) } }`。**Plan 1 不解析 intent extra**——从通知进录音是 Plan 4 的活，现在读 extra 只会读到 null 然后写一堆死分支。
 
 - [ ] **Step 6: 接进 MainActivity 并截图验收**
 
-构建与安装还是手工命令（脚本不管安装），**截图与冷启动一律走脚本**：
+**构建与安装还是手工命令（脚本不管安装），截图与冷启动一律走 §2 的三个脚本**——不要裸写 `adb exec-out screencap > x.png`（PS 5.1 会把 PNG 写成 UTF-16，见 Global Constraints）：
 
 ```powershell
 $adb="C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe"
-cd D:\DreamKeeper\android; .\gradlew.bat :app:assembleDebug --no-daemon
+cd D:\DreamKeeper\android
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+.\gradlew.bat :app:assembleDebug --no-daemon
 cd D:\DreamKeeper
-& $adb logcat -c
-& $adb install -r android\app\build\outputs\apk\debug\app-debug.apk
-& $adb shell am force-stop com.dreamkeeper
 
-# ① 冷启动 ×3（脚本内部起 Activity、抓 logcat、判 TotalTime/Displayed/崩溃，红了 exit 1）
+# ⓪ 复位种子：旧库还在，seedIfEmpty() 会因为 count != 0 早退，改了种子也不会重灌（D51）
+& $adb uninstall com.dreamkeeper          # 或 & $adb shell pm clear com.dreamkeeper
+& $adb install android\app\build\outputs\apk\debug\app-debug.apk
+& $adb logcat -c
+
+# ① 冷启动 ×3（第一次冷启动同时完成「空库 → 播种 4 条」）
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-logcat.ps1 -Runs 3 -OutFile docs\evidence\plan1\task6-logcat.txt
 
 # ② 日历首屏截图（脚本内部走 cmd.exe 二进制安全重定向 + 魔数/IHDR/IEND 校验）
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-task6-a.png
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\task6-calendar.png -Serial emulator-5554
 ```
 
 Expected：
-- `capture-logcat.ps1` 末行 `RESULT: OK`；`STARTUP: runs=3 … max=…ms` 里 **max ≤ 2000**；`LAUNCH: Displayed=3`；`CRASHES: 0`。
-- `plan1-task6-a.png` 的 `RESULT: OK … dims=1080x2400 sha256=…`；图上是当月标题、星期表头、网格、底部「说梦」钮。
-- 种子 4 条（Task 4 的 `SeedData`，**相对当月**）让当月 **4 个有梦日**＝`1/8/15/22` 号（`SeedData.DAY_ELEVATOR/DAY_CLASSROOM/DAY_OLD_HOUSE/DAY_STAIRS`），标题行是「**共 4 天有梦**」。**不是 3 天、也不是 5 天**——4 条种子同月是硬约束（D36），这条断言就是它的守门人。
-- 点右箭头后再截一张 `plan1-task6-b.png`，标题变成下个月，**且网格行数随之变化**（有的月份 5 行、有的 6 行）。
-- 点有梦的格子（当月 8 号）进当日列表，再截一张 `plan1-task6-c.png`：标题「X月8日 周X」、**一张**卡片「教室」（正文首句「教室最后一排…」）、没有标签行（教室那条没打标签）；左上角返回箭头能回到日历且**月份不丢**。
+- `capture-logcat.ps1` 末行 `RESULT: OK`；`STARTUP: runs=3 … max=…ms` 里 **max ≤ 2000**；`CRASHES: 0`。
+- **`LAUNCH: Displayed=N` 的判据是 `N ≥ 1`（脚本只在 N = 0 时判失败），不要把它当成「画面对」**（D50）：`Displayed=3` 只说明 `am start -W` 三次都看到了启动，白屏、停在别的页、日历还没画完都能满足它。画面正确性一律交给下面的人工读图。
+- `task6-calendar.png` 的 `RESULT: OK … dims=1080x2400 sha256=…`。
+- 种子 4 条（Task 4 的 `SeedData`，**相对当月**）让当月 **4 个有梦日**＝`1/8/15/22` 号，标题行是「**共 4 天有梦**」。**不是 3 天、也不是 5 天**——4 条种子同月是硬约束（D36），这条断言就是它的守门人。**如果看到 0 个红点，先查是不是漏了 ⓪ 的复位**：旧库 + 旧种子 = 红点落在已经过去的月份里。
 
 ```powershell
+# ③ 翻到下个月（无红点的月份）
 & $adb shell input tap 950 250   # 右箭头大致位置，按实际截图调整
 Start-Sleep 1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-task6-b.png
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\task6-calendar-empty.png -Serial emulator-5554
 
-# 回到当月，点 8 号那个格子（坐标按 a 图实际位置调整）——这一张验的是 D35 那一层
-& $adb shell input tap 950 250   # 假设"再点一次"回到当月，实际按截图调整
+# ④ 点月标题回今天（contentDescription「回到今天」），再点 8 号格子进当日列表
+& $adb shell input tap 540 250   # 月标题 = 回今天；坐标按实际截图调整
 & $adb shell input tap 300 700   # 8 号格子
 Start-Sleep 1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\plan1-task6-c.png
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan1\task6-day.png -Serial emulator-5554
 
-# ③ 近白像素闸门：三张图一起过，判据 nearWhite 必须 = 0
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\plan1-task6-*.png -TopOffset 100 -MaxRatio 0
+# ⑤ 近白像素闸门：三张图一起过，判据 nearWhite 必须 = 0
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-near-white.ps1 docs\evidence\plan1\task6-*.png -TopOffset 100 -MaxRatio 0
 ```
 
 Expected：`check-near-white.ps1` 对三张图各自打印 `RESULT: OK … nearWhite=0 …`，退出码 0。**任何一张 `nearWhite>0` 都是深夜体验破了**（`-MaxRatio 0` 就是不许有例外，别的任务用的是脚本默认 1%，这里更严）。
 
-**三张图都要 read_image 确认**，不能只看安装成功——写下"看到了几个红点、标题是几月、当日列表有几张卡片"。
+**三张图都要 `read_image` 肉眼确认**，这是硬性步骤，不是「顺便看一眼」——`Displayed` 与 `nearWhite` 都只能证明「有一个非白的画面」，证明不了「画的是当月日历」：
+
+- `task6-calendar.png`：标题是**当月**（如「2026年10月」）、「共 4 天有梦」、红点**正好在 1/8/15/22 四个格子上**、底部「说梦」钮完整没被网格压住。
+- `task6-calendar-empty.png`：标题是**下个月**、**一个红点都没有**（证明红点是数据驱动的、不是画死的）、网格行数随月份变化（5 行 / 6 行）。
+- `task6-day.png`：标题「X月8日 周X」、**一张**卡片「教室」（正文首句「教室最后一排…」）、没有标签行（教室那条没打标签）；左上角返回箭头能回到日历且**月份不丢**。
+
+写结论时写清「看到了几个红点、标题是几月、网格几行、当日列表几张卡片」——「看起来正常」等于没验。
 
 - [ ] **Step 7: 提交**
 
@@ -2588,7 +2786,7 @@ git rev-parse --short HEAD
 
 - [ ] **Step 8: 归档证据**
 
-按 §2 写 `docs/evidence/plan1/task6.md`：short SHA、APK 与三张截图（`-a` 日历 / `-b` 下个月 / `-c` 当日列表）的 SHA256、三张图各自的人工读图结论（写下"看到了几个红点、标题是几月、网格几行、当日列表几张卡片"，不是"看起来正常"）、`task6-logcat.txt` 的三个数（max TotalTime / Displayed / CRASHES）、`check-near-white.ps1` 的三行 `nearWhite=0`、复现步骤（含点右箭头与 8 号格子的坐标）。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task6 证据归档"`。
+按 §2 写 `docs/evidence/plan1/task6.md`：short SHA、APK 与三张截图（`task6-calendar.png` 当月 / `task6-calendar-empty.png` 下个月 / `task6-day.png` 当日列表）的 SHA256、三张图各自的人工读图结论（写清「当月是几月、看到几个红点、在几号、网格几行、当日列表几张卡片」，不是「看起来正常」）、`task6-logcat.txt` 的三个数（max TotalTime / Displayed / CRASHES）、`check-near-white.ps1` 的三行 `nearWhite=0`、**截图前做过 `adb uninstall` / `pm clear` 复位种子**这一条（不写，复现的人会拿到旧库）、复现步骤（含点月标题回今天与 8 号格子的坐标）。然后 `git add docs/evidence/plan1; git commit -m "docs(evidence): task6 证据归档"`。
 
 ---
 
@@ -2744,8 +2942,8 @@ Expected: 2 个测试通过。
 - 顶部一条：标题「全部梦」（`titleLarge`）+ 右侧搜索图标（`onSearch()`）。
 - 右侧一个分段控件切 `时间轴 / 卡片`（两段，选中态用 `Ember` 描边，不用填充色块）。
 - **时间轴**：左侧一条 1dp `Line` 竖线，每条一个 `Ember` 圆点 + 日期（`labelSmall`，`InkFaint`）+ 标题或首行（`bodyMedium`，`Paper`），条目间距 20dp。
-- **卡片流**：圆角 12dp 的 `NightRaised` 卡片，内边距 16dp，日期在上、正文取前两行（`maxLines = 2`，`TextOverflow.Ellipsis`）。
-- **复用 Task 6 的卡片**：Task 6 的 `DayScreen` 已经有「标题 / 正文首句 / 标签」的卡片。把它抽成 `ui/components/DreamCard.kt` 的 `@Composable fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit)`，两个界面都用这一个。**不要写第二份长得一样的卡片**——两份样式迟早会分叉。
+- **卡片流**：每条 = 一行日期（`labelSmall`、`InkFaint`）+ 下面一张 `DreamCard(dream, tags) { onOpen(dream.id) }`；卡片间距 12dp 交给 `LazyColumn` 的 `verticalArrangement`，不要在卡片里再叠外边距。
+- **只许调用 `DreamCard`，不许重写一个**：Task 6 已经把「标题 / 正文首句 / 标签」抽成 `ui/common/DreamCard.kt`（`@Composable fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit)`）。「时间轴 / 卡片流」的差别用日期行和间距表达，**不要**为此复制一份卡片——两份样式迟早会分叉，分叉那天没人记得哪份是对的。
 - 空状态：居中一行 `InkDim` 文案「**还没有梦**」+ 下一行更小的副标题「去日历页，按那个橙色的钮」。**不要箭头**（D38）：这个页面没有说梦钮（唯一的说梦钮在日历页），画一支指向不存在的按钮的箭头是自相矛盾；原稿「按下面那个钮」也是错的，下面只有底部栏。
 - 点任意条目 → `onOpen(dream.id)`。
 
@@ -3230,5 +3428,14 @@ git rev-parse --short HEAD
 | D42 | `docs/eval/` 口径不统一 | §7.2 ④ 三条评分写成「1–5 / 有·无 / 有·无」 | `docs/eval/README.md` 是「三项各 1–5 分」，`results.md` 的列名与表头却是「有没有…」+ 缺一列「原样整理违规次数」 | **已改 `docs/eval/results.md`**：三项统一 **1–5 分**（不再混用「有/无」），并加一列「原样整理违规次数（目标 0）」；与 `README.md` 的说法逐句核对过。设计 §7.2 ④ 同步改成 1–5 | **已改**。同一份口径在三处（设计 / README / results）漂移是文档类项目最常见的腐烂方式：改一处的读者以为改全了 |
 | D43 | 任务提交步骤用 `git add -A` | 各 Task 的提交步骤写 `git add -A` | 改成 `git add <本任务 Files 清单里的路径>`（全计划 9 处已替换，`git add -A` 命中数 = 0） | **Lead 裁定**：`git add -A` 会把工作区里别人的改动一起提交（Task 5 期间就差点把专家产出混进同一个 commit，已 `reset --soft` 拆开） |
 | D44 | Task 9 拉数据库用 `Set-Content -Encoding Byte` | `& $adb exec-out run-as ... cat databases/dreamkeeper.db | Set-Content -Encoding Byte` | 换成 `cmd /c "… exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db > D:\DreamKeeper\.scratch\dreamkeeper.db"`（二进制安全），并校验 SQLite 魔数 `53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33` | PS 5.1 没有 `-Encoding Byte`、PS 7 的 `Set-Content` 按文本处理会改换行；与截图那条是同一个坑 |
+| D45 | 网格用了 `verticalScroll`，它没有 `contentPadding` | Task 6 Step 5：「整屏可上下滑动；网格的 `verticalScroll` 必须带 `contentPadding = PaddingValues(bottom = 112.dp)`」 | 改成 `LazyVerticalGrid(columns = GridCells.Fixed(7), contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 112.dp))`。`Modifier.verticalScroll` 的签名只有 `(state, enabled, flingBehavior, userScrollEnabled)`，传 `contentPadding` 直接编译红；用 `.padding(...)` 顶替也不是同一件事（容器内边距不随内容滚动留白，最后一行照样被大钮压住） | 照原文写会卡在编译。这是「把 Lazy 的 API 记到普通滚动上」的典型笔误——凡是要 `contentPadding`，先确认这个容器是不是 Lazy 家族 |
+| D46 | 日格尺寸只写了「7 列」，没算触控下限 | Task 6 Step 5：「7 列网格：有梦的日子在数字下方画一个 4dp 的 `Ember` 圆点……」（没有格子高度、没有左右内边距、没有无障碍语义） | 日格 `Modifier.fillMaxWidth().heightIn(min = 48.dp)`；算式写进代码注释：屏宽 360dp − 左右各 8dp = 344dp ÷ 7 = **49.1dp/格 ≥ 48dp**；每个日格补 `contentDescription`（`"2026年10月15日，1 条梦记"` / `"2026年10月16日，无记录"`），`CalendarUiState.daysWithDreams` 因此由 `Set<LocalDate>` 改为 `Map<LocalDate, Int>` | 不钉死这条，实现者容易用 `weight(1f)` 让格子随内容缩到 30dp 上下，单手点不准，TalkBack 也念不出「几号、几条」。8dp 是算式的输入，改成 16dp 就掉到 46.9dp、跌破 48 |
+| D47 | `observeDay` 只活在计划里，磁盘上没有 | Task 4 Step 4/8 写了 `DreamDao.observeDay` 与两条单测、Task 5 写了 `DreamRepository.observeDay`，D35 记「已补进计划」 | 实测磁盘：`DreamDao.kt`、`DreamRepository.kt` 都没有 `observeDay`，`DreamDaoTest.kt` 也没有那两条用例（现有 15 条）。裁定 **Task 6 开头补 Step 0**：先写两条失败用例（跨月不串 / 软删排除）→ 再实现 DAO + 仓库 → `DreamDaoTest` 17 条全绿 | 计划写着「已完成」、代码没有，是最贵的一种偏差：Task 6 的 `DayViewModel` 直接编译不过，而读计划的人会以为是 Task 6 写错了。教训：偏差表登记「补进计划」时要同时写清**补的是计划文本还是代码** |
+| D48 | 种子写死月份 + `novelChangeLog` 是一句散文 | 磁盘 `SeedData.kt` 仍是 `"2026-10-20/24/27/28"`、`novelChangeLog = "补写 2 处：走廊的光、声音的方向"`、`seedIfEmpty` 没有事务；Task 4 Step 7 的计划文本已是相对日期 + `withTransaction` | Task 6 Step 0c 把磁盘对齐计划：`YearMonth.now()` 的 1/8/15/22 号、`db.withTransaction { }`、`novelChangeLog` 改为 `SeedData` 内的私有 `ChangeLogEntry(type, action, target)` + `renderChangeLog()` 渲染。「若领域层没有 `ChangeLogEntry` 就用现有类型」——实测 `domain/Dream.kt` 里**没有**这个类型，字段就是 `String?`，所以结构化只到 `SeedData` 代码层，**不动表结构**，渲染结果与旧串逐字相同 | 只改日期不改类型：Plan 3 还得再改一次；只改类型不改日期：11 月 1 号起当月 0 红点，「共 4 天有梦」的截图全假绿。两件事一起做，但不为此加列 / 改 `DreamEntity` / 动 `DreamRepositoryTest` 的断言 |
+| D49 | `goToday()` 在界面上没有入口 | Task 6 Step 5 的顶部只写了「左箭头、`state.title`、右箭头」；`goToday()` 只出现在 ViewModel 与单测里 | 点月标题回当月：`clickable { vm.goToday() }`、命中区 ≥48dp、`contentDescription = "回到今天"` | 没有入口时 `goToday()` 只活在测试里，用户回不到当月；截图脚本翻到下个月后也回不去，只能重启 App 重走播种。这是「方法写了、入口忘了」——只盯代码覆盖率的话永远发现不了 |
+| D50 | 用 `Displayed` 证明「界面画对了」 | Task 6 Step 6 Expected：「`LAUNCH: Displayed=3`」 | 判据拆两条：① `Displayed` **只在 =0 时算失败**（`capture-logcat.ps1` 第 246–251 行就是这么判的），`N ≥ 1` 即过；② **追加**三张截图必须 `read_image` 肉眼确认「当月日历 + 红点在 1/8/15/22」 | `Displayed=3` 是 `am start -W` 三次都看到了启动：白屏、停在别的页、日历还没画完都能满足它。把启动日志当界面验收，等于用「进程起来了」证明「画对了」 |
+| D51 | 截图命名 `plan1-task6-a/b/c.png` + `install -r` 后直接截图 | Task 6 Step 6 用 `plan1-task6-a.png` / `-b.png` / `-c.png`，且 `adb install -r` 之后立即截图 | 命名改 `taskN-<slug>.png`：`task6-calendar.png`、`task6-calendar-empty.png`、`task6-day.png`（§2 已写约定，Task 1–5 的 `plan1-*.png` 保留原名不重命名）。截图前必须 `adb uninstall com.dreamkeeper`（或 `pm clear`）复位种子。另：`capture-screen.ps1` 的参数是 `-OutPath` / `-Serial`，**没有 `-Name`** | `a/b/c` 读的人得先翻证据文件才知道哪张是哪张。`seedIfEmpty()` 靠 `count() == 0` 幂等：旧库还在时改了种子也**不会重灌**，截出来还是旧数据（或旧月份 0 红点），看起来像新代码没生效 |
+| D52 | 全文构建命令没设 `JAVA_HOME` | Global Constraints 与 Task 6 的构建步骤都只写 `cd android; .\gradlew.bat …` | Global Constraints「本机纪律」新增一条：跑任何 gradle 命令前 `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`；Task 6 的 Step 0d / 2 / 4 / 6 每条构建命令都自带这一行 | 不设就 `ERROR: JAVA_HOME is not set`，一个字节都不编译。本机只有 Android Studio 自带的 jbr（D28 的 `gradle-daemon-jvm.properties` 把 toolchain 钉在 25），没有第二份 JDK 可换——这不是「换台机器就好」的问题 |
+| D53 | ViewModel 测试只靠 `advanceUntilIdle()` 等 Room | Task 6 Step 1 的 4 条用例：`backgroundScope` 收集 + `advanceUntilIdle()` + 读 `vm.state.value` | 加两件：① 建库 `.setQueryExecutor(dispatcher.asExecutor()).setTransactionExecutor(dispatcher.asExecutor())`（`asExecutor()` 来自 `kotlinx-coroutines-test`）；② 断言改 `withTimeout(5_000) { vm.state.first { … } }`。`backgroundScope` 收集者保留，说明改写成「两者分工：它负责启动上游，`first{}` 负责等到期望值」 | Room 的查询与失效通知跑在**它自己的 executor**（真实线程），`advanceUntilIdle()` 推的是测试调度器——**虚拟时钟等不到真实线程**，于是要么永远读到 `initialValue`，要么在快机器上偶发绿。这是测试写法的偏差，**不改生产代码的 `WhileSubscribed`**（改成 `Eagerly` 是为了测试绿而改生产语义） |
 
 > 登记规则：以后每次发现计划与设计不一致，先在这里加一行，再决定改哪边。**不允许**只在代码里悄悄偏离。
