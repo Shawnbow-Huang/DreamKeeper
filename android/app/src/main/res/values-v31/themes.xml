@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.DreamKeeper" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0B0E13</item>
+        <item name="android:statusBarColor">#0B0E13</item>
+        <item name="android:navigationBarColor">#0B0E13</item>
+        <item name="android:windowSplashScreenBackground">#0B0E13</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_dark</item>
+    </style>
+</resources>

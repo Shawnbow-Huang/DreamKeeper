@@ -3,6 +3,7 @@
     <application
         android:name=".DreamKeeperApp"
         android:allowBackup="false"
+        android:icon="@drawable/ic_launcher_dark"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.DreamKeeper">
