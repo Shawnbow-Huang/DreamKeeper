@@ -34,8 +34,9 @@ import com.dreamkeeper.ui.theme.Paper
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit) {
-    val body = firstSentence(dream.faithfulText ?: dream.rawTranscript)
-    val heading = dream.title?.takeIf { it.isNotBlank() } ?: body
+    val texts = cardText(dream.title, dream.faithfulText ?: dream.rawTranscript)
+    val heading = texts.heading
+    val body = texts.body
 
     Column(
         modifier = Modifier
@@ -107,3 +108,37 @@ fun firstSentence(text: String?): String {
 
 /** 首句上限：40 字（含标点时另算），超出补省略号 */
 private const val MAX_SENTENCE_CHARS = 40
+
+/** 卡片两行各放什么文字（D63）。`heading` 用标题字重，`body` 用次级字重。 */
+data class CardText(val heading: String, val body: String)
+
+/**
+ * 决定卡片的两行文字。
+ *
+ * 有标题：标题当 heading，正文首句当 body。
+ * 没标题：正文首句当 heading，**剩下的部分**才是 body——不能把首句同时塞进两行，
+ * 那会在卡片上把同一句话上下各画一遍（任务 6/7 的截图里就是这样）。
+ */
+fun cardText(title: String?, text: String?): CardText {
+    val first = firstSentence(text)
+    val realTitle = title?.trim().orEmpty()
+    if (realTitle.isNotEmpty()) return CardText(realTitle, first)
+    return CardText(first, restBelowFirstSentence(text))
+}
+
+/**
+ * 去掉首句之后剩下的正文；太短就当作没有（不足 [MIN_REST_CHARS] 字）。
+ *
+ * 首句是「满 40 字 + …」的截断形态时直接返回空：那是截断不是句读，
+ * 把被截断的尾巴再画一遍比不画更糟。
+ */
+fun restBelowFirstSentence(text: String?): String {
+    val trimmed = text?.trim().orEmpty()
+    val first = firstSentence(trimmed)
+    if (first.isEmpty() || first.endsWith("…")) return ""
+    val rest = trimmed.removePrefix(first).trim()
+    return if (rest.length >= MIN_REST_CHARS) rest else ""
+}
+
+/** 剩下的正文短于这个长度就不单独占一行 */
+private const val MIN_REST_CHARS = 4
