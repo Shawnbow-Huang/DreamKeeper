@@ -58,3 +58,48 @@
 | `docs/eval/results.md` | 每次评测一行：版本 / 日期 / 样本数 / 三项 1–5 分 / 编造次数 / 原样整理违规次数（目标 0）/ 备注 | ✅ |
 | `docs/eval/dreams.local.md` | 真实原文与转写（本地私有） | ❌ 已 ignore |
 | `docs/eval/*.local/` | 音频、导出的中间文件 | ❌ 已 ignore |
+
+## 自动检查
+
+`scripts/check-ai-flavor.py` 是**表面特征检查器**：只查可指认的 AI 写作症状（结尾升华、对偶句、三段式、破折号密度、段长均匀等），规则定义与正反例见 `docs/eval/anti-ai-patterns.md`。它不是分类器，不判断作者身份，也不替代下面的人工评分。
+
+### 怎么跑
+
+在仓库根目录：
+
+```bash
+# 自测样例：AI 腔应报错
+python scripts/check-ai-flavor.py docs/eval/fixtures/ai-flavored-01.md
+
+# 人写样例应通过
+python scripts/check-ai-flavor.py docs/eval/fixtures/human-01.md
+
+# 批量（PowerShell 不会替原生程序展开通配符，脚本自己展开）
+python scripts/check-ai-flavor.py docs/eval/fixtures/*.md
+
+# 机器可读；CI 里想临时放宽 HARD 阈值
+python scripts/check-ai-flavor.py docs/eval/*.md --json --max-hard 2
+```
+
+输出格式：`文件:行号:列 编号 严重度 名称 | 命中片段`，末尾一行 `HARD=x MED=y SOFT=z`。
+
+### 退出码
+
+| 退出码 | 含义 |
+|---|---|
+| `0` | HARD 命中数 ≤ `--max-hard`（默认 0），通过 |
+| `1` | HARD 命中数 > `--max-hard`，不通过 |
+| `2` | 输入错误：文件不存在、通配符无匹配、不是合法 UTF-8 |
+
+MED/SOFT 只计数，不影响退出码。`--max-hard` 只是临时放宽，**不要把它当成默认通过线**；发布前仍用默认 0。
+
+### 和人工打分（`results.md`）的关系
+
+- 自动检查是**前置门**：HARD > 0 的稿子先改，不进入人工评分，省得浪费评分时间。
+- HARD = 0 **不等于**「像人写的」。它只说明没有踩到那 21 条表面规则；「像不像人写的」仍按 `results.md` 的三项 1–5 分人工评，尤其第 1 项。
+- 自动检查的命中数**不折算**成 1–5 分，也不写进三项均分；最多作为「备注」里的线索。
+- `docs/eval/fixtures/` 里的两个文件是**脚本自测样例**，不是评测集样本，不参与 10/20 条的通过线统计。
+
+### 当前状态
+
+**真实梦境样本仍为 0，人工评分暂缺。** `dreams.md` 的 20 个槽位尚未录入，`results.md` 还没有任何一行评测记录；因此现在只能验证「脚本能跑、规则能命中、人写样例不被误杀」，不能对生成质量下结论。等第一批 10 条真实样本进来后，先人工评一遍，再用真实误报/漏报重新校准阈值。
