@@ -1,0 +1,61 @@
+APK sha256=3979f0f61160cdc432e8228756cdf6c6e401857a45bc0fa0ffd39401aa161c85 | device_time=Fri Oct 30 19:26:58 CST 2026 | rerun=adb shell run-as com.dreamkeeper chmod 000 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav（完整复跑见文末）
+
+# 证据 ② 负控制：文件不可读 → Error("打不开")、无音频轨道、可重试（p2-play-02-negative）
+
+设备：emulator-5554；进程 pid=22905（重启后）；梦 id=c0f55f08-3e7c-4a64-b0e1-774472d042c4。
+手段：把真实录音文件权限改为 000，模拟「路径在库里、文件打不开」的坏数据。
+
+## 1. 权限被拿走
+
+  adb shell run-as com.dreamkeeper chmod 000 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  adb shell run-as com.dreamkeeper ls -l files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  ---------- 1 u0_a237 u0_a237 192716 2026-10-30 19:26 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+
+## 2. 点击播放：repair 读头失败，落到 Error，不崩
+
+10-30 19:26:58.658 D/DkPlayback(22905): repair start file=c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav bytes=192716 before=null
+10-30 19:26:58.659 W/DkPlayback(22905): prepare failed file=c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+10-30 19:26:58.659 W/DkPlayback(22905): java.io.FileNotFoundException: /data/user/0/com.dreamkeeper/files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav: open failed: EACCES (Permission denied)
+10-30 19:26:58.659 W/DkPlayback(22905): 	at libcore.io.IoBridge.open(IoBridge.java:574)
+10-30 19:26:58.659 W/DkPlayback(22905): 	at java.io.RandomAccessFile.<init>(RandomAccessFile.java:307)
+10-30 19:26:58.659 W/DkPlayback(22905): 	at com.dreamkeeper.audio.WavStore.readHeader(WavStore.kt:227)
+10-30 19:26:58.659 W/DkPlayback(22905): 	at com.dreamkeeper.audio.WavStore.repair(WavStore.kt:192)
+10-30 19:26:58.659 W/DkPlayback(22905): 	at com.dreamkeeper.ui.detail.AudioPlayback$prepareInternal$repaired$1.invokeSuspend(AudioPlayback.kt:169)
+
+异常在 `runCatching` 内被收口为 `PlaybackState.Error("打不开")`；进程存活（随后仍能返回列表），
+播放条仍可点击（重试），不是死按钮。
+
+## 3. 没有产生音频输出（负控制的另一半）
+
+  adb shell dumpsys audio | grep -E "19:26:5[5-9]"
+  （仅 "Current time: ..."，19:26:55–59 没有任何 player/started/focus 事件）
+
+  adb shell dumpsys media.audio_flinger | grep 22905
+  （无输出：没有该 pid 的 Client/Track）
+
+与证据 ① 的第 3、4 节对照：同样点击动作，正常文件的 flinger 多出 active Track、dumpsys audio 多出
+`new player`/`event:started`；坏文件两者都没有 → 失败发生在开文件阶段，没有「假装播放」。
+
+## 4. 截图
+
+docs/evidence/plan2/p2-play-02-negative.png（sha256 BD77A000E16D85CDFD9D72CF21DDCC422F8826408E9B50039F9B05ED23201256）
+界面：播放条右侧红字「打不开」，三角形按钮仍在（可重试）。
+
+## 5. 恢复
+
+  adb shell run-as com.dreamkeeper chmod 600 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  -rw------- 1 u0_a237 u0_a237 192716 2026-10-30 19:26 files/audio/...
+
+## 复跑
+
+  adb shell am force-stop com.dreamkeeper
+  adb shell am start -n com.dreamkeeper/.MainActivity
+  adb shell input tap 693 958 && adb shell input tap 535 293
+  adb shell run-as com.dreamkeeper chmod 000 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  adb logcat -c && adb shell input tap 60 2225 && sleep 1.2
+  adb logcat -d -v time | grep -A7 DkPlayback
+  adb shell dumpsys audio | grep -E "19:2[0-9]:5[5-9]"
+  adb shell dumpsys media.audio_flinger | grep <pid>
+  adb shell run-as com.dreamkeeper chmod 600 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+
+结论：坏文件路径得到「打不开」错误态、无音频轨道、可重试、不崩溃；负控制成立。

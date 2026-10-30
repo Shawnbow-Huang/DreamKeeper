@@ -1,5 +1,9 @@
 package com.dreamkeeper.ui.detail
 
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,25 +37,37 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
@@ -65,6 +81,7 @@ import com.dreamkeeper.ui.theme.Line
 import com.dreamkeeper.ui.theme.Night
 import com.dreamkeeper.ui.theme.NightRaised
 import com.dreamkeeper.ui.theme.Paper
+import java.io.File
 import kotlinx.coroutines.launch
 
 /**
@@ -104,6 +121,12 @@ private const val NOVEL_EMPTY = "还没有生成。等接上大模型后，这�
 private const val WAVE_BARS = 40
 
 /**
+ * 把真实播放器下发到 [PlaybackBar]，不经过详情页根 Composable 的 state 收集
+ * （brief §0.7：`playback.state` 只允许在播放条内部 collect）。
+ */
+val LocalAudioPlayback = staticCompositionLocalOf<AudioPlayback?> { null }
+
+/**
  * 详情页（设计 §11 第三层）：原样 / 小说化 / 标签 / 素材。
  *
  * 播放条在滚动区**之外**常驻（brief 0.9）：正文再长也不会把它顶出屏幕，最后两行也不会被盖住。
@@ -113,15 +136,17 @@ private const val WAVE_BARS = 40
 fun DetailScreen(
     dreamId: String,
     repo: DreamRepository,
+    audioStore: WavStore,
     onBack: () -> Unit,
 ) {
-    val vm: DetailViewModel = viewModel { DetailViewModel(repo, dreamId) }
+    val vm: DetailViewModel = viewModel { DetailViewModel(repo, dreamId, audioStore) }
     val state by vm.state.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    Box(modifier = Modifier.fillMaxSize().background(Night)) {
+    CompositionLocalProvider(LocalAudioPlayback provides vm.playback) {
+        Box(modifier = Modifier.fillMaxSize().background(Night)) {
         Column(modifier = Modifier.fillMaxSize()) {
             DetailTopBar(
                 date = state.dream?.date?.let { DayViewModel.titleOf(it) }.orEmpty(),
@@ -189,6 +214,7 @@ fun DetailScreen(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
+        }
         }
     }
 }
@@ -567,42 +593,114 @@ private fun MissingDream(onBack: () -> Unit, modifier: Modifier = Modifier) {
  */
 @Composable
 fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Unit = {}) {
-    val label = durationMs?.let { ms -> "%d:%02d".format(ms / 60_000, (ms / 1000) % 60) } ?: "--:--"
-    val barHeights = remember { List(WAVE_BARS) { i -> (6 + (i * 7 + 3) % 15).dp } }
+    val playback = LocalAudioPlayback.current
+    // brief §0.7：state 只在这一层 collect；根 Composable 不订阅播放器。
+    val current = playback?.state?.collectAsStateWithLifecycle()?.value ?: PlaybackState.Idle
+    val hasAudio = audioPath != null
+    val enabled = hasAudio && playback != null
+
+    // Paused 不带时长（brief §0.5）；进度与标签一律用入参 durationMs，缺失才退回播放器解析值。
+    val totalMs = when {
+        durationMs != null && durationMs > 0L -> durationMs
+        current is PlaybackState.Playing -> current.durationMs
+        else -> 0L
+    }
+    val progress = playbackProgress(current, totalMs)
+    val label = when {
+        !hasAudio -> "这条梦没有录音"
+        playback == null -> "播放器不可用"
+        else -> barLabel(current, totalMs)
+    }
+    val labelColor = if (current is PlaybackState.Error) ErrorText else InkFaint
+    val isPlaying = current is PlaybackState.Playing
+
+    // 音频焦点：只在播放期间持有；来电/别的应用抢走焦点就暂停，而不是继续念。
+    val context = LocalContext.current
+    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    DisposableEffect(isPlaying, playback, audioManager) {
+        var request: AudioFocusRequest? = null
+        if (isPlaying && playback != null) {
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            val listener = AudioManager.OnAudioFocusChangeListener { change ->
+                if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                    playback.pause()
+                }
+            }
+            request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(attributes)
+                .setOnAudioFocusChangeListener(listener)
+                .build()
+            audioManager.requestAudioFocus(request)
+        }
+        onDispose { request?.let { audioManager.abandonAudioFocusRequest(it) } }
+    }
+
+    // 离开页面（锁屏/切后台）就停：后台不该有声音，也避免 MediaPlayer 被系统收回后状态错乱。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, playback) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) playback?.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 进度在 draw 阶段读取；40 根柱子一次 Canvas 画完，不做 40 个 Box 重组。
+    val progressState = rememberUpdatedState(progress)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.45f)
             .clip(RoundedCornerShape(8.dp))
             .background(NightRaised)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .clickable {
-                // Plan 2：audioPath != null 时在这里接 MediaPlayer。
-                // Plan 1 点了必须给一句人话——按钮不响等于坏了。
-                onAction(if (audioPath == null) "这条梦还没有录音" else "播放还没做，之后会有")
+            .clickable(enabled = enabled) {
+                when {
+                    playback == null -> onAction("播放器不可用")
+                    current is PlaybackState.Playing -> playback.pause()
+                    current is PlaybackState.Paused -> playback.toggle()
+                    // 已结束（Paused 停在 duration）再点：toggle 会先 seekTo(0)，从头播。
+                    else -> audioPath?.let { path -> playback.prepare(File(path), totalMs) }
+                }
             }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Canvas(modifier = Modifier.size(width = 12.dp, height = 16.dp)) {
-            val triangle = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(size.width, size.height / 2f)
-                lineTo(0f, size.height)
-                close()
-            }
-            drawPath(triangle, Paper)
-        }
-        Row(
-            modifier = Modifier.weight(1f).height(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            barHeights.forEach { barHeight ->
-                Box(modifier = Modifier.width(1.dp).height(barHeight).background(InkDim))
+            if (isPlaying) {
+                val barWidth = size.width * 0.34f
+                drawRect(Paper, topLeft = Offset(0f, 0f), size = Size(barWidth, size.height))
+                drawRect(Paper, topLeft = Offset(size.width - barWidth, 0f), size = Size(barWidth, size.height))
+            } else {
+                val triangle = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, size.height / 2f)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(triangle, Paper)
             }
         }
-        Text(label, style = MaterialTheme.typography.labelSmall, color = InkFaint)
+        Canvas(modifier = Modifier.weight(1f).height(24.dp)) {
+            val playedX = size.width * progressState.value
+            val gap = size.width / (WAVE_BARS - 1).coerceAtLeast(1)
+            val barWidth = 1.dp.toPx()
+            for (i in 0 until WAVE_BARS) {
+                val heightFactor = (6 + (i * 7 + 3) % 15) / 21f
+                val barHeight = size.height * heightFactor
+                val x = i * gap
+                drawRect(
+                    color = if (x <= playedX) Ember else InkDim,
+                    topLeft = Offset(x - barWidth / 2f, (size.height - barHeight) / 2f),
+                    size = Size(barWidth, barHeight),
+                )
+            }
+        }
+        Text(label, style = MaterialTheme.typography.labelSmall, color = labelColor)
     }
 }

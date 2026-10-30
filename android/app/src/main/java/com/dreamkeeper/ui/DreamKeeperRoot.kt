@@ -195,6 +195,7 @@ fun DreamKeeperRoot(
                 DetailScreen(
                     dreamId = dreamId,
                     repo = repo,
+                    audioStore = audioStore,
                     onBack = { nav.popBackStack() },
                 )
             }

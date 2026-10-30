@@ -1,0 +1,68 @@
+APK sha256=3979f0f61160cdc432e8228756cdf6c6e401857a45bc0fa0ffd39401aa161c85 | device_time=Fri Oct 30 19:26:41 CST 2026 | rerun=adb shell input tap 60 2225（完整复跑见文末）
+
+# 证据 ③ 播前修头：dirty header 在点击瞬间变干净，payload 不变（p2-play-03-repair）
+
+设备：emulator-5554；进程 pid=22766；梦 id=c0f55f08-3e7c-4a64-b0e1-774472d042c4。
+做法：应用已停在详情页（Idle）后，把磁盘上的 WAV 头改成两个 0xFFFFFFFF（模拟录制中断/写头失败），
+再点播放；全程不重启应用，因此 repair 只可能由「点击播放」触发，不是启动扫描顺手修的。
+
+## 1. 注入 dirty header 后、点击前
+
+  adb shell run-as com.dreamkeeper od -A d -t x1 -N 44 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  0000000 52 49 46 46 ff ff ff ff 57 41 56 45 66 6d 74 20
+  0000016 10 00 00 00 01 00 01 00 80 3e 00 00 00 7d 00 00
+  0000032 02 00 10 00 64 61 74 61 ff ff ff ff
+  0000044
+
+  offset 4..8  = ff ff ff ff（RIFF size 占位）
+  offset 40..44 = ff ff ff ff（data size 占位）
+  文件大小 192716 B（payload 192672 B）。
+
+  payload sha256（host 计算，skip 前 44 字节）：
+  98986d8e8f52ec39a568498dcb4442cd4d771ec5054771690aece6019c7a1c3d
+
+## 2. 点击播放：日志显示修头发生在点击瞬间
+
+10-30 19:26:41.653 D/DkPlayback(22766): repair start file=c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav bytes=192716 before=WavState(fileBytes=192716, riffSize=4294967295, dataSize=4294967295, placeholder=true, framesAligned=true)
+10-30 19:26:41.661 D/DkPlayback(22766): repair done file=c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav after=WavState(fileBytes=192716, riffSize=192708, dataSize=192672, placeholder=false, framesAligned=true)
+10-30 19:26:41.662 D/DkPlayback(22766): duration bytes=6021 db=6021 diff=0 chosen=6021
+10-30 19:26:41.729 D/DkPlayback(22766): t=13567194 positionMs=0 durationMs=6021
+
+before.placeholder=true → after.placeholder=false，间隔 8 ms；随后同一调用继续 setDataSource/prepare/start，
+没有先播脏头再修。
+
+## 3. 点击后：头变干净、payload 逐字节不变
+
+  adb shell run-as com.dreamkeeper od -A d -t x1 -N 44 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  0000000 52 49 46 46 c4 f0 02 00 57 41 56 45 66 6d 74 20
+  0000016 10 00 00 00 01 00 01 00 80 3e 00 00 00 7d 00 00
+  0000032 02 00 10 00 64 61 74 61 a0 f0 02 00
+  0000044
+
+  offset 4..8  = c4 f0 02 00 = 192708 = 192716-8
+  offset 40..44 = a0 f0 02 00 = 192672 = 192716-44
+  (192716-44) % 32 = 0
+
+  payload sha256（同一算法）：98986d8e8f52ec39a568498dcb4442cd4d771ec5054771690aece6019c7a1c3d
+  → 头两个字段被改写，payload 未动一个字节。
+
+## 4. 截图
+
+docs/evidence/plan2/p2-play-03-repair.png（sha256 563B92FE1092FB1C62D7F82B845370BFA0FEBC90499D2A320F21F30795BF5EA3）
+点击后约 1.3 s 截屏，播放条已进入播放态（暂停图标），标签显示 0:01.3 / 0:06.0。
+
+## 5. 复跑
+
+  # 1) 取当前干净文件（也可直接用仓库里的 dirty 夹具）
+  adb exec-out run-as com.dreamkeeper cat files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav > clean.wav
+  python -c "b=bytearray(open('clean.wav','rb').read()); b[4:8]=b'\xff'*4; b[40:44]=b'\xff'*4; open('dirty.wav','wb').write(b)"
+  # 或用夹具 docs/evidence/plan2/audio/p2-play-03-dirty.wav
+  adb push dirty.wav /data/local/tmp/dirty.wav
+  adb shell run-as com.dreamkeeper cp /data/local/tmp/dirty.wav files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  adb shell run-as com.dreamkeeper od -A d -t x1 -N 44 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+  # 2) 应用停在详情页（Idle）时点播放
+  adb logcat -c && adb shell input tap 60 2225 && sleep 1
+  adb logcat -d -v time | grep DkPlayback
+  adb shell run-as com.dreamkeeper od -A d -t x1 -N 44 files/audio/c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav
+
+结论：dirty header 由「点击播放」在同一次 prepare 内修复（8 ms），修复后立刻可播；payload 哈希不变。

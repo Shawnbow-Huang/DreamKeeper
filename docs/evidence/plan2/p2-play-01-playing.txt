@@ -1,0 +1,77 @@
+APK sha256=3979f0f61160cdc432e8228756cdf6c6e401857a45bc0fa0ffd39401aa161c85 | device_time=Fri Oct 30 19:24:48 CST 2026 | rerun=adb shell input tap 60 2225（完整复跑命令见文末）
+
+# 证据 ① 播放推进（正出现行）
+
+设备：emulator-5554；应用 com.dreamkeeper 0.1.0，进程 pid=22526。
+素材：梦 id=c0f55f08-3e7c-4a64-b0e1-774472d042c4，文件 192716 B，库 rawAudioMs=6021。
+信号来源：模拟器麦克风输入恒为零（qemu 启动参数未接 host audio），所以本证据只证明
+「播放通路成立、信号来源=静音」；不声称「能听到声音」，也不评价音质。
+
+## 1. 点击即 repair（头已干净，幂等，0 次改写）
+
+10-30 19:24:48.286 D/DkPlayback(22526): repair start file=c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav bytes=192716 before=WavState(fileBytes=192716, riffSize=192708, dataSize=192672, placeholder=false, framesAligned=true)
+10-30 19:24:48.286 D/DkPlayback(22526): repair done file=c0f55f08-3e7c-4a64-b0e1-774472d042c4.wav after=WavState(fileBytes=192716, riffSize=192708, dataSize=192672, placeholder=false, framesAligned=true)
+10-30 19:24:48.286 D/DkPlayback(22526): duration bytes=6021 db=6021 diff=0 chosen=6021
+
+## 2. positionMs 随时间推进（MediaPlayer.getCurrentPosition，单调）
+
+10-30 19:24:48.332 D/DkPlayback(22526): t=13453796 positionMs=0 durationMs=6021
+10-30 19:24:51.406 D/DkPlayback(22526): t=13456871 positionMs=2936 durationMs=6021
+10-30 19:24:51.507 D/DkPlayback(22526): t=13456972 positionMs=3038 durationMs=6021
+10-30 19:24:51.612 D/DkPlayback(22526): t=13457077 positionMs=3141 durationMs=6021
+10-30 19:24:51.716 D/DkPlayback(22526): t=13457180 positionMs=3246 durationMs=6021
+10-30 19:24:51.821 D/DkPlayback(22526): t=13457285 positionMs=3351 durationMs=6021
+
+取首末两点：19:24:48.332 → 19:24:51.821，Δt=3489 ms，ΔpositionMs=3351 ms，
+3351/3489=96.0%（差值 138 ms，约等于一个 100 ms tick 加音频起播延迟，仍在 2500–3500 ms 窗口内）。
+相邻 tick 间隔 101/105/104/105 ms，推进连续，无回跳。
+
+## 3. AudioFlinger：确有一条 16 kHz、active 的 com.dreamkeeper 轨道
+
+客户端：
+    22526  10237  com.dreamkeeper
+轨道：
+  Track-126:  start: 19:24:48.390 (active) uid: 10237 com.dreamkeeper  sessions: 53  actual_seconds: 574.429456 { 22526 }
+轨道行（Active=yes，pid/uid=22526/10237，SRate=16000，Chn=1）：
+            104    yes   22526/  10237     465     154 A  0x000 00000001 00000001  16000  3   1  0   -33     0     0     0          -33      false 00003740   8326    6875 A         0        0      false        false  518.36 t
+混音线程 AudioOut_D：
+  Frames written: 12053952   （第一次快照）
+  Frames written: 12229120   （第二次快照）
+  Δ=175168 帧；175168/48000=3.649 s
+
+两次快照的主机时间（脚本 date +%s%3N）：
+T1=1793359491665, T2=1793359491830（第一次 dump 前后）
+T3=1793359495332, T4=1793359495472（第二次 dump 前后）
+中点差=(T3+T4)/2-(T1+T2)/2=3654 ms。
+3.649 s 与 3.654 s 相差 5 ms（0.14%），即播放期间音频硬件时钟在真实走。
+
+## 4. dumpsys audio：播放器 started + 音频焦点为 USAGE_MEDIA/CONTENT_TYPE_SPEECH
+
+10-30 19:24:48:294 new player piid:463 uid/pid:10237/22526 package:com.dreamkeeper type:android.media.MediaPlayer session:465
+10-30 19:24:48:329 player piid:463 event:started
+10-30 19:24:48:335 requestAudioFocus() from uid/pid 10237/22526 AA=USAGE_MEDIA/CONTENT_TYPE_SPEECH ... callingPack=com.dreamkeeper req=2 flags=0x0 sdk=37
+10-30 19:24:48:393 player piid:463 format update:FormatInfo{isSpatialized=false, channelMask=0x1, sampleRate=16000}
+
+## 5. 截图
+
+docs/evidence/plan2/p2-play-01-playing.png（sha256 F5764FFD2C2C260EE8F6FA1988597FD7795B4CE99773D98C7106C05B73D5E009）
+界面标签 0:03.1 / 0:06.0，暂停图标（两条竖线），波形前段 Ember 色、后段 InkDim。
+
+## 复跑
+
+  export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+  cd android && ./gradlew.bat assembleDebug
+  adb install -r app/build/outputs/apk/debug/app-debug.apk
+  adb shell am force-stop com.dreamkeeper
+  adb shell input keyevent KEYCODE_WAKEUP && adb shell wm dismiss-keyguard
+  adb shell am start -n com.dreamkeeper/.MainActivity
+  adb shell input tap 693 958     # 日历 10 月 30 日
+  adb shell input tap 535 293     # manualnote
+  adb logcat -c
+  adb shell input tap 60 2225     # 播放条
+  sleep 3.4
+  adb logcat -d -v time | grep DkPlayback
+  adb shell dumpsys media.audio_flinger | grep -E "yes +<pid>|Frames written"
+  adb shell dumpsys audio | grep -E "19:2[0-9]:.*dreamkeeper"
+
+结论：播放通路成立、信号来源=静音；位置推进与 AudioFlinger 帧计数均证明「在真实播放」，而不是只改了 UI 标签。

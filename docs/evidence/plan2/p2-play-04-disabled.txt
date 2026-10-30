@@ -1,0 +1,36 @@
+APK sha256=3979f0f61160cdc432e8228756cdf6c6e401857a45bc0fa0ffd39401aa161c85 | device_time=Fri Oct 30 19:27:23 CST 2026 | rerun=adb shell input tap 832 2250; adb shell input tap 258 638（完整复跑见文末）
+
+# 证据 ④ 无录音的梦：播放条压暗禁用 + 「这条梦没有录音」（p2-play-04-disabled）
+
+设备：emulator-5554；应用 com.dreamkeeper 0.1.0。
+对象：seed-dream-3（标题「老房子」，日期 2026-10-15），库内 rawAudioPath=NULL、rawAudioMs=NULL。
+信号来源与 ① 相同：模拟器输入恒零；本证据只涉及禁用态，不涉及声音。
+
+## 1. 数据
+
+  sqlite3 dreamkeeper.db "select id,dreamDate,rawAudioPath,rawAudioMs from dreams where id='seed-dream-3'"
+  seed-dream-3|2026-10-15||            （两个字段均为 NULL）
+
+## 2. 界面
+
+docs/evidence/plan2/p2-play-04-disabled.png（sha256 419AA5E21662E71747B2ED59DDC6090DDDD061E33C8A604BE99DFDFBE05D5B9D）
+
+可见：
+- 播放条整体 alpha 0.45（明显压暗），三角形为灰色而不是 Paper 白；
+- 右侧文字为「这条梦没有录音」，不是 0:00.0 / 0:00.0，也不是「打不开」；
+- 点击该条无任何反应（enabled=false），不会弹 Toast/snackbar，也不会进入 Error。
+
+静音也不是「没有录音」：只要有 rawAudioPath，仍会正常走播放/修头流程（见 ①③）；这里禁用仅由
+rawAudioPath == null 决定。
+
+## 3. 复跑
+
+  adb shell am force-stop com.dreamkeeper
+  adb shell am start -n com.dreamkeeper/.MainActivity
+  adb shell input tap 832 2250     # 底部「全部」
+  adb shell input tap 258 638      # 列表里的「老房子」（10 月 15 日）
+  # 截图：播放条应压暗，文字「这条梦没有录音」
+  adb shell input tap 60 2225      # 点击禁用条应无反应
+  adb shell dumpsys audio | grep dreamkeeper   # 不应新增 player
+
+结论：无录音的梦有明确、不可点的禁用态，文案准确，不存在「死按钮」或 0:00.0 假进度。
