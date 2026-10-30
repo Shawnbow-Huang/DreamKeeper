@@ -22,6 +22,10 @@ REPLAY=<一行可直接复跑的命令>
 
 png 不写文字，改为在同名 `.txt` 里记 `PNG_SHA256=` 与上面三行，互相指路。
 
+**豁免（D378）**：`docs/evidence/plan3/` 下的**导出原件**（`<yyyyMMdd>-<标题>-v<n>.txt|docx|pdf`）是交付物，
+不适用 §1 命名与 §2 头三行；其 sha256 记在 `p3-e2e-06-export.txt` 的 `EXPORT_SHA256=` 行（逐文件一行），
+并注明「按入库 blob 的 LF 字节计」。导出原件的复跑命令也在该 txt 里。
+
 ## 3. 硬规矩
 
 - **不许**用 PowerShell `>` 抓二进制（会把内容 UTF-16LE 化）：一律

@@ -783,7 +783,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   5. 选中 v2 → 截选中态与「当前 v2 · 已选中」（`p3-e2e-05-selected.png`）。
   6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ 等 MediaStore `IS_PENDING` 清（`ls -l` 见 3 文件且 size>0、
      间隔 2s 两次 `sha256sum` 稳定）→ 设备 `ls -l` + `sha256sum` → `adb pull /sdcard/Download/DreamKeeper/` 三件 →
-    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件原样存入 `docs/evidence/plan3/`（保留原文件名，另记 `EXPORT_SHA256=`（按入库 blob 的 LF 字节计），第三方只凭仓库即可复跑 check-export）。
+    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件原样存入 `docs/evidence/plan3/`（保留原文件名，另记 `EXPORT_SHA256=`（按入库 blob 的 LF 字节计），第三方只凭仓库即可复跑 check-export）；`EXPORT_SHA256=` 逐文件写在 `p3-e2e-06-export.txt` 里（不在原件内），并注明按入库 blob 的 LF 字节计（D378：导出原件豁免证据命名/头三行约定）。
     同时贴 `SELECT novelSelectedVersion FROM dreams` 与 `SELECT version FROM novel_versions WHERE dreamId=…` 原始行，证明文件名里的 `-v<n>` 就是选中版（D373）。
   7. 系统「文件」打开 txt/docx 截图；pdf 打开态记 PENDING（AOSP 无 viewer），`p3-e2e-07-pdf-open.png` 若拍到则单独说明、
      **排除**在 nearWhite=0 之外（D359）。
@@ -998,6 +998,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D375 | T10-25：§0.6 步骤 6 等 MediaStore `IS_PENDING` 清且 sha 稳定两次再 pull；每步当场抓 `adb shell date` 落 timeline；`adb logcat -d` 在 force-stop 后、重装/清空前抓全量 | MediaStore 未落盘会 pull 到半截文件；DEVICE_TIME 事后补会重演 Task 4 的「一批同值」；logcat 清了就再也拿不到 A15/A9 原文 |
 | D376 | T10-26：A5 的「txt/docx 设备可打开」开工前 5 分钟做查看器探针；PENDING 白名单只收环境限制，实现缺陷不许 PENDING | AOSP 镜像常常没有 txt/docx 查看器，当天才发现会让口径当场失效；PENDING 不设白名单会变成「红都记 PENDING」的后门 |
 | D377 | T10-27：`.gitattributes` 补 `docs/evidence/plan3/*.txt text eol=lf` 与 `docs/evidence/plan3/*.db binary`；Task 10 Files 白名单加 `.gitattributes`；`EXPORT_SHA256` 按入库 LF 字节计 | 实测 `core.autocrlf=true` 下 fresh clone 把 `p3-mig-00-red.txt` 转 CRLF、sha256 由 `f6992210…` 漂到 `f604be2c…`；导出 txt 入库后第三方 clone 必在上 `\r` 计数 0 / 逐字节比对 / `EXPORT_SHA256` 上 RED，A21 失效（本机自测会假绿） |
+| D378 | T10-28：导出原件平铺进 `docs/evidence/plan3/`，豁免 §1 命名与 §2 头三行；`EXPORT_SHA256=` 逐文件写在 `p3-e2e-06-export.txt` 里 | 导出原件是交付物、文件名是产品行为的一部分（`-v<n>`/`-raw`），按证据命名规则改名就没法证明导出文件名正确；sha 落点不写死，第三方不知道去哪对 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
