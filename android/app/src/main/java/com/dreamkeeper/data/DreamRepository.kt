@@ -172,6 +172,14 @@ class DreamRepository(
         dreams.updateAudio(id, rawAudioMs, transcriptStatus)
     }
 
+    /**
+     * 追问窗口收尾：只落时长，按现行状态决定是否重置为 `PENDING`（见 `DreamDao.finishFollowUp`）。
+     * 与 [updateAudio] 的分工：**不允许**把 `FAILED` 盖回 `PENDING`。
+     */
+    suspend fun finishFollowUp(id: String, rawAudioMs: Long) {
+        dreams.finishFollowUp(id, rawAudioMs)
+    }
+
     // ---- 音频兜底扫描（Task 6）：文件系统是「存在与时长」的唯一真源 ----
 
     /** 所有带音频指针的行（含回收站）；扫描拿它和 `files/audio/` 下的 wav 对账。 */

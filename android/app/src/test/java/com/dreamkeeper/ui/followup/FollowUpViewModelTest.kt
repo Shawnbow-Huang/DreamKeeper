@@ -228,6 +228,25 @@ class FollowUpViewModelTest {
         assertEquals("PENDING", dream.transcriptStatus)
     }
 
+    @Test
+    fun `collapse must not clobber a FAILED transcription status`() = runTest(dispatcher) {
+        seedDream()
+        writeFirstTake() // 96_016 → 3000 ms
+        // 模拟「转写已经失败」：先把时长写进库，再用 CAS 把状态置 FAILED（文本保持空）
+        db.dreamDao().setAudioMs(dreamId, 3_000L)
+        db.dreamDao().updateTranscript(dreamId, 3_000L, null, "FAILED")
+        assertEquals("FAILED", repo.observe(dreamId).first()!!.transcriptStatus)
+
+        val vm = viewModel()
+        runCurrent()
+        vm.onDoneNow()
+        settle()
+
+        val dream = repo.observe(dreamId).first()!!
+        assertEquals("时长仍要落库", 3_000L, dream.rawAudioMs)
+        assertEquals("把 FAILED 盖回 PENDING 会让用户永远等不到结果", "FAILED", dream.transcriptStatus)
+    }
+
     // ---- 5.1 文本 ----
 
     @Test

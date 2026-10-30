@@ -125,6 +125,26 @@ interface DreamDao {
     suspend fun setAudioMs(id: String, rawAudioMs: Long)
 
     /**
+     * 追问窗口收尾：写整文件时长，并把状态「重置为 PENDING 以便重转写」——
+     * 但**只在这一行还没转出文本、且没有失败过**时才重置。
+     *
+     * 起因（Task 7 反馈）：转写可能比收起更早结束并写下 `FAILED`；如果这里无条件写 PENDING，
+     * 会把真实的失败盖成「正在转写…」，用户永远等不到结果。反过来，已经 OK 且有文本时也不重置：
+     * 追加段的重转写策略属于 Plan 3，本轮宁可不假装。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawAudioMs = :rawAudioMs,
+            transcriptStatus = CASE
+                WHEN transcriptStatus = 'FAILED' THEN transcriptStatus
+                WHEN TRIM(rawTranscript) = '' THEN 'PENDING'
+                ELSE transcriptStatus
+            END
+        WHERE id = :id
+    """)
+    suspend fun finishFollowUp(id: String, rawAudioMs: Long)
+
+    /**
      * 行已存在时补写本次 take 的路径与时长（§0-4）。
      *
      * 与 [updateAudio] 的分工：不动 `transcriptStatus`，也不动 `updatedAt` 与文本列。

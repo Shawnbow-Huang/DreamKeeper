@@ -45,7 +45,8 @@ data class FollowUpUiState(
  * 三件事各自只有一个来源，别再加第二份：
  * 1. 倒计时 = `windowMs - (clock() - openedAt)`，录音期间不推进（[openedAt] 在松手时补上本段时长）；
  * 2. 补录走 [RecordingStarter.start]，服务端对已有文件只 markOpen 追加，本类不碰文件；
- * 3. 收尾只写 `rawAudioMs` + `transcriptStatus`（走 [DreamRepository.updateAudio] 窄更新），
+ * 3. 收尾只写 `rawAudioMs`（走 [DreamRepository.finishFollowUp]），是否把状态重置成 `PENDING`
+ *    由 DAO 里的 CASE 决定——**不许把转写写下的 `FAILED` 盖回 `PENDING`**，
  *    时长取**最终整文件** `dataSize / 32`，不是两次 run 的 elapsed 相加。
  */
 class FollowUpViewModel(
@@ -204,7 +205,7 @@ class FollowUpViewModel(
             val wav = audioStore.state(file)
             if (wav.placeholder) WavMath.durationMs(wav.fileBytes) else wav.dataSize / WavMath.BYTES_PER_MS
         }.getOrNull() ?: return // 文件还不存在：宁可什么都不写，也不要把已知时长清成 0
-        runCatching { repository.updateAudio(dreamId, ms, TRANSCRIPT_STATUS_PENDING) }
+        runCatching { repository.finishFollowUp(dreamId, ms) }
     }
 
     companion object {
@@ -213,7 +214,6 @@ class FollowUpViewModel(
 
         /** 200 ms 一次：数字每秒才变一次，但这样「还剩 N 秒」最多晚 0.2 s 刷新。 */
         private const val TICK_MS = 200L
-        const val TRANSCRIPT_STATUS_PENDING = "PENDING"
 
         const val HINT_PREVIOUS_SEGMENT = "上一段还在收尾"
         const val HINT_SEGMENT_LIMIT = "单段最长 120 秒，已替你保存"
