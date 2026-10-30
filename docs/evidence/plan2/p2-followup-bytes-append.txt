@@ -1,0 +1,25 @@
+# Plan 2 Task 5 追加字节证据（同一 dreamId，三次 stat）
+
+adb shell date              : Fri Oct 30 17:37:11 CST 2026
+wav                          : files/audio/2f4000e9-f635-4634-902d-f5641ecb32c1.wav
+stat1 第一段结束后   (bytes) : 92844
+stat2 补录进行中     (bytes) : 121644
+stat3 补录结束后     (bytes) : 153644
+stat4 再等 0.3s 复查 (bytes) : 153644
+
+stat2-stat1 (bytes)          : 28800
+stat3-stat1 (bytes)          : 60800
+追加时长 (stat3-stat1)/32     : 1900 ms   (目标 2000ms ±100)
+整文件时长 (stat3-44)/32      : 4800 ms
+第一段整文件时长 (stat1-44)/32: 2900 ms
+两次 run 的 elapsed 相加会得  : 4800 ms（2900+1900，本次恰好相同）
+注：口径必须是整文件 dataSize/32；相加在极端情况会漂（单测里 96016+64016 两段各自 /32
+    相加得 5000，取整文件得 5001），所以 §0-6 禁止相加
+
+第一段是否原样保留（PCM 段逐字节比对，跳过 44 字节头——头部尺寸字段本来就要回填）:
+  first.wav PCM 长度           : 92800 bytes
+  first.wav PCM   md5          : dc475bacad05bf86e6b2dec9afe7d725
+  final.wav 同段  md5          : dc475bacad05bf86e6b2dec9afe7d725
+  => 一致：第一段 PCM 未被截断也未被改写
+
+追加后是否仍在增长（stat3 vs stat4）: 已停止写入
