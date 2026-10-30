@@ -35,3 +35,6 @@ Thumbs.db
 # Python 缓存（scripts/*.py 会生成）
 __pycache__/
 *.pyc
+
+# Plan 2 采集脚本产生的临时 raw/log（不进库）
+docs/evidence/plan2/.p2-*
