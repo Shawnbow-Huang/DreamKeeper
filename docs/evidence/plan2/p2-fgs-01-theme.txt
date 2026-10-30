@@ -1,5 +1,10 @@
 # 截图采集说明
 device_theme: 采集期间 cmd uimode night yes（脚本结束时还原为采集前的值）
-why: 浅色系统主题下，通知条目左侧 app 图标被系统垫了一层纯白圆底，check-near-white.ps1
-     -TopOffset 100 -MaxRatio 0 实测 nearWhite=162/69120=0.234% -> FAIL；深色主题下同一
-     画面 nearWhite=0 -> OK。白像素来自系统通知栏样式，不是 app 渲染异常（app 自身是深色主题）。
+why: check-near-white.ps1 -TopOffset 100 -MaxRatio 0 对通知栏截图会判红：
+     浅色系统主题 nearWhite=162/69120=0.234%，深色主题 nearWhite=118/69120=0.171%；
+     两次的 near-white 像素都只出现在通知条目左侧「系统给 app 图标垫的白圆底」包围盒内
+     （深色那次的定位：nearwhite_total=1044、in_icon_box=1044、outside=0，
+      包围盒 x=90..182 y=746..838，见 p2-fgs-01-notify.txt 与 p2-fgs-01-whitepixels.ps1）。
+result: 仍 rc=1（判红）。白圆底是 SystemUI 的通知条目样式，换主题只能减少不能消除；
+     它不代表 app 渲染异常，app 自身是深色主题。录音页截图（Task 4 的 p2-ux-*）不受影响。
+measured: 2026-10-30 16:02 那轮（APK 39dab6ec，png 932294e2）

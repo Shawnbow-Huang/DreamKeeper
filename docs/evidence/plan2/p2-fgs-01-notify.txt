@@ -22,6 +22,14 @@ RESULT: OK path=docs/evidence/plan2/p2-fgs-01-notify.png serial=emulator-5554 by
 --- check-near-white.ps1 输出（TopOffset=100 MaxRatio=0，rc=1，0=通过）
 RESULT: FAIL image=docs/evidence/plan2/p2-fgs-01-notify.png reason=near-white ratio 0.171% > max 0.000% dims=1080x2400 samples=69120 nearWhite=118 ratio=0.1707% center=#151720
 
-note: 深色系统主题下通知栏底色 #151720 一类，near-white 计数为 0；
-      浅色主题下同一画面会因系统给 app 图标垫的白圆底被判 0.234%（见 p2-fgs-01-theme.txt）。
-      app 自身是深色主题，与截图无关。
+note: 深色系统主题下通知栏底色是 #151720 一类，但 near-white 仍有 118 个采样（0.171%），
+      全部落在通知条目左侧「系统给 app 图标垫的白圆底」包围盒内（见下方定位），
+      颜色本身没问题；浅色主题下同一画面更差（0.234%，见 p2-fgs-01-theme.txt）。
+      所以这道闸门在本用例判红属预期，截图内容有效（app 自身是深色主题，与白圆底无关）。
+
+--- 白像素来源定位（p2-fgs-01-whitepixels.ps1，对同一张 png 复算）
+RESULT: nearwhite_total=1044（每 2 像素取 1，约 4176 实际像素）
+        nearwhite_in_icon_box=1044（图标圆底包围盒 x=50..210 y=650..950）
+        nearwhite_outside_icon_box=0
+        nearwhite_bbox: x=90..182 y=746..838
+replay: powershell -NoProfile -ExecutionPolicy Bypass -File docs/evidence/plan2/p2-fgs-01-whitepixels.ps1 -Path docs/evidence/plan2/p2-fgs-01-notify.png -TopOffset 100

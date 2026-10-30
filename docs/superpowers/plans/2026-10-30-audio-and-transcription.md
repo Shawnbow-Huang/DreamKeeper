@@ -635,6 +635,7 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D125 | 本任务的证据文件按仓库规矩由 Lead 复核提交，不由实现者提交 | 实现者只落盘 `docs/evidence/plan2/p2-fgs-01-*` 并在报告里列清单，Lead 复核四连判据后一次性提交 | 证据提交与代码分开两个 commit |
 | D126 | 计数基线：Task 2 末 152 用例 / 14 类；本任务 +8（`RecordingCommandTest`）+1（`WavStoreTest`）= **161 用例 / 15 类** | 一律以 `test-results/testDebugUnitTest/*.xml` 统计为准；无钩子构建 APK 12,958,451 B | Lead 复跑 `:app:testDebugUnitTest` 并从 XML 统计 |
 | D127 | `startForeground` 失败 / `AudioRecord` 打开失败 / `startCapture` 失败三条路径会留下 44 字节占位头孤儿文件，`startCapture` 失败还漏关写句柄 | 三条失败路径都 `file.delete()`；`startCapture` 失败额外 `writer.close()`（close 兜底 finish）避免 fd 泄漏 | `git show HEAD -- android/app/src/main/java/com/dreamkeeper/service/RecordingService.kt` |
+| D128 | 通知栏截图的近白闸门 `-TopOffset 100 -MaxRatio 0` 判红：深色系统主题下 `nearWhite=118/69120=0.171%`，浅色主题下 `0.234%` | 白像素**全部**落在 SystemUI 给 app 图标垫的白圆底包围盒内（深色那轮定位：`nearwhite_total=1044`、`in_icon_box=1044`、`outside=0`、`bbox x=90..182 y=746..838`），不是 app 渲染；故本用例判红属预期，截图内容有效，并在证据里写明「换主题只能减少不能消除」 | `docs/evidence/plan2/p2-fgs-01-notify.txt`（含 `p2-fgs-01-whitepixels.ps1` 输出）、`p2-fgs-01-theme.txt` |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 

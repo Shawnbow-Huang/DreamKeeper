@@ -11,7 +11,7 @@
 | 判据 | 期望 | 实测 | 文件 |
 |---|---|---|---|
 | ① 前台服务 | 同一 ServiceRecord 内 `startRequested=true` + `isForeground=true` + `foregroundId=42` + `types=0x00000080` | 全部命中（`:43` `:46`；API 37 字段名见 D120） | `p2-fgs-01-services.txt` |
-| ② 通知 | id=42，flags 含 `FOREGROUND_SERVICE`/`ONGOING_EVENT`/`NO_CLEAR` | 命中；另有通知栏截图 | `p2-fgs-01-notify-dump.txt`、`p2-fgs-01-notify.png` |
+| ② 通知 | id=42，flags 含 `FOREGROUND_SERVICE`/`ONGOING_EVENT`/`NO_CLEAR` | 命中；另有通知栏截图（**该截图的近白闸门 rc=1**：白像素全部来自 SystemUI 的图标白圆底，包围盒内 1044、盒外 0，见 D128） | `p2-fgs-01-notify-dump.txt`、`p2-fgs-01-notify.png` |
 | ③ 写入速率 | 32000 B/s ±2% | 4 次采样（文件字节 + `/proc/uptime` 单调钟）在区间内 | `p2-fgs-01-bytes.txt` |
 | ④ 崩溃日志 | `FATAL` / `ForegroundServiceStartNotAllowed` / `DidNotStartInTime` 全空 | `FATAL=0`、其余 0 | `p2-fgs-01-logcat.txt` |
 
