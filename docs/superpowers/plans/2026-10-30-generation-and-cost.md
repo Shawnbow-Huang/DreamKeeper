@@ -686,8 +686,10 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 - 前置：**Task 9 已提交验收**。`DetailViewModel.orchestrator` 参数与 `DreamKeeperRoot`/`MainActivity` 的传参已由 Task 9 落地，
   本任务**复用、不重复改签名**；只允许在参数已存在的前提下调用。
-- Files：`llm/GenerationRunner.kt`（新：`interface GenerationRunner { suspend fun generateFaithful(dreamId: String): GenerationResult;
-  suspend fun generateNovel(dreamId: String): GenerationResult }`）、`llm/GenerationOrchestrator.kt`（**只**加 `: GenerationRunner`
+- Files：`llm/GenerationRunner.kt`（新：`interface GenerationRunner { suspend fun generateFaithful(dreamId: String,
+  onProgress: ((GenerationStage, Int) -> Unit)? = null): GenerationResult; suspend fun generateNovel(dreamId: String,
+  onProgress: ((GenerationStage, Int) -> Unit)? = null): GenerationResult }`——签名必须与
+  `GenerationOrchestrator.kt:92-95/:116-119` 逐字一致，Kotlin 默认参数不参与 override 签名，少一个参数就编译不过）、`llm/GenerationOrchestrator.kt`（**只**加 `: GenerationRunner`
   与 `override`，不改任何逻辑）、`ui/detail/DetailViewModel.kt`（构造参数类型改 `GenerationRunner`，`generateFaithful()` /
   `generateNovel()` / `retryGeneration()` + `generationPhase: StateFlow<GenerationPhase>`）、`ui/detail/DetailScreen.kt`（NovelTab 顶部
   两枚按钮「原样整理」「小说化」+ `GenerationPhase` 三态 + 失败「重试」）、`test/.../ui/detail/GenerationPhaseMappingTest.kt`
@@ -703,8 +705,9 @@ T3  不调用模型                                   → faithfulText = rawTran
   4. 设备 smoke：`assembleDebug` → `install -r` → 打开一条种子梦（`rawTranscript` 非空、无小说稿）→ 截按钮可见
      `p3-wire-01-buttons.png` → **无 Key** 点「原样整理」→ 截失败态 `p3-wire-02-failed.png`（不要求真实生成，真实 API 归 Task 10）
      → logcat `FATAL EXCEPTION` 计数 0。
-  5. 负向（JVM）：`transcriptStatus != OK` 或 `rawTranscript` 为空时，`generate*` 返回 Protocol 失败且
-     `FakeGenerationRunner` 调用次数 == 0；设备侧只截按钮禁用态（`p3-wire-04-disabled.png`，可选，不做 run-as 计数——
+  5. 负向（JVM）：**ViewModel 先判** `transcriptStatus != OK` 或 `rawTranscript` 为空 → 直接置 `Failed(Protocol("…"))`、
+     **不调 runner**（`FakeGenerationRunner` 调用次数 == 0）；这一层判断在 ViewModel，不在 orchestrator（orchestrator 的
+     `generatable` 是第二道闸）；设备侧只截按钮禁用态（`p3-wire-04-disabled.png`，可选，不做 run-as 计数——
      fresh install 的种子梦全走默认 status，无非 OK 梦可点，见 `SeedData.kt:119-130`）。
 - Expected：3/3 绿；全量 **36 类 / 347 例**（344 + 3）0 失败（若并入既有类则类数不变，报告须说明差 1 原因）；证据
   `p3-wire-00-red.txt`（host-only 头）、`01-green.txt`、`02-mutation.txt`（回调改成空 → 用例 1 红）、`03-full.txt`；设备两图 +
