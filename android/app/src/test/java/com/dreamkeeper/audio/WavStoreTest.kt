@@ -84,6 +84,26 @@ class WavStoreTest {
     }
 
     @Test
+    fun `syncToDisk flushes pcm but keeps the placeholder header`() {
+        val store = WavStore(tmp.root)
+        val file = store.create("dream-1")
+        val writer = store.openWriter(file)
+        val chunk = ByteArray(3_200) { 0x11 }
+
+        writer.write(chunk, chunk.size)
+        writer.syncToDisk()
+
+        assertEquals("sync 后 PCM 必须已在文件里（fsync 本身看不见，长度先对上）", 3_244L, file.length())
+        assertArrayEquals("头必须还是占位：回填只能发生在 finish", PLACEHOLDER_HEADER, readHeader(file))
+
+        val state = writer.finish()
+
+        assertFalse(state.placeholder)
+        assertEquals(3_200L, state.dataSize)
+        assertArrayEquals("finish 之后是 100 ms 那枚标准头", FILLED_HEADER_100MS, readHeader(file))
+    }
+
+    @Test
     fun `finish backfills the full canonical header`() {
         val store = WavStore(tmp.root)
         val file = store.create("dream-1")

@@ -35,6 +35,14 @@ interface WavWriter : Closeable {
 
     fun write(buffer: ByteArray, length: Int)
 
+    /**
+     * 只把已写入的 PCM 刷到盘，**不动**头里的两个尺寸字段。
+     *
+     * 录音中约每秒一次（1 秒 PCM ≈ 32 KB，断电最多丢这一秒）；
+     * 头必须留到 [finish] 回填 —— 中途回填再继续追加会让 `data` 尺寸偏小。
+     */
+    fun syncToDisk()
+
     /** sync() → 回填两字段 → close()；可重复调用。 */
     fun finish(): WavState
 }
@@ -165,6 +173,11 @@ class WavStore(private val rootDir: File) {
             check(!finished) { "writer 已 finish，不能再写" }
             raf.write(buffer, 0, length)
             bytesWritten += length
+        }
+
+        override fun syncToDisk() {
+            // finish 之后 fd 已关，这里静默跳过：收尾路径不该因为多一次 sync 崩。
+            if (!finished) raf.fd.sync()
         }
 
         override fun finish(): WavState {

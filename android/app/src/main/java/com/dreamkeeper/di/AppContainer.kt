@@ -1,11 +1,14 @@
 package com.dreamkeeper.di
 
 import android.content.Context
+import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.TagDao
+import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.library.SharedPreferencesLayoutPrefs
+import java.io.File
 
 /**
  * 手写依赖容器：Plan 1 明确不引 Hilt/Koin（设计 §2「尽量少的依赖」），
@@ -39,4 +42,20 @@ class AppContainer(context: Context) {
      * 进程重启后仍是上次选的那种排布——这是 Task 7 三条验收之一。
      */
     val layoutPrefs: LayoutPrefs by lazy { SharedPreferencesLayoutPrefs(appContext) }
+
+    /**
+     * WAV 落盘层：`files/audio/<dreamId>.wav`（不进 Room，音频是文件不是 BLOB）。
+     *
+     * 与 [recordingSession] 一样是**进程内唯一**的写入口：Service 写、启动扫描（Task 6）修、
+     * 详情页（Task 8）读，都从这里拿同一个 `rootDir`。
+     */
+    val audioStore: WavStore by lazy { WavStore(File(appContext.filesDir, "audio")) }
+
+    /**
+     * 录音状态的唯一真相：前台服务写、录音页（Task 4）只读。
+     *
+     * 放在容器里而不是 Service 字段：Activity 与 Service 生命周期不同步，
+     * 状态必须活过其中任何一个的销毁重建。
+     */
+    val recordingSession: RecordingSession by lazy { RecordingSession() }
 }

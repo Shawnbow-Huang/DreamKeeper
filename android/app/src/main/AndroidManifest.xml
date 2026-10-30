@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 录音：运行时权限，按住「说梦」时才请求（Task 4 的界面负责），Service 侧只做检查 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 33+ 通知要用户授权；没授权也照录，只是常驻通知不可见 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 前台服务本体 + microphone 类型（14+ 起类型权限是独立的一条） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
     <application
         android:name=".DreamKeeperApp"
         android:allowBackup="false"
@@ -16,5 +25,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          前台录音服务：只由可见 Activity 的 Context 用 startForegroundService 起。
+          exported=false —— 别的应用不能起它；stopWithTask=false —— 用户划掉任务卡片
+          时录音继续（录音中划掉任务通常是想让它在后台录完，而不是静默丢一段）。
+        -->
+        <service
+            android:name=".service.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="false" />
     </application>
 </manifest>
