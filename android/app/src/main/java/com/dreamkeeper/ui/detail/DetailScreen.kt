@@ -221,6 +221,8 @@ fun DetailScreen(
                                 novelText = state.finalNovel?.novelText ?: state.dream?.novelText,
                                 // 是否有「小说稿」：只认 novel / novel_revise 版本，原样整理稿不算（D394）。
                                 hasNovelVersion = hasNovelVersion(state.dream, state.versions),
+                                // 是否有「原样稿」：决定「原样整理」按钮还露不露（D406，Task 10 E2E 复现双点）。
+                                hasFaithfulVersion = hasFaithfulVersion(state.dream, state.versions),
                                 versions = state.versions,
                                 messages = state.messages,
                                 selectedVersion = state.dream?.novelSelectedVersion,
@@ -574,6 +576,11 @@ private fun NovelTab(
      * 被当成「已有稿」而永远不显示生成入口。口径见 [hasNovelVersion]（D394）。
      */
     hasNovelVersion: Boolean,
+    /**
+     * 是否已有原样稿（`promptId == "faithful"` 的版本，或老数据的 `dreams.faithfulText`）。
+     * 两枚按钮分别判：整理过的梦不该再露「原样整理」（D406，Task 10 E2E 双点复现）。
+     */
+    hasFaithfulVersion: Boolean,
     versions: List<NovelVersionEntity>,
     messages: List<NovelMessageEntity>,
     selectedVersion: Int?,
@@ -599,10 +606,13 @@ private fun NovelTab(
         if (revisionAck > 0) opinion = ""
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        // Task 9b：只在「这篇还没有小说稿」时露出生成入口；有稿后只留版本线与改稿输入条。
-        if (!hasNovelVersion) {
+        // Task 9b/9c/9d：两枚按钮各自按「有没有对应稿」收起（D394/D406）；都收起了整块不出现，
+        // 只留版本线与改稿输入条——有稿之后入口再出现会让人误以为会覆盖当前选中版。
+        if (!hasFaithfulVersion || !hasNovelVersion) {
             GenerationActions(
                 phase = generationPhase,
+                showFaithful = !hasFaithfulVersion,
+                showNovel = !hasNovelVersion,
                 onFaithful = onGenerateFaithful,
                 onNovel = onGenerateNovel,
                 onRetry = onRetryGeneration,
@@ -688,6 +698,8 @@ private fun NovelTab(
 @Composable
 private fun GenerationActions(
     phase: GenerationPhase,
+    showFaithful: Boolean,
+    showNovel: Boolean,
     onFaithful: () -> Unit,
     onNovel: () -> Unit,
     onRetry: () -> Unit,
@@ -699,31 +711,35 @@ private fun GenerationActions(
             .padding(start = 16.dp, end = 16.dp, top = 16.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onFaithful,
-                enabled = !running,
-                modifier = Modifier.height(40.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = EmberDeep,
-                    contentColor = Paper,
-                    disabledContainerColor = Line,
-                    disabledContentColor = InkFaint,
-                ),
-            ) {
-                Text("原样整理", style = MaterialTheme.typography.labelLarge)
+            if (showFaithful) {
+                Button(
+                    onClick = onFaithful,
+                    enabled = !running,
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EmberDeep,
+                        contentColor = Paper,
+                        disabledContainerColor = Line,
+                        disabledContentColor = InkFaint,
+                    ),
+                ) {
+                    Text("原样整理", style = MaterialTheme.typography.labelLarge)
+                }
             }
-            OutlinedButton(
-                onClick = onNovel,
-                enabled = !running,
-                modifier = Modifier.height(40.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Ember,
-                    disabledContentColor = InkFaint,
-                ),
-            ) {
-                Text("小说化", style = MaterialTheme.typography.labelLarge)
+            if (showNovel) {
+                OutlinedButton(
+                    onClick = onNovel,
+                    enabled = !running,
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Ember,
+                        disabledContentColor = InkFaint,
+                    ),
+                ) {
+                    Text("小说化", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
         when (phase) {

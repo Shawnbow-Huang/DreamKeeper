@@ -381,3 +381,19 @@ internal fun hasNovelVersion(dream: Dream?, versions: List<NovelVersionEntity>):
     if (versions.isNotEmpty()) return versions.any { it.promptId != "faithful" }
     return dream?.novelText != null || (dream?.novelVersion ?: 0) > 0
 }
+
+/**
+ * 「这篇梦是不是已经有原样稿」——决定「原样整理」按钮还该不该露出来（D406）。
+ *
+ * 为什么需要第二个判据：只按「有没有小说稿」收起整块入口，忠实稿写完之后两枚按钮会
+ * 一起重新出现——Task 10 的设备 E2E 实测到了这一点（「原样整理」被点了第二次，多出
+ * 一条 v2 忠实版本）。原样整理的语义是「把转写整理成通顺原文」，同一篇梦整理第二遍
+ * 只会得到近似重复的版本，所以有过忠实版本就该收起这枚按钮。
+ *
+ * 判据：有版本行时认 `promptId == "faithful"`；没有版本行时退回老数据的
+ * `dreams.faithfulText`（Plan 1/2 的种子与历史记录都只有这一列）。
+ */
+internal fun hasFaithfulVersion(dream: Dream?, versions: List<NovelVersionEntity>): Boolean {
+    if (versions.any { it.promptId == "faithful" }) return true
+    return dream?.faithfulText != null
+}

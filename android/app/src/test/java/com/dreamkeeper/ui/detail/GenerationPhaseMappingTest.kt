@@ -223,6 +223,31 @@ class GenerationPhaseMappingTest {
         assertTrue(hasNovelVersion(raw.copy(novelVersion = 3), emptyList()))
     }
 
+    // ---------------------------------------------- 9d：两枚按钮各自收起（D406）
+
+    /** 原样稿已存在（faithful 版本行）时，「原样整理」不该再出现——否则会整理出重复版本。 */
+    @Test
+    fun `faithful version hides the faithful entry`() {
+        val d = dream("seed-dream-4")
+        assertTrue(hasFaithfulVersion(d, listOf(version(1, "faithful"))))
+    }
+
+    /** 只有小说/改稿版本、没有原样稿时，「原样整理」仍应出现（用户可能先要一版通顺原文）。 */
+    @Test
+    fun `novel version does not hide the faithful entry`() {
+        val d = dream("seed-dream-4").copy(faithfulText = null)
+        assertEquals(false, hasFaithfulVersion(d, listOf(version(1, "novel"))))
+        assertTrue(hasNovelVersion(d, listOf(version(1, "novel"))))
+    }
+
+    /** 老数据没有版本行：`dreams.faithfulText` 非空即视为整理过；纯转写仍可整理。 */
+    @Test
+    fun `legacy faithfulText falls back to the dream column`() {
+        val raw = dream("seed-dream-4").copy(faithfulText = null)
+        assertEquals(false, hasFaithfulVersion(raw, emptyList()))
+        assertTrue(hasFaithfulVersion(raw.copy(faithfulText = "整理过的原文"), emptyList()))
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     private fun version(no: Int, promptId: String): NovelVersionEntity = NovelVersionEntity(

@@ -1,0 +1,53 @@
+APK_SHA256=cdc6a2c12c3f0b6b807ca3940869edbb1a44a7cebcb3bc2d77d7539fe43eb5f3
+DEVICE_TIME=Sat Oct 31 01:41:10 CST 2026 (emulator-5554; 装机后 pm path→adb pull 复核 sha 与本地 app-debug.apk 相等)
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" --rerun-tasks --console=plain
+
+D406：生成入口「原样整理 / 小说化」两枚按钮分别按对应稿收起
+
+## 为什么改
+Task 10 设备 E2E 实测：对 seed-dream-4 点「原样整理」得到 v1 之后，两枚按钮又都露了出来，
+再点一次又写出 v2 忠实版本。根因是 9b 的判据把两枚按钮当一个整体、只看「有没有小说稿」：
+忠实稿写入后 version 列表变非空但 hasNovelVersion 仍为 false，于是整块入口继续渲染。
+
+## 改法（两处 Kotlin + 3 例测试）
+- `DetailViewModel.kt`：新增 `hasFaithfulVersion(dream, versions)` =
+  `versions.any { it.promptId == "faithful" } || dream?.faithfulText != null`。
+- `DetailScreen.kt`：`NovelTab` 增加 `hasFaithfulVersion` 参数；渲染条件改
+  `if (!hasFaithfulVersion || !hasNovelVersion)`，`GenerationActions` 按 `showFaithful/showNovel` 分别出按钮。
+- `GenerationPhaseMappingTest.kt`：新增 3 例（faithful 版本收起整理按钮 / novel 版本不收起整理按钮 /
+  老数据 faithfulText 兜底）。
+
+## 绿跑（真跑，非缓存）
+GenerationPhaseMappingTest：`9 tests completed`，XML `tests=9 failures=0 errors=0`，BUILD SUCCESSFUL。
+
+## 变异反证（先改 → 跑 → 恢复）
+变异：`hasFaithfulVersion` 整体 `return false`（等价于修复前的「不看忠实稿」口径）。
+原文：
+
+    GenerationPhaseMappingTest > faithful version hides the faithful entry FAILED
+    GenerationPhaseMappingTest > legacy faithfulText falls back to the dream column FAILED
+    9 tests completed, 2 failed
+    > Task :app:testDebugUnitTest FAILED
+    BUILD FAILED in 26s
+
+恢复后同一命令复绿（见上）。`cp /tmp/DVM.bak` 逐字节恢复，`git diff` 只剩本任务意图内的改动。
+
+## 全量
+`classes=39 tests=365 failures=0 errors=0 skipped=0`（BUILD SUCCESSFUL in 39s；
+365 = Task 10 Phase B 的 362 + 本次 3 例）。
+
+## 设备侧（诚实记录：状态不可复现，故无对比截图）
+装机 APK sha256 `cdc6a2c1…eb5f3`（13,860,885 B，与本地构建物逐字节相等）。
+当前设备库（`p3-e2e-08-db.db` 同源）里**没有**「有忠实稿、无小说稿」的梦：
+- seed-dream-1：faithfulText 29 字、novelText 38 字、novelVersion 0 → 入口整体收起（有稿态）
+- seed-dream-2/3：有小说版本 → 入口整体收起
+- seed-dream-4：novel_versions 有 1 条 `promptId=novel` → 入口整体收起
+- 真实录音那条：rawTranscript 为空、transcriptStatus=FAILED → 生成闸门本就不放行
+因此「只露小说化」这一态在设备上无法用现有数据复现，**设备对比截图记为 PENDING（D406）**，
+该态由 3 例单测 + 变异覆盖。另记一条未验证风险：生成成功后入口是否立刻刷新（可能要到重新进入详情页）
+本次未在设备上单独验证，留给 Plan 4 的 UI 打磨。
+
+## 读法
+1. 先看 `GenerationPhaseMappingTest` 3 例的名字与断言，确认「两枚按钮各自判」；
+2. 再看变异段：把判据改回旧口径后恰好是这两例红，说明测试真能证伪；
+3. 设备段说明为什么没有截图——不是没跑，是当前数据里没有那个态。
