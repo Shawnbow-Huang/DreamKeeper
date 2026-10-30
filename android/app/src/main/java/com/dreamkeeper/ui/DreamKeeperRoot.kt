@@ -45,6 +45,7 @@ import com.dreamkeeper.ui.calendar.CalendarViewModel
 import com.dreamkeeper.ui.day.DayScreen
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.detail.DetailScreen
+import com.dreamkeeper.ui.followup.FollowUpScreen
 import com.dreamkeeper.ui.library.LibraryScreen
 import com.dreamkeeper.ui.library.LibraryViewModel
 import com.dreamkeeper.ui.library.LayoutPrefs
@@ -226,7 +227,27 @@ fun DreamKeeperRoot(
                     debugError = debugRecordError,
                 )
             }
-            composable("followup/{dreamId}") { /* Plan 2 Task 5：FollowUpScreen */ }
+            composable("followup/{dreamId}") { backStackEntry ->
+                val dreamId = backStackEntry.arguments?.getString("dreamId").orEmpty()
+                FollowUpScreen(
+                    dreamId = dreamId,
+                    repository = repo,
+                    session = session,
+                    starter = starter,
+                    audioStore = audioStore,
+                    onDismiss = {
+                        // 收起落 Night 底页（日历），不退桌面。record 那条已经被
+                        // popUpTo(inclusive) 清掉了，所以这里正常能 pop 到日历。
+                        val popped = nav.popBackStack()
+                        if (!popped) {
+                            nav.navigate(DreamRoute.Calendar.route) {
+                                popUpTo(DreamRoute.Calendar.route) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                )
+            }
         }
     }
 }
