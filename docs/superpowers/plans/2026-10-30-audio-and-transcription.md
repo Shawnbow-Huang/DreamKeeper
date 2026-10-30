@@ -220,6 +220,7 @@ class RecorderCore(
 - Modify `android/app/src/main/AndroidManifest.xml`
 - Create `android/app/src/main/java/com/dreamkeeper/service/RecordingService.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/service/RecordingSession.kt`
+- Create `android/app/src/main/java/com/dreamkeeper/audio/WavSink.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/service/RecordingNotifications.kt`
 - Modify `android/app/src/main/java/com/dreamkeeper/di/AppContainer.kt`
 - Create `android/app/src/main/res/drawable/ic_notification.xml`
@@ -288,6 +289,7 @@ object RecordingCommands {
 - [ ] 3.4d 录音中途被吊销权限：`AudioRecord` 读循环捕获 `SecurityException` / `read()` 返负 → `snapshot.fail("录音权限被收回")` + 收尾（`finish()` 回填 + `stopSelf()`），不许把异常吞掉留在录音态。
 - [ ] 3.5 实现通知：常驻、`IMPORTANCE_LOW`、锁屏 `VISIBILITY_PRIVATE`、`setOngoing(true)`；`ContentIntent` → `MainActivity` + `entry=NOTIFICATION` + `FLAG_IMMUTABLE`；`ACTION_STOP` 走 `PendingIntent.getService(...)` 指向本 Service 的 STOP；渠道在 `RecordingNotifications.ensureChannel()` 里建。
 - [ ] 3.6 `AppContainer` 加 `audioStore`（`WavStore(filesDir/audio)`）与 `recordingSession`。
+- [ ] 3.6b 新建 `android/app/src/main/java/com/dreamkeeper/audio/WavSink.kt`：`class WavSink(private val writer: WavWriter) : PcmSink`，`write(buffer, length)` → `writer.write(buffer, length)`；`sync()` → `writer.flushToDisk()`（**注意**：Task 1 的 `WavWriter` 接口只有 `bytesWritten` / `write` / `finish`，**没有** `sync`——若确认缺失，就给 `WavWriter` 加一个 `fun syncToDisk()` 并在 `PcmWavWriter` 里实现为 `fd.sync()`，同时补一条 `WavStoreTest`）；`bytesWritten()` → `writer.bytesWritten`；`finish()` → `writer.finish()`。**禁止**把 `WavWriter` 直接当 `PcmSink` 用（`bytesWritten` 是属性不是方法、也没有 `sync()`），报告里要写明这一段是怎么接的。
 - [ ] 3.7 构建 + 安装，**从可见页面起服务**：`adb shell am start -n com.dreamkeeper/.MainActivity`（shell 起 Activity 不受后台启动限制）→ 首页点「说梦」→ `adb shell input swipe 540 1600 540 1600 3000` 或手按住 3 秒 → 松手。判据四连：① `dumpsys activity services com.dreamkeeper` 同一段里 `started=true` 且 `isForeground=true` 且 `foregroundId=42` 且类型含 `microphone`；② `dumpsys notification --noredact` 里 id=42、`flags` 含 `0x40`、ongoing；③ 两次 `run-as com.dreamkeeper stat -c %s files/audio/<id>.wav` 间隔 ≥3 s，`Δbytes/Δt` 落在 32000 B/s ±2%（这是「AudioRecord 真在供数」的唯一自动判据）；④ `logcat -d` 里 `FATAL` / `ForegroundServiceStartNotAllowed` / `DidNotStartInTime` 全空。**不要**用 `adb shell am start-foreground-service …`（shell 是后台，14+ 必抛 `ForegroundServiceStartNotAllowedException`），证据目录里也不许出现该命令的失败日志。
 - [ ] 3.8 证据（存 `docs/evidence/plan2/`）：`p2-fgs-01-notify.png`（`cmd statusbar expand-notifications` 后截图）、`p2-fgs-01-services.txt`（`dumpsys activity services com.dreamkeeper`）、`p2-fgs-01-notify-dump.txt`（`dumpsys notification --noredact` 里本包那段）、`p2-fgs-01-perms.txt`（`dumpsys package com.dreamkeeper | Select-String RECORD_AUDIO|FOREGROUND_SERVICE`）、`p2-fgs-01-bytes.txt`（两次 `stat` 的原始输出）。
 - [ ] 3.9 提交：`feat(record): 前台录音服务（microphone 类型、通知、START/STOP/CANCEL）`
@@ -618,6 +620,7 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D111 | design §11 提到录音页「暂停/继续 + 音量键结束」 | **本轮不实现**，登记推迟到 Plan 4；`RecordUiState` 里旧的 `paused` 字段随重写删掉 | UI Designer：brief 与 plan 都没有这两条的实现步骤与证据，留在文档里只会让实现者猜 | 以为的坑 |
 | D112 | 42dp/160dp 等尺寸口径 | 仓内唯一有据的下限是 **48dp**（`CalendarScreen.kt:238-240`、`LibraryScreen.kt:127`）；主钮 `160.dp` 保留，但补「最小按住 200ms 才算一次录音」防蹭碰；文档里出现的 42dp 属笔误，不改 | UI Designer：`42dp` 在全仓 docs 里 0 命中，无出处 | 实测结论 |
 | D113 | 权限被拒后仍可能「先建草稿再让服务 fail」 | 钉死：`hasPermission()` 为 false 时 `onPressStart` 什么都不做（不生成 id、不建文件、不起服务），只把 `permissionBlocked` 置 true | UI Designer：原 4.1/4.4 顺序会让空草稿堆积、并在启动服务时才炸 | 实测结论 |
+| D114 | Task 2 的 `PcmSink` 与 Task 1 的 `WavWriter` 对不上（前者 `bytesWritten()`/`sync()`，后者 `bytesWritten` 属性/无 `sync`） | Task 3 增加 `audio/WavSink.kt` 适配层；若 `WavWriter` 确实缺落盘方法，就给它加 `syncToDisk()` 并补 `WavStoreTest` 一条 | Lead 复核 Task 2 代码时发现：两个接口在不同任务里各自成型，中间没有适配器，Task 3 照 3.4c 直接 `RecorderCore(source, writer)` 会编译不过 | 实测结论 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
