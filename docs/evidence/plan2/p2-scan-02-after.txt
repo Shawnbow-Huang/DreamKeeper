@@ -1,0 +1,25 @@
+apk_sha256: 2cedc18cbf379d490b157ad75b024bee2f4a0f8f68954c35da85f105a1e45c63
+device_date: 2026-10-30 18:15:34 CST
+replay: bash docs/evidence/plan2/p2-scan-capture.sh
+artifact: audio/p2-scan-02-repaired.wav
+file_sha256: f3cd77e73ad93b3977621af4125e5fcf90d7f6c0dc22f272ec7ccc19cd9fa9aa
+pre_state_by: App: 重启触发 AudioScan.repair，行与文件都已存在（§0-13 ①）
+audio_id: 81287fe4-d59e-4f4a-9d49-7ba57b0e5b74
+file_bytes: 137644
+device_sha256: f3cd77e73ad93b3977621af4125e5fcf90d7f6c0dc22f272ec7ccc19cd9fa9aa
+host_sha256: f3cd77e73ad93b3977621af4125e5fcf90d7f6c0dc22f272ec7ccc19cd9fa9aa
+sha256_match: yes
+hex_head_48: 52494646a419020057415645666d74201000000001000100803e0000007d000002001000646174618019020000000000
+---- db (after restart) ----
+db: .tmp-evidence/scan/dreamkeeper.db
+db_sha256: b5f413081830c3a83edcc99b47fbeddb12b5ccf7e2c3983674d94f2f3dd0db0e
+db_bytes: 4096
+sql: SELECT * FROM dreams WHERE rawAudioPath IS NOT NULL
+
+id | dreamDate | createdAt | updatedAt | isDraft | transcriptStatus | rawAudioMs | path | transcriptChars
+81287fe4-d59e-4f4a-9d49-7ba57b0e5b74 | 2026-10-30 | 1793355312106 | 1793355312106 | 1 | PENDING | 4300 | /data/user/0/com.dreamkeeper/files/audio/81287fe4-d59e-4f4a-9d49-7ba57b0e5b74.wav | 0
+
+cross-check: (bytes-44)//32 | rawAudioMs | diff
+4300 | 4300 | 0
+cross_red_rows: 0
+db_report_exit: 0

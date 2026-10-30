@@ -1,0 +1,27 @@
+apk_sha256: 2cedc18cbf379d490b157ad75b024bee2f4a0f8f68954c35da85f105a1e45c63
+device_date: 2026-10-30 18:16:12 CST
+replay: bash docs/evidence/plan2/p2-scan-capture.sh
+artifact: databases/dreamkeeper.db
+file_sha256: b5f413081830c3a83edcc99b47fbeddb12b5ccf7e2c3983674d94f2f3dd0db0e
+pre_state_by: App: 重启触发 AudioScan.recoverDraft（§0-13 ② 后半）
+db: .tmp-evidence/scan/dreamkeeper.db
+db_sha256: b5f413081830c3a83edcc99b47fbeddb12b5ccf7e2c3983674d94f2f3dd0db0e
+db_bytes: 4096
+sql: SELECT * FROM dreams
+
+id | dreamDate | createdAt | updatedAt | isDraft | transcriptStatus | rawAudioMs | path | transcriptChars
+seed-dream-1 | 2026-10-01 | 0 | 0 | 0 | OK | None | None | 29
+seed-dream-2 | 2026-10-08 | 0 | 0 | 0 | OK | None | None | 37
+seed-dream-3 | 2026-10-15 | 0 | 0 | 0 | OK | None | None | 30
+seed-dream-4 | 2026-10-22 | 0 | 0 | 0 | OK | None | None | 14
+81287fe4-d59e-4f4a-9d49-7ba57b0e5b74 | 2026-10-30 | 1793355312106 | 1793355312106 | 1 | PENDING | 4300 | /data/user/0/com.dreamkeeper/files/audio/81287fe4-d59e-4f4a-9d49-7ba57b0e5b74.wav | 0
+2a27843f-c34c-4a54-9010-3871d80ccf4c | 2026-10-30 | 1793355356412 | 1793355356412 | 1 | PENDING | 1500 | /data/user/0/com.dreamkeeper/files/audio/2a27843f-c34c-4a54-9010-3871d80ccf4c.wav | 0
+
+cross-check: (bytes-44)//32 | rawAudioMs | diff
+4300 | 4300 | 0
+1500 | 1500 | 0
+cross_red_rows: 0
+db_report_exit: 0
+today_on_device: 2026-10-30
+recovered_bytes: 48044
+expected_ms: 1500

@@ -1,0 +1,9 @@
+apk_sha256: 2cedc18cbf379d490b157ad75b024bee2f4a0f8f68954c35da85f105a1e45c63
+device_date: 2026-10-30 18:17:00 CST
+replay: adb shell am start -n com.dreamkeeper/.MainActivity; adb shell input tap 690 982
+artifact: p2-scan-07-home.png, p2-scan-07-day.png
+file_sha256: p2-scan-07-home.png fb4cd99d9d7aaa90db2df460d63738a187ef9395a32ce4a8b1dafd242c2cfe45
+file_sha256: p2-scan-07-day.png a1be158c5483a416da5bc36ef7532fa2788117c8c04cb7200b7e3408ec62143d
+pre_state_by: App: capture 脚本跑完四态后重启，首页应把 2026-10-30 计入「有梦」（5 天，含恢复草稿）
+discriminator: 2026年10月 / 共 5 天有梦 / 30 号圆点；进入 30 号后可见两张空草稿卡（Task 9 才做草稿 UI）
+note: 两张空卡分别来自状态①修复行和状态③被 markMissing 的行；都还没有正文，符合 Task 6 只做数据层
