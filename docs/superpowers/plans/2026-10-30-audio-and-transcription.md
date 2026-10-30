@@ -601,7 +601,6 @@ per-dreamId 单飞（`Mutex` 或 in-flight 集合）。
 实现者报告里的偏差自己编号 `T7-1…T7-n`，由 Lead 记账时映射成 D 号。
 
 
-
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/stt/SttEngine.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/stt/SystemSttEngine.kt`
@@ -688,7 +687,6 @@ class TranscriptWriter(private val repository: DreamRepository) {
 0.15 挑给 Task 9（不在本任务做）：十列 `## 3b 音频证据表`、`pm clear` 干净链路、三路权限、崩溃恢复、3 次冷启动 + `capture-logcat -Runs 3` + 近白闸门、全库 `rawAudioMs == (bytes-44)/32` 审计（可复用 `p2-scan-db.py`）。
 
 
-
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/ui/detail/AudioPlayback.kt`
 - Modify `android/app/src/main/java/com/dreamkeeper/ui/detail/DetailScreen.kt`
@@ -723,6 +721,9 @@ class AudioPlayback(private val scope: CoroutineScope) {
 
 ---
 
+
+## Task 9：端到端验收与证据
+
 ### 0. 派工前修订（Lead 按三位专家预审裁定，**覆盖下文任何冲突**）
 
 0.1 **每份证据首三行固定**：`apk_sha256=<前 16 位>` / `device_date=<adb shell date 原文>` / `rerun=<完整命令>`（`docs/evidence/plan2/README.md:22-24`）。缺任一行，该份证据视为不合格。
@@ -739,8 +740,6 @@ class AudioPlayback(private val scope: CoroutineScope) {
 0.12 文档边界：`docs/evidence/plan1/ACCEPTANCE.md` **只许追加** `## 3b 音频证据表`，原有九列一个字都不许改。3b 表头下加两行说明：(a) design v1.5 的 §14 共 **8** 条（v1.4 插入「对话改稿」后编号后移，§14.8 属 Plan 3）；(b) §14.2 已按 v1.5 改口径——段间不补静音（D153），要证的是「电话前后的话都在且段内位置不变」。3b 之后再追加 `## 3c §14 状态更新（Plan 2 收尾）`，逐条只写「本轮结论 + 归属」：§14.1 Plan 4、§14.2 音频层已证/通话场景仍缺、§14.3 Plan 3（需 `check-faithful.py` 跑通）、§14.4 Plan 3、§14.5 Plan 4（需造数）、§14.6 Plan 3、§14.7 负向证据已有·真抓包 Plan 3、§14.8 Plan 3。
 0.13 分工：实现者只写 `docs/evidence/plan2/**` 与上述两处追加，**不 commit `docs/`**（D125：证据由 Lead commit）；看板、ledger、`plan2-done` tag、设计文档状态都由 Lead 做。
 0.14 偏差编号：Task 9 新增行接在 **Task 8 交回后确定的最后一个编号之后**（Task 1–7 已用到 D203，Task 8 的 T8-n 先入表），不复用、不跳号。
-
-## Task 9：端到端验收与证据
 
 **Files**
 - Modify `docs/evidence/plan1/ACCEPTANCE.md`（**只追加** `## 3b 音频证据表`，不改原有九列）
