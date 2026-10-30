@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 19:40 —— **Plan 2 进行中 8/9：Task 1–8 已验收（247 用例全绿）；Task 7 本机探测=Unavailable、33+ 正路径未验证；Task 8 详情页播放四件证据齐（含 flinger 帧计数与负控制）；Task 9 端到端验收待开工**
+> 最后更新：2026-10-30 20:05 —— **Plan 2 完成 9/9：Task 1–9 全部验收（248 用例全绿）；端到端录音→追问→补录→详情播放全通，全库音频审计 GREEN；转录正路径待有中文离线包的设备验证；§14.2 已结案，§14.1 音频侧通、其余归 Plan 3/4**
 
 ## 一、当前在做
 
@@ -32,25 +32,23 @@
 
 **现在装到手机上能干什么**：翻月历看哪天有梦（红点）、点日期看当天的梦、切「全部」看时间轴/卡片、全文搜索、点进详情看四 tab（原样 / 小说化 / 标签 / 素材占位）、管标签（改名/合并/删除）。
 
-## 二·五、Plan 2（录音与转写）进行中 8/9
+## 二·五、Plan 2（录音与转写）完成 9/9
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| 1 WavStore 与 WAV 数学 | ✅ 完成 | `ea1d8a2`：`WavMath`/`WavStore` 单一写句柄、整 44 字节黄金断言、fixture 已回填头（D88–D91）；132 用例全绿，两份 WAV sha256 一致，ffprobe 无告警 |
-| 2 RecorderCore 读循环与补零 | ✅ 完成 | `397fbf3` + `e177cf0`：18 条用例、假钟假源、先补零再写新数据、`rebase`、四种收尾原因；Lead 变异验证 sync/finish 兜底（D115–D117） |
-| 3 前台录音服务 | ✅ 完成 | `b083021` + `584aed8`：microphone 型 FGS、通知、START/STOP/CANCEL；四连判据实测通过（`isForeground=true`/`foregroundId=42`/`types=0x80`、通知 id=42、写入 31,611 B/s、崩溃 0）；Lead 修失败路径孤儿文件（D127）；通知栏近白闸门判红原因定位并豁免（D128） |
-| 4 录音页 + RecordEntry | ✅ 完成 | `c3777cd`：按住说梦、权限三态、入口接线；14 条新用例（总 176）；真机同一次 take `stat` 48044→160044→220844（= 44+6900×32），松手后冻结；按下→RECORDING 163ms、松手→FINISHING 491ms、FINISHING→DONE 14ms；Lead 复核代码与全绿（D141–D149） |
-| 5 30 秒追问窗口 | ✅ 完成 | `e99b0d0`+`eb099a5`+`9e6ed4a`：追加走 `markOpen`+`openWriter`（`create` 会截断，D150）、失败路径只在 `createdThisTake` 时删（D151）、窄更新只写时长与状态（D154）；实测 `92844→153644` 差 60800B = **1900ms**，第一段 PCM md5 两边一致；真机抓到两个真 bug（闭包捕获 `recording` 导致松手不发 STOP、`decorationBox fillMaxSize` 把麦克风顶出屏）；D163–D172 |
-| 6 启动扫描与头修复 | ✅ 完成 | `cf31244` + `3b71511` + `9f63a6f`：四主态 + 第 5 态逐文件兜底、`isOpen` 跳过正在录的文件；真机五态实测（占位头 137644B → 重启后 riff/data 回填、validator exit 1→0、设备/宿主 sha256 一致；无行恢复草稿 PENDING；删文件清指针 + FAILED；干净不动；0 字节删文件）、M1/M2 变异各 2/3 红；Lead 复跑 219 用例、schema 零 diff（D189–D195） |
-| 7 SttEngine 与写回 | ⬜ | 三态探测 + API 33+ 文件转写 + 窄更新写回 |
-| 8 详情页播放 | ⬜ | 播前 repair；时长取 `rawAudioMs` |
-| 9 端到端验收与证据 | ⬜ | W1/W2/W3 三层 + `ACCEPTANCE.md` 追加 `## 3b 音频证据表` |
+| 1 WavStore 与 WAV 数学 | ✅ 完成 | `ea1d8a2`：`WavMath`/`WavStore` 单一写句柄、整 44 字节黄金断言、fixture 已回填头（D88–D96）；132 用例全绿，两份 WAV sha256 一致，ffprobe 无告警 |
+| 2 RecorderCore 读循环与补零 | ✅ 完成 | `397fbf3` + `e177cf0`：假钟假源、先补零再写新数据、`rebase`、四种收尾原因；Lead 变异验证 sync/finish 兜底（D115–D117） |
+| 3 前台录音服务 | ✅ 完成 | `b083021` + `584aed8`：microphone 型 FGS、通知、START/STOP/CANCEL；四连判据实测通过（`isForeground=true`/`foregroundId=42`/`types=0x80`、通知 id=42、写入 31,611 B/s、崩溃 0）；Lead 修失败路径孤儿文件（D127）、通知栏近白判红原因定位并豁免（D128） |
+| 4 录音页 + RecordEntry | ✅ 完成 | `c3777cd`：按住说梦、权限三态、入口接线；176 用例；真机同一次 take `stat` 48044→160044→220844（= 44+6900×32），松手后冻结；按下→RECORDING 163 ms（D141–D149） |
+| 5 30 秒追问窗口 | ✅ 完成 | `e99b0d0`+`eb099a5`+`9e6ed4a`：追加走 `markOpen`+`openWriter`（`create` 会截断）、失败路径只在 `createdThisTake` 时删、窄更新只写时长与状态；实测差 60800 B = **1900 ms**、第一段 PCM md5 两边一致；真机抓到两个真 bug 并修掉（D163–D172） |
+| 6 启动扫描与头修复 | ✅ 完成 | `cf31244`+`3b71511`+`9f63a6f`：四主态 + 第 5 态逐文件兜底、`isOpen` 跳过正在录的文件；五态真机实测 + M1/M2 变异；Lead 复跑 219 用例、schema 零 diff（D189–D195） |
+| 7 SttEngine 与写回 | ✅ 完成（有未验证项） | `fe6e94f`+`5d1493c`：三态探测 + `mapSupport` + CAS 窄更新 + 详情页三分支与手动补字；真机四张语言表全空 → `Unavailable` → 写回 `FAILED`，手动补字后 `OK` 且 `updatedAt` 未变；**33+ 正路径设备未验证**、负对照 NOT_EXECUTED。Lead 修 `FollowUpViewModel` 把 FAILED 盖回 PENDING（D198，含变异）（D196–D203） |
+| 8 详情页播放（播前 repair） | ✅ 完成 | `2dc9b86`：四缝可注入、`isOpen` 拒绝且不 repair、IO 线程、字节定时长；单 Canvas 波形、`m:ss.d`、压暗禁用、`Error` 可重试、音频焦点 + `ON_STOP` 暂停。证据：播放 0→3351 ms（96%）+ flinger Track SRate 16000 + Frames +175168；`chmod 000` → EACCES 无轨道；脏头 8 ms 修好、payload sha 不变（D204–D209） |
+| 9 端到端验收与证据 | ✅ 完成 | `449fe186` + `27a5282`：e2e / perm / audit / coldstart 四目录 + `ACCEPTANCE.md` 的 `## 3b`（11 列 7 行）与 `## 3c`（§14 八条）。9.1 录 4 s→追问→补录 2 s→详情 `0:05.8`→播放；9.2 三路权限（C 路「待实测」）；9.3 崩溃恢复 6,011 ms 回填；9.4 7 行全 PASS-ENV；9.5 全库审计 GREEN（容差 0）；9.6 冷启 14 次 13 次 ≤2000（最差 2080）。Lead 独立自算 7/7 PASS、自跑 5 次冷启 1885–1996 ms，并修 D214 空白卡片 + 时间轴空行（D210–D217） |
 
-任务书：[plans/2026-10-30-audio-and-transcription.md](superpowers/plans/2026-10-30-audio-and-transcription.md) · 证据约定：[evidence/plan2/README.md](evidence/plan2/README.md)
+任务书：[plans/2026-10-30-audio-and-transcription.md](superpowers/plans/2026-10-30-audio-and-transcription.md) · 证据约定：[evidence/plan2/README.md](evidence/plan2/README.md) · 终审：[evidence/plan2/FINAL-REVIEW.md](evidence/plan2/FINAL-REVIEW.md)
 
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
-| 7 本地转写（系统识别器） | ✅ 完成（有未验证项） | `fe6e94f` + `5d1493c`：`SttEngine`/`SystemSttEngine`/`TranscriptWriter`；探测四档 + `mapSupport` 纯函数；CAS 窄更新 + 失败态第二条 CAS；写回投 `transcriptionScope`；详情页三分支 + 手动补字。真机：四张语言表全空 → `Unavailable(本机没有中文离线识别)` → 写回 `FAILED` rows=1；手动补字后 `OK` 且 `updatedAt` 未变。**33+ 文件转写正路径（pipe/分段/Ok）设备未验证**（本机无中文离线包），负对照 NOT_EXECUTED，均如实标注。Lead 修 `FollowUpViewModel` 把 FAILED 盖回 PENDING 的真 bug（D198，含变异验证），全量 237 用例 |
-| 8 详情页播放（播前 repair） | ✅ 完成 | `2dc9b86`：`AudioPlayback`（四个缝可注入、`isOpen` 时拒绝且不 repair、IO 线程、字节定时长、release 闸门）；播放条改单 Canvas 波形、`m:ss.d`、空路径压暗禁用、`Error` 可重试、音频焦点 + `ON_STOP` 暂停。证据四件：①播放 0→3351 ms / Δt 3489 ms（96%）+ flinger Track active SRate 16000 + Frames +175168；②`chmod 000` → EACCES → 「打不开」无轨道、已恢复 600；③脏头点击瞬间 8 ms 修好、payload sha 不变；④无录音压暗禁用。247 用例 / 22 类 |
 
 ## 三、你提的需求（已收下，落点如下）
 

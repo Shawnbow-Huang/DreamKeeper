@@ -896,6 +896,20 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D207 | T8-4：播放位置存在 ViewModel 的 `PlaybackState` 里（旋转/重组不丢），未用 `rememberSaveable`；进程被杀后的位置恢复未实现 | 接受本轮范围（进程级恢复无产品价值）；旋转由 ViewModel 天然覆盖，未单独截图，属未验证项 | `task-8-report.md` §7 |
 | D208 | T8-5：证据 ②③ 用 `adb run-as chmod 000` / `cp dirty.wav` 制造坏文件与脏头，不是应用内操作 | 接受：可重复、可恢复、不改生产代码；`chmod` 后已 `chmod 600` 还原并在证据里留 `ls -l` 对照 | `p2-play-02-negative.txt` 第 5 节；`p2-play-03-repair.txt` 第 1 节 |
 | D209 | T8-6：`playerFactory` 在 `DetailViewModel` 内创建、生产不注入；`audioStore == null` 时播放条显示「播放器不可用」（只为测试/预览留的口子） | 接受：可测性缝与生产路径分开；不加 DI 框架（Global Constraints 禁 Hilt/Koin） | `AudioPlayback.kt:81-86`；`AudioPlaybackStateTest` 注入 fake |
+| D210 | T9-1：五态「求和 == files」口径不可满足（一条梦可能同时命中多态），改为「健康态 + 五态异常」完备划分；审计脚本按 files/rows/union 三个集合对账 |
+| D211 | T9-2C：`appops set ... RECORD_AUDIO ignore` 必须带 `--uid <pkg uid>` 才生效；生效后 audioserver 记 `App op 27 missing, silencing record`，App 零异常、仍落库全零音频 → 该路结论定为「待实测」，不当作支持性证据 |
+| D212 | T9-3：冷启动 A 批报告被 `-OutFile` 覆盖，只剩 B 批 9 行原始数据 + Lead 独立复跑 5 行；两批合起来报分布，不重跑凑数 |
+| D213 | T9-4：本轮自定护栏「冷启 ≤ 2000 ms」实测 14 次中 13 次达标、最差 2080 ms（+4%）。门槛不调、数据照实写；§14.1 的 3 秒预算仍成立（冷启≈1.85 s + 按下→RECORDING 163 ms），但不拿冷启动当 §14.1 的证据 |
+| D214 | T9-5（Lead 修）：没有转写文本的梦在列表里是一条**空白圆角条**——`DreamCard` 与时间轴行各写了一套文案分派，两处都渲染空串。修法：`cardText` 兜底成「未转写 / 这条梦还没有文字」，时间轴行改调 `cardText`（一处真源），`DreamCardTextTest` 补「两者皆空」「只有标题」两例并改掉两条把空白当预期的旧用例 |
+| D215 | T9-6：9.1 的「补录中」那一帧拍晚了（补录已结束），改用同一次 take 里 `p2-e2e-11` 真录音中帧补上，原图保留不删 |
+| D216 | T9-7：D214 修复后重拍 `p2-e2e-30-timeline-untranscribed.png` / `p2-e2e-31-cards-untranscribed.png`（APK sha256 前 16 位 `e119e69cbfb09641`，`adb shell date` = 2026-10-30 19:58 CST，近白 0/69,120） |
+| D217 | T9-8：Task 9 的证据 APK（`449fe186` 那批）与本轮修复后 APK 不是同一个，`Audit`/`e2e` 目录里各图首三行已按 Evidence Collector 要求绑定 APK sha 与设备时间；修复图的判别串是卡片上的「未转写」 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
+### Task 9 验收（Lead，2026-10-30）
+
+- 交付：`449fe186` 的证据（e2e / perm / audit / coldstart 四个目录）+ `ACCEPTANCE.md` 追加 `## 3b`（11 列表 7 行）与 `## 3c`（§14 八条逐条状态）。
+- Lead 独立复核：用 `audit/pull/` 的库与 7 个 WAV 自算，7 条全 PASS（`riff == bytes-8`、`data == bytes-44`、`rem == 0`、`(bytes-44)//32 == rawAudioMs` 容差 0），无孤儿；自跑 5 次冷启 1885 / 1771 / 1996 / 1804 / 1862 ms、崩溃 0。
+- §14 结论：只有 **§14.2（音频连续 + 段间无静音）可结案**；§14.1 音频侧通、转写侧因本机无中文离线包不判绿；§14.3–§14.8 未覆盖并写归属（Plan 3 / Plan 4）。
+- 修 D214 后：`testDebugUnitTest` **248 用例 / 22 类 / 0 失败**；两张新图近白 0。
