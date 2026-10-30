@@ -32,8 +32,16 @@ docs/evidence/plan2/
   ```
   ffprobe -v error -show_entries stream=codec_name,sample_rate,channels:format=duration,size -of compact <wav>
   ```
-  期望 `pcm_s16le / 16000 / 1ch`；`duration ≈ (bytes-44)/32`（差 < 100ms）；**并且 stderr 不出现 `[wav @`**（出现 `Ignoring maximum wav data size` / `Estimating duration from bitrate` / `Packet corrupt` 即判失败）。
-  **ffprobe 不能用来验头**：占位头它也照样报一个 duration，头必须按字节读 `offset 4..8` 与 `40..44`。
+  期望 `pcm_s16le / 16000 / 1ch`；`duration ≈ (bytes-44)/32`（差 < 100ms）。
+- **W2b 头必须按字节验（ffprobe 不算）**：`od -A d -t x1 -N 44 <wav>`，只看
+  `offset 4..8 == bytes-8`、`offset 40..44 == bytes-44`、`(bytes-44) % 32 == 0`，且 44 字节整体逐字节等于黄金 hex。
+  实测教训：把修好的文件改成**看起来合法但错误**的头（`riffSize=32036` / `dataSize=32000`），`ffprobe` 报
+  `duration=1.000000` 且**零警告**；占位头那份只有加 `-v warning` 才吐 `Ignoring maximum wav data size`，`-v error` 一字不出。
+  所以「ffprobe 没报错」不能当「头对了」。
+- **W2c ffmpeg stderr 的容许行**：`ffmpeg -v warning` 对**任何**合法 mono PCM WAV 都会打一行
+  `Guessed Channel Layout: mono`（WAV 头里没有 channel layout），这一行放行；
+  其余任何行为判失败（占位头的 `Ignoring maximum wav data size` / `Estimating duration from bitrate` / `Packet corrupt` 照红）。
+  校验脚本见 `docs/evidence/plan2/p2-scan-validate.py`（`BENIGN_STDERR` 正则精确匹配，before 4 行红、after 1 行绿）。
 - **W3 信号来源**：`ffmpeg -hide_banner -nostats -i <wav> -af astats=metadata=1:reset=0 -f null -`，看 `RMS level dB`。模拟器默认灌零（除非以 `-allow-host-audio` 启动），`-inf` 说明**是环境静音，不是 App 坏**——必须在证据里写明 `信号来源 = seam / 静音 / host-mic`，不许含糊。
 
 ## 取文件与造故障（命令固定）
@@ -53,8 +61,10 @@ cmd /c "`"$adb`" exec-out run-as com.dreamkeeper cat files/audio/<id>.wav > docs
 
 - 本机 emulator 37.2.12.0 的 `-help` 原文：`-allow-host-audio  Allows sending of audio from audio input devices. Otherwise, zeroes out audio.`
   → **默认输入是零**，「文件有字节」不等于「录到声音」。
-- AVD `Medium_Phone_API_37.0` 的 `config.ini` 里是 `hw.audioInput=yes`，但**仓库里没有任何地方记录模拟器启动命令行**，
-  所以「这台机上没加 `-allow-host-audio` 就会灌零」目前是**假设**，不是实测事实。要断言它，就把启动命令记进本轮证据。
+- AVD `Medium_Phone_API_37.0` 的 `config.ini` 里是 `hw.audioInput=yes`。
+- **已实测（2026-10-30 18:00，Plan 2 Task 6 取证期间）**：宿主 `Get-CimInstance Win32_Process` 里 qemu 命令行
+  **既无 `-allow-host-audio` 也无 `-audio`**，且拉回的 WAV `RMS level dB: -inf`（全零 PCM）→ 「本机默认灌零」由假设升为事实。
+  启动命令（Lead 记于 `p2-env-01-emulator.txt`）：`emulator -avd Medium_Phone_API_37.0 -no-snapshot-save -no-boot-anim`。
 - 因此在没有宿主麦克风证据时，W3 只能写 `信号来源 = seam`（全零 PCM，`RMS level dB: -inf`），
   **不许**写成「录音功能正常」。反过来，`-inf` 也不能证明 App 坏了——它证明的是这一路没有真实声源。
 
