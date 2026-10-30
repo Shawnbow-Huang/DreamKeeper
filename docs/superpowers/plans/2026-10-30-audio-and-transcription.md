@@ -13,9 +13,9 @@
 
 ### G-1 命令纪律
 - 任何 gradle 命令前必须：`$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`（不设会 `ERROR: JAVA_HOME is not set`）。
-- adb 一律绝对路径：`C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe`（**不在 PATH**）。
-- 构建：`cd D:\DreamKeeper\android; .\gradlew.bat :app:assembleDebug --no-daemon --console=plain`
-- 测试：`cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --no-daemon --console=plain`
+- adb 一律绝对路径：`C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe`（**不在 PATH**）；本文件后面写成 `$adb = ``C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe`` 或直接用全路径，不许裸 `adb`。
+- 构建：`$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`；`cd D:\DreamKeeper\android; .\gradlew.bat :app:assembleDebug --no-daemon --console=plain`
+- 测试：`$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`；`cd D:\DreamKeeper\android; .\gradlew.bat :app:testDebugUnitTest --no-daemon --console=plain`
 - 提交只用 `git add <本 Task Files 里列出的路径>`，**禁止 `git add -A`**（Plan 1 有前车之鉴：会把专家产出混进同一个 commit）。
 
 ### G-2 证据纪律
@@ -128,7 +128,7 @@ interface WavWriter : Closeable {
 - [ ] 1.6 **变异验证**：把 `durationMs` 改成 `fileBytes / 32`（忘了减头）→ 1.1 必须红；把 `writeU32` 改成大端 → 1.4 的整头黄金断言必须红。改回。
 - [ ] 1.7 **第三方交叉校验**（用 python 独立造一枚 32044 字节、**已回填**的 canonical WAV；注意 `riffSize = 32036` 不是 32044、`b"fmt "` 尾空格、`open(...,'wb')`、`struct.pack('<I',...)`）：
   ```powershell
-  python -c "import struct;h=b'RIFF'+struct.pack('<I',32036)+b'WAVE'+b'fmt '+struct.pack('<I',16)+struct.pack('<HHIIHH',1,1,16000,32000,2,16)+b'data'+struct.pack('<I',32000);assert len(h)==44;f=open('docs/evidence/plan2/audio/p2-wav-01.wav','wb');f.write(h+b' '*32000);f.close()"
+  python -c "import struct;h=b'RIFF'+struct.pack('<I',32036)+b'WAVE'+b'fmt '+struct.pack('<I',16)+struct.pack('<HHIIHH',1,1,16000,32000,2,16)+b'data'+struct.pack('<I',32000);assert len(h)==44;f=open('docs/evidence/plan2/audio/p2-wav-01.wav','wb');f.write(h+b'\x00'*32000);f.close()"
   ```
   然后让本 Task 的 `create + writer.write(32000 零) + finish()` 产出另一枚文件，两者 **sha256 必须相同**；两个 sha256 都写进证据 txt。
 - [ ] 1.8 ffprobe 校验（**必须连 stderr 一起看**）：期望 `pcm_s16le / 16000 Hz / 1 channel / duration=1.000000 / size=32044`，且 stderr **不出现** `[wav @`（出现 `Ignoring maximum wav data size` / `Estimating duration from bitrate` / `Packet corrupt` 即判失败）。存 `docs/evidence/plan2/p2-wav-01-ffprobe.txt`。
@@ -370,7 +370,7 @@ class AudioScan(
 - [ ] 6.1 写测试（Robolectric + 临时目录；先红）：①库里有行 + 文件头是 `0xFFFFFFFF` → 修好后回填正确且库里 `rawAudioMs` 等于新时长；②文件存在但库里没有行 → 恢复成草稿（`isDraft=true`、`transcriptStatus=PENDING`）；③库里有 `rawAudioPath` 但文件丢了 → 置空并标 `FAILED`；④干净文件 → `Noop` 且不写库。
 - [ ] 6.2 跑 → 红；6.3 实现 → 绿。
 - [ ] 6.4 **变异验证**：把「文件丢了 → 标 FAILED」改成「什么都不做」→ 对应用例红。
-- [ ] 6.5 端到端故障注入（选做其一即可，但必须做一次）：录音中 `adb shell am force-stop com.dreamkeeper` → 重启 App → 断言文件头已被修复、`rawAudioMs` 与 `(bytes-44)/32` 一致。
+- [ ] 6.5 端到端故障注入（选做其一即可，但必须做一次）：录音中 `& "C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe" shell am force-stop com.dreamkeeper` → 重启 App → 断言文件头已被修复、`rawAudioMs` 与 `(bytes-44)/32` 一致。
 - [ ] 6.6 证据：`p2-scan-01-before.txt`（48 字节 hexdump，两个字段 `FFFFFFFF`）、`p2-scan-02-after.txt`（修复后 hexdump）、`p2-scan-03-db.txt`（sqlite 查询该行）。
 - [ ] 6.7 提交：`feat(audio): 启动扫描——孤儿恢复、反向孤儿清空、WAV 头修复`
 
@@ -488,6 +488,7 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D88 | Task 1 Step 1.7：造一个「占位头 + 1000ms PCM」的 WAV 当 fixture | 改成造**已回填**的 canonical 头（`riffSize=32036`、`dataSize=32000`）；占位头只由单测证明（`create` 只落 44 字节） | Evidence Collector 实测：占位头会让 ffprobe 报 `Ignoring maximum wav data size, file may be invalid` 并改按 bitrate 估算时长——这种文件本身不是合法 WAV，做不了 W2 的基准 | 实测结论 |
 | D89 | 初版 `WavStore` 的 `append(FileOutputStream, ...)` + `finish(File)` 两个入口 | 改成单一写句柄 `openWriter(file): WavWriter`（自带 `bytesWritten`/`write`/`finish`），`finish(file)`/`repair(file)` 只留作扫描与离线修复 | Mobile App Builder 预审：两个入口分裂时，调用方可能套缓冲或没 flush 就让 `finish` 回填，得到「短头」；且回填后仍能继续写，头又变脏。`placeholder` 语义同时钉死为「任一字段仍是 `0xFFFFFFFF` 即 true」 | 以为的坑 |
 | D90 | Task 1 只断言 `offset 4..8` 与 `40..44` | 补「整 44 字节逐字节等于黄金 hex」两条常量（占位头、回填头） | Mobile App Builder：只查两个长度字段时，`fmt ` 尾空格丢失、`byteRate` 写成 0、`bitsPerSample` 写错都照样绿 | 以为的坑 |
+| D91 | Task 1 实作的四处细节原计划没写死：①`openWriter` 对缺失或 <44 字节文件兜底写占位头；②`state()` 对 <44 字节抛 `IllegalStateException`；③`repair` 顺带纠正过期但非占位的尺寸；④追加场景 `bytesWritten` 从已有 PCM 起算。另计划里那条 python fixture 命令原本含一个真正的 NUL 字节 | 四条行为全部保留并用测试钉住（`WavStoreTest` 17 条）；NUL 换成 `\x00` 字面量使命令可复制执行 | Lead（`WavStore.kt:63-116` 复核 + python 修补） |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
