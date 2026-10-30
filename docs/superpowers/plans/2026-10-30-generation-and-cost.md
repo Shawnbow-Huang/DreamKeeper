@@ -679,29 +679,33 @@ T3  不调用模型                                   → faithfulText = rawTran
 - Expected：`ReviseOrchestratorTest` 8/8 + `VersionStripTest` 2/2；全量 **35 类 / 344 例**（334 + 10）0 失败；
   证据 `p3-revise-00-red.txt`、`01-green.txt`、`02-mutation.txt`、`03-full.txt`（host-only 头）。
   设备截图（输入条/chips、ASK 气泡、版本线、选中态、撤回、失败态）归 **Task 10 端到端**，本任务不做设备证据（D336）。
-  本任务**不验证**：①生成入口 UI 可点性（由 Task 9b 关闭，D356/D367）；②D221 的残余风险——改稿闸门不再对 rawTranscript
+  本任务**不验证**：①生成入口 UI 可点性（由 Task 9b 关闭，D356/D363）；②D221 的残余风险——改稿闸门不再对 rawTranscript
   复查 G1/G5，更早版本里已混入的专名不会被重罚（D353，列为可接受并进 Task 9 验收的「未验证/可接受」段）。
 
-### Task 9b 生成入口接线（UI 可点性，D356/D367）
+### Task 9b 生成入口接线（UI 可点性，D356/D363）
 
 - 前置：**Task 9 已提交验收**。`DetailViewModel.orchestrator` 参数与 `DreamKeeperRoot`/`MainActivity` 的传参已由 Task 9 落地，
   本任务**复用、不重复改签名**；只允许在参数已存在的前提下调用。
-- Files：`ui/detail/DetailScreen.kt`（NovelTab 顶部两枚按钮「原样整理」「小说化」+ `GenerationPhase` 三态 + 失败「重试」）、
-  `ui/detail/DetailViewModel.kt`（`generateFaithful()` / `generateNovel()` / `retryGeneration()` + `generationPhase: StateFlow<GenerationPhase>`）、
-  `test/.../ui/detail/GenerationPhaseMappingTest.kt`（fake orchestrator，纯逻辑）、`docs/evidence/plan3/p3-wire-*`、`task-9b-report.md`。
-- 禁止：改 orchestrator / DAO / 数据库 / prompts / export；改导航结构；新增依赖；对 `transcriptStatus != OK` 或
-  `rawTranscript` 为空的梦发起生成（按钮禁用或一行 Protocol 文案）。
+- Files：`llm/GenerationRunner.kt`（新：`interface GenerationRunner { suspend fun generateFaithful(dreamId: String): GenerationResult;
+  suspend fun generateNovel(dreamId: String): GenerationResult }`）、`llm/GenerationOrchestrator.kt`（**只**加 `: GenerationRunner`
+  与 `override`，不改任何逻辑）、`ui/detail/DetailViewModel.kt`（构造参数类型改 `GenerationRunner`，`generateFaithful()` /
+  `generateNovel()` / `retryGeneration()` + `generationPhase: StateFlow<GenerationPhase>`）、`ui/detail/DetailScreen.kt`（NovelTab 顶部
+  两枚按钮「原样整理」「小说化」+ `GenerationPhase` 三态 + 失败「重试」）、`test/.../ui/detail/GenerationPhaseMappingTest.kt`
+  （`FakeGenerationRunner` 记录调用，纯逻辑）、`docs/evidence/plan3/p3-wire-*`、`task-9b-report.md`。
+- 禁止：改 orchestrator **逻辑**（只许加接口实现）、DAO、数据库、prompts、export；改导航结构；新增依赖；对
+  `transcriptStatus != OK` 或 `rawTranscript` 为空的梦发起生成（按钮禁用或一行 Protocol 文案）。
 - Steps（先红后绿）：
   1. 先落可编译空壳（按钮 + 状态枚举 + 空回调）→ 跑红。
   2. 实现：按钮 → 对应入口；`Idle → Running → Idle`、失败 `Failed(kind)`；失败态「重试」再次调用同一入口；成功后刷新详情
      （复用 Task 9 的刷新路径，不新增状态源）。
-  3. 单测 3 例：①两按钮分别命中 fake orchestrator 的 faithful / novel 入口；②`GenerationPhase` 映射（Running/Failed/Idle）；
-     ③失败态「重试」命中第二次调用。
+  3. 单测 3 例（`FakeGenerationRunner`）：①两按钮分别命中 faithful / novel 入口（记录 dreamId 与入口名）；
+     ②`GenerationPhase` 映射（Running/Failed/Idle）；③失败态「重试」命中第二次调用。
   4. 设备 smoke：`assembleDebug` → `install -r` → 打开一条种子梦（`rawTranscript` 非空、无小说稿）→ 截按钮可见
      `p3-wire-01-buttons.png` → **无 Key** 点「原样整理」→ 截失败态 `p3-wire-02-failed.png`（不要求真实生成，真实 API 归 Task 10）
      → logcat `FATAL EXCEPTION` 计数 0。
-  5. 负向：对 `transcriptStatus != OK` 的梦，按钮禁用/文案触发，且 `llm_calls` / `generation_jobs` 无新增行
-     （设备 `run-as` 前后 count 对比，落 `p3-wire-04-dbcount.txt`）。
+  5. 负向（JVM）：`transcriptStatus != OK` 或 `rawTranscript` 为空时，`generate*` 返回 Protocol 失败且
+     `FakeGenerationRunner` 调用次数 == 0；设备侧只截按钮禁用态（`p3-wire-04-disabled.png`，可选，不做 run-as 计数——
+     fresh install 的种子梦全走默认 status，无非 OK 梦可点，见 `SeedData.kt:119-130`）。
 - Expected：3/3 绿；全量 **36 类 / 347 例**（344 + 3）0 失败（若并入既有类则类数不变，报告须说明差 1 原因）；证据
   `p3-wire-00-red.txt`（host-only 头）、`01-green.txt`、`02-mutation.txt`（回调改成空 → 用例 1 红）、`03-full.txt`；设备两图 +
   同名 txt（`APK_SHA256`/`DEVICE_TIME`/`REPLAY`，截图 `nearWhite=0`）。
@@ -762,6 +766,8 @@ T3  不调用模型                                   → faithfulText = rawTran
   - 子命令统一 `RESULT: GREEN|RED` + 非零退出码，便于证据粘贴。
 
 - §0.6 端到端设备流程（真机/模拟器 emulator-5554，APK 用本次 `assembleDebug` 产物；D360/D361）：
+  0. 前置：在设置页**手工**输入 Key（禁用 `dk_debug_save_key`/adb 注入，不截 Key 输入框）；`adb devices` 设备在线；
+     记下本次 `assembleDebug` 的 APK 路径与主机 sha256；A9 的 `grep` 命令先写好（D365）。
   1. 安装（`adb install -r`）→ 原文 `Success` → `pm path` → `adb pull` 出 base.apk → 主机 sha256 与设备 `sha256sum` 相等 →
      `aapt2 dump badging` 的包名/版本对齐；只认 pull 出来的 APK。
   2. 用**已有种子梦**（`rawTranscript` 非空、无小说稿）做生成链：点「原样整理」→ 等 T0 原样稿（截 `p3-e2e-01-generated.png`）。
@@ -800,7 +806,7 @@ T3  不调用模型                                   → faithfulText = rawTran
      之前抓一次（A15 的 `FATAL EXCEPTION` 计数与 A9 的 Key 命中 0 都从这份原文算）。截图同名 txt 带 `PNG_SHA256` 与
      `nearWhite=0 ratio=0.0000%` 原文。
 
-- §0.7 验收清单（每项一行结论 + 证据文件）：A1 生成链路（T0 原样稿真实入库）；A2 五闸门全绿批次（T2/T3 降级链以 `GenerationOrchestratorTest` #6/#7 的 JVM 证据补充，设备只走 happy path，D367）；A3 版本线/选中/撤回；
+- §0.7 验收清单（每项一行结论 + 证据文件）：A1 生成链路（T0 原样稿真实入库）；A2 五闸门全绿批次（T2/T3 降级链以 `GenerationOrchestratorTest` #4/#5 的 JVM 证据补充，设备只走 happy path，D367）；A3 版本线/选中/撤回；
   A4 ASK 不建版；A5 txt/docx 设备可打开（开工前先做 5 分钟查看器探针，打不开按同形制登记 PENDING，D376）+ pdf 结构 GREEN + pdf 打开态 PENDING（D359）；A6 成本复算 `mismatches=0` + `failed=N`；A7 失败行记账（`error`/`cost==0`/`usageJson NULL`，`failed>=1`，由飞行模式步骤制造，D361）；
   A8 提示词指纹与三件 sha 一致；A9 Key 只在 Keystore：本轮**手工**在设置页输入 Key（禁用 `dk_debug_save_key`/adb 注入），证据目录与 REPLAY 中 Key 命中 0
   （`grep -r` 原文），截图不含 Key 输入框（D365）；A10 无新依赖（`libs.versions.toml` 未增）；
@@ -977,7 +983,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D364 | T10-14：E2E 的生成链改用**已有种子梦**（rawTranscript 非空、无小说稿），不引入预置 rawTranscript 的 debug 播种入口；真实 STT 录制改为可选项/ PENDING | Task 10 Files 里没有 debug 播种文件，原「预置 rawTranscript」降级不可执行；种子梦足以覆盖 A1/A2/A3/A6/A7 |
 | D365 | T10-15：A9 的 Key 必须**手工**在设置页输入，禁用 `dk_debug_save_key`/adb 注入，并对证据目录与 REPLAY 做 Key 命中 0 的 grep | adb 注入会把 Key 写进 logcat/REPLAY，反而违反 A9/G-2 证据纪律 |
 | D366 | T10-16：`check-cost.py` 增 `--require-rows`（rows>0 硬门）、输出 `failed=N` 与逐行 `[FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET` | 现脚本 `:516-521` 无这些参数，空表/全绿会假绿；格式写进契约，Task 10 不会漏实现 |
-| D367 | T10-17：T2/T3 降级链以 JVM 用例（`GenerationOrchestratorTest` #6/#7）为证据，设备只走 happy path；A22/A23 明确入口可点与兜底证据口径 | 设备上强制 T2 需要可控坏模型返回，E2E 不引入假 client；JVM 已覆盖判据（`isConservativeOk`、T3 不调模型） |
+| D367 | T10-17：T2/T3 降级链以 JVM 用例（`GenerationOrchestratorTest` #4/#5）为证据，设备只走 happy path；A22/A23 明确入口可点与兜底证据口径 | 设备上强制 T2 需要可控坏模型返回，E2E 不引入假 client；JVM 已覆盖判据（`isConservativeOk`、T3 不调模型） |
 | D368 | T10-18：§0.6 步骤 8 增加「失败 → 重试仍失败 → 联网重试成功」三段，A22 一并验收 | happy path 下重试入口无证据；只测一次失败无法区分「重试没接上」与「重试接上但网络仍断」 |
 | D369 | T10-19：A14 大字体遮挡改为设备步骤 12（`font_scale 1.3` + 键盘 + 截图 `p3-e2e-10-fontscale.png`） | 原 A14 在 §0.6 无对应步骤，不可机器判定；加一步即可留证 |
 | D370 | T10-20：`llm/DeepSeekClient.kt` 只加一行每次尝试的 logcat 日志（`DKLLM attempt n=<i> status=<s> kind=<k>`），`failed=N` 用 logcat 计数做独立对账 | 同表自证（N == error 行数）不能证明「失败被观察到」；不加日志就没有第三方可读的失败次数真源 |
