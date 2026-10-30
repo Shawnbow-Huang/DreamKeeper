@@ -1,0 +1,209 @@
+{
+  "schema": "dreamkeeper.p3.cost.vectors/v1",
+  "note": "Task 3 成本向量（先行提交，实现之前）。本文件只放「输入 + 人手算的期望 + 推导原文」，Kotlin 单测与 scripts/check-cost.py 都读这一份，不许在测试里另抄常量。JSON 带不了证据首三行，绑定信息在同名 p3-cost-01-vectors.txt 侧车里。",
+  "fixturesNote": "全部夹具取 2026 年（2026-10-30 周五 / 2026-10-31 周六），避开 Asia/Shanghai 1986–1991 历史 DST 与 1901 前 LMT。时区一律 Asia/Shanghai，除非向量显式写了反事实。",
+  "formulaVersion": "cost-v1",
+  "card": {
+    "version": "2026-10-30",
+    "effectiveFrom": "2026-10-30",
+    "provenance": "project-convention",
+    "currency": "CNY",
+    "unit": "microYuanPerMillionTokens",
+    "models": {
+      "deepseek-flash": {
+        "peak": {"cacheHit": 20000, "cacheMiss": 1000000, "output": 4000000},
+        "offPeak": {"cacheHit": 10000, "cacheMiss": 500000, "output": 2000000}
+      },
+      "deepseek-v4-pro": {
+        "peak": {"cacheHit": 150000, "cacheMiss": 4500000, "output": 13500000},
+        "offPeak": {"cacheHit": 75000, "cacheMiss": 2250000, "output": 6750000}
+      }
+    }
+  },
+  "vectors": [
+    {
+      "id": "peak-01-0100Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T01:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": true,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "2026-10-30 是周五。01:00Z + 8h = 09:00 Asia/Shanghai，落在 [09:00,12:00) 的左闭端 → 峰。flash peak 分子 = 1×20000 + 1×1000000 + 1×4000000 = 5,020,000；+500,000 = 5,520,000；÷1,000,000 取整 = 5（真实 5.02 微元，四舍五入 5）。"
+    },
+    {
+      "id": "peak-02-085959Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T08:59:59Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": true,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "08:59:59Z + 8h = 16:59:59 CST，落在 [14:00,18:00) 内 → 峰。分子同 peak-01 = 5,020,000 → (5,020,000+500,000)÷1,000,000 = 5。"
+    },
+    {
+      "id": "peak-03-035959Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T03:59:59Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": true,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "03:59:59Z + 8h = 11:59:59 CST，落在 [09:00,12:00) 内 → 峰（12:00 前最后一秒仍算峰）。分子同 peak-01 = 5,020,000 → 5。"
+    },
+    {
+      "id": "peak-04-040000Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T04:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": false,
+      "expect_micro": 3,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "04:00:00Z + 8h = 12:00:00 CST。[09:00,12:00) 是半开区间，右端 12:00 不在内 → 谷。flash offPeak 分子 = 1×10000 + 1×500000 + 1×2000000 = 2,510,000；+500,000 = 3,010,000；÷1,000,000 = 3（真实 2.51 微元，四舍五入 3）。"
+    },
+    {
+      "id": "peak-05-050000Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T05:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": false,
+      "expect_micro": 3,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "05:00:00Z + 8h = 13:00 CST，落在 12:00–14:00 的午间空档 → 谷。专抓「把 09:00–18:00 当一整段」的错实现。offPeak 分子 2,510,000 → 3。"
+    },
+    {
+      "id": "peak-06-055959Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T05:59:59Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": false,
+      "expect_micro": 3,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "05:59:59Z + 8h = 13:59:59 CST，仍在午间空档 → 谷（14:00 前最后一秒）。offPeak 分子 2,510,000 → 3。"
+    },
+    {
+      "id": "peak-07-060000Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T06:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": true,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "06:00:00Z + 8h = 14:00 CST，[14:00,18:00) 的左闭端 → 峰。分子同 peak-01 = 5,020,000 → 5。"
+    },
+    {
+      "id": "peak-08-095959Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T09:59:59Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": true,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "09:59:59Z + 8h = 17:59:59 CST，仍在 [14:00,18:00) 内 → 峰（18:00 前最后一秒）。分子同 peak-01 = 5,020,000 → 5。"
+    },
+    {
+      "id": "peak-09-100000Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T10:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": false,
+      "expect_micro": 3,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "10:00:00Z + 8h = 18:00 CST，[14:00,18:00) 右端开 → 谷。offPeak 分子 2,510,000 → 3。"
+    },
+    {
+      "id": "peak-10-sat0200Z",
+      "kind": "peak",
+      "model": "deepseek-flash",
+      "at": "2026-10-31T02:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": false,
+      "expect_micro": 3,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "2026-10-31 是周六。02:00Z + 8h = 周六 10:00 CST，时刻本身在 [09:00,12:00) 内，但 dayOfWeek.value >= 6 一律判谷 → offPeak。分子 2,510,000 → 3。"
+    },
+    {
+      "id": "arith-01-millions",
+      "kind": "arithmetic",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T02:00:00Z",
+      "hit": 1000000,
+      "miss": 1000000,
+      "out": 1000000,
+      "expect_peak": true,
+      "expect_micro": 5020000,
+      "usage": {"prompt_tokens": 2000000, "completion_tokens": 1000000, "total_tokens": 3000000, "prompt_cache_hit_tokens": 1000000, "prompt_cache_miss_tokens": 1000000},
+      "derivation": "02:00Z + 8h = 周五 10:00 CST → 峰。分子 = 1,000,000×20000 + 1,000,000×1000000 + 1,000,000×4000000 = 2×10^10 + 1×10^12 + 4×10^12 = 5,020,000,000,000；+500,000 后 ÷1,000,000 = 5,020,000 微元（可整除，无取整损失）。同一组 token 的谷价 = 2,510,000，5,020,000 = 2×2,510,000，这是「两倍差」唯一允许写等式的整除组（brief §0.8）。"
+    },
+    {
+      "id": "arith-02-rounding",
+      "kind": "arithmetic",
+      "model": "deepseek-v4-pro",
+      "at": "2026-10-30T02:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 0,
+      "expect_peak": true,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 0, "total_tokens": 2, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "v4-pro peak：1×150000 + 1×4500000 + 0×13500000 = 4,650,000；+500,000 = 5,150,000；÷1,000,000 = 5。真实值 4.65 微元，四舍五入到 5；漏掉 +500,000 直接截断会得 4，本组专抓漏加半格与二次取整。"
+    },
+    {
+      "id": "tz-01-sh-peak-utc-offpeak",
+      "kind": "tz",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T01:00:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": true,
+      "expect_peak_utc": false,
+      "expect_micro": 5,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "同一 Instant 01:00Z：按 Asia/Shanghai 是 09:00 峰；按 UTC 是 01:00，不在 [09:00,12:00) → 谷。向量钉住 zone 显式参数（brief §0.6）；测试另把 JVM 默认时区改成 America/New_York 后重跑，仍须得峰——抓偷偷用 ZoneId.systemDefault() 的实现。峰价分子 5,020,000 → 5。"
+    },
+    {
+      "id": "tz-02-sh-offpeak-utc-peak",
+      "kind": "tz",
+      "model": "deepseek-flash",
+      "at": "2026-10-30T10:30:00Z",
+      "hit": 1,
+      "miss": 1,
+      "out": 1,
+      "expect_peak": false,
+      "expect_peak_utc": true,
+      "expect_micro": 3,
+      "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3, "prompt_cache_hit_tokens": 1, "prompt_cache_miss_tokens": 1},
+      "derivation": "同一 Instant 10:30Z：按 Asia/Shanghai 是 18:30 谷；按 UTC 是 10:30，落在 [09:00,12:00) → 峰。反向反事实，堵住「直接把 UTC 当北京时间」的实现。谷价分子 2,510,000 → 3。"
+    }
+  ]
+}
