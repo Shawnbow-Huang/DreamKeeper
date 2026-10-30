@@ -302,6 +302,26 @@ object RecordingCommands {
 
 ## Task 4：录音页与 RecordEntry 解析
 
+### 0. 派工前修订（Lead 按两位专家预审裁定，覆盖下文任何冲突）
+
+以下 14 条是硬约束，与下文冲突时以本节为准。
+
+1. **`RecordViewModel` 必须 `: ViewModel()`**；`state = session.state.stateIn(viewModelScope, SharingStarted.Eagerly, RecordUiState())`（删掉「Eagerly 或测试直接断言」的二选一）。
+2. **`RecordingStarter` 只用 action 起服务**：`start` → `startForegroundService(ACTION_START + EXTRA_DREAM_ID)`；`stop` → `startService(ACTION_STOP)`；`cancel` → `startService(ACTION_CANCEL)`。**禁止 `stopService`**——它绕过 `onRecordingFinished`，session 永远到不了 DONE，一条梦都不会落库。
+3. **接线补全**：`DreamKeeperRoot` 增参 `session: RecordingSession, audioStore: WavStore, starter: RecordingStarter, recordEntry: RecordEntry?, onEntryConsumed: () -> Unit`；`MainActivity` 用 `mutableStateOf<RecordEntry?>` 装 intent 并在 `LaunchedEffect` 里 `navigate(Record(it))` 后 `onEntryConsumed()`；`RecordScreen` 的 entry 从 `backStackEntry.arguments?.getString("entry")` 取；**首页说梦钮（`DreamKeeperRoot.kt:134` 的假按钮）必须换成 `nav.navigate(Record(HOME_BUTTON))`**。不许在 ViewModel 里掏 `applicationContext`。
+4. **权限三态**：`RecordUiState` 加 `permissionState: ASKABLE | BLOCKED | GRANTED`，由「持久化 `askedOnce` + 当前是否授予」决定，**不靠 `shouldShowRequestPermissionRationale` 单独判**（首装它也返回 false）。Activity 每次 RESUMED 递增 `permissionEpoch` 强制重算；按钮文案 ASKABLE=「允许麦克风」、BLOCKED=「去设置」；授予后自动回到可按态，不要求用户再点一次。VM 的 `permissionBlocked` 降级为「这次按下被拦」的一次性提示。
+5. **测试写法**：`RecordingSession` / `DreamRepository` 都是 final 且无可注入 seam → **用真的**：Robolectric `@Config(sdk = [34])` + `Room.inMemoryDatabaseBuilder` + `Dispatchers.setMain(StandardTestDispatcher())`，照 `CalendarViewModelTest` 的范式；只 fake 接口 `RecordingStarter`，`hasPermission`/`clock` 用 lambda。不要写「假 session」。
+6. **落库取数**：`rawAudioMs = snapshot.elapsedMs`（服务 `finish(dataSize)` 内部已是 `bytes/32`），**禁止**在 VM 里二次读文件（文件缺失会抛 `NoSuchFileException`，把一次成功 DONE 变崩溃）。空判定用 `snapshot.elapsedMs > 0L`。
+7. **`DONE && elapsedMs == 0`（快速点按）**：不落库，并 `runCatching { audioStore.fileFor(dreamId).delete() }` 删掉服务建过的 44 字节占位头文件（否则 Task 6 扫描会把它恢复成一条 0 秒空梦）；补一条「DONE(0) 后文件不存在」的测试。
+8. **重复 START 防护**：`onPressStart` 开头 `if (session.state.value.phase != RecordingPhase.IDLE) return`；`dreamId/filePath` 以 `session.state` 为唯一真源（不用 VM 本地 UUID），否则进程内已在录音时会落一条指向不存在文件的草稿。
+9. **手势收尾必须兜底**：`pointerInput` 用 `try { awaitEachGesture { awaitFirstDown(requireUnconsumed = false); onStart(); val up = waitForUpOrCancellation(); if (up == null) onInterrupted() else onStop() } } finally { if (pressed) onStop() }`。`up == null`（来电/系统手势/锁屏抢焦）= **中断**：置 `interrupted = true`，顶部一行 `Paper`「录音被系统打断（0:37）」+ 两个动作「继续录」/「就这样」；`elapsedMs < 200` 的中断直接 `onCancel()`（不落库、不报错）。
+10. **取消不删文件**：`onCancel()` 只发 `starter.cancel()`，文件由服务端删；VM 要等 `phase == IDLE` 再刷新。测试写成「调了 `starter.cancel` 一次」+「收到 IDLE 后 `!file.exists()`」，不要把「VM 删文件」当契约。
+11. **收尾与返回**：`FINISHING` 期间主钮 `enabled = false`、环改 `InkFaint`、圈下 `Paper 16sp`「正在保存…」，计时冻结；`BackHandler(enabled = phase == RECORDING || phase == FINISHING)`，FINISHING 里按返回走 `onCancel()`。
+12. **跳 FollowUp 的导航**：`navigate(FollowUp(id)) { popUpTo(recordRoute) { inclusive = true }; launchSingleTop = true }`，`savedDreamId` 当一次性事件消费掉；本任务的 FollowUp 是空桩，**验收以当前 route 与日志为准，不以「看到追问页」为判据**。
+13. **视觉与坐标**（实算，420dpi → 1080px=411.4dp）：页面底色用 `Night #0B0E13`（`NightVoid` 与它只差 1.04:1，白多一个色值）；主钮 `size(160.dp)` = 420px、圆心放在屏高 **65%**（约 594dp，单手可达）；填充 `EmberDeep` + **1.5dp `Ember` 描边** + `Paper` 文字（`EmberDeep` 直接放在 `Night` 上只有 2.68:1，没描边圆边不可辨）；计时放圆**上方 32dp**（`Paper 40sp` 等宽数字），振幅做 r≈88–96dp 的 `Ember` 环**环绕圆外**；按下瞬间先用本地 `pressed` 出按压态（scale 0.96 + `Ember` 环，`DreamMotion.Quick=120`），`starting` 窗口显示 `InkDim`「正在启动麦克风…」；「取消」`sizeIn(minWidth = 48.dp, minHeight = 48.dp)`（126×126px），**不再叠 `navigationBarsPadding()`**（Scaffold 已算），并提供一个同手可达的取消（录音中上滑或双击主钮）。错误容器 `NightRaised` + **1dp `Ember` 描边**（6.03:1），文案两行 + 两个出口（「再试一次」「返回首页（这段录音留着）」）；`ENOSPC` 时主按钮改「空间不足，先去清理」并禁用重试。另在 `ThemeContrastTest` 加 `assertContrast("EmberDeep on Night", EmberDeep, Night, 3.0)`（它会红，正好把「必须靠描边」钉成断言）。
+14. **证据**（一次 take 拍成链，命名 `p2-ux-*`）：`-01-idle.png`、`-02-recording-t1.png`（按压态 + 0:01）、`-03-recording-t4.png`（同一 take，0:04，振幅不同）、`-04-finishing.png`（松手后计时冻结 + 「正在保存…」+ 主钮禁用）、`-05-notif-ongoing.png`、`-06-perm-askable.png`、`-07-perm-blocked.png`、`-08-notif-off.png`、`-09-error-enospc.png`、`-10-interrupted.png`、`p2-ux-hold.mp4`（`screenrecord --time-limit 20`，同一 take，截图证明不了时序、录像才算）、`p2-ux-bytes-hold.txt`（三次 `stat`：按住中两次间隔 ≥3 s、松手后一次冻结，三个采样必须同一 `dreamId`）、`p2-ux-latency.txt`（logcat 里 START/STOP 与 `adb shell date` 的时差）、`p2-ux-index.md`（每行：文件 / APK sha256 前 8 位 / `adb shell date` / 复跑命令 / 判别串）。**`check-near-white.ps1` 没有 `-MaxRatio` 参数**（只有 `-Path`/`-TopOffset`），命令写成 `-Path docs/evidence/plan2/p2-ux-XX.png -TopOffset 100`，把 nearWhite=0 写进 txt 当判据；`FINISHING` 亚秒级，用 `-04-finishing.png` + `dumpsys`/日志取证，不用手工抢截。
+
+
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/ui/record/RecordScreen.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/ui/record/RecordViewModel.kt`
@@ -636,6 +656,18 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D126 | 计数基线：Task 2 末 152 用例 / 14 类；本任务 +8（`RecordingCommandTest`）+1（`WavStoreTest`）= **161 用例 / 15 类** | 一律以 `test-results/testDebugUnitTest/*.xml` 统计为准；无钩子构建 APK 12,958,451 B | Lead 复跑 `:app:testDebugUnitTest` 并从 XML 统计 |
 | D127 | `startForeground` 失败 / `AudioRecord` 打开失败 / `startCapture` 失败三条路径会留下 44 字节占位头孤儿文件，`startCapture` 失败还漏关写句柄 | 三条失败路径都 `file.delete()`；`startCapture` 失败额外 `writer.close()`（close 兜底 finish）避免 fd 泄漏 | `git show HEAD -- android/app/src/main/java/com/dreamkeeper/service/RecordingService.kt` |
 | D128 | 通知栏截图的近白闸门 `-TopOffset 100 -MaxRatio 0` 判红：深色系统主题下 `nearWhite=118/69120=0.171%`，浅色主题下 `0.234%` | 白像素**全部**落在 SystemUI 给 app 图标垫的白圆底包围盒内（深色那轮定位：`nearwhite_total=1044`、`in_icon_box=1044`、`outside=0`、`bbox x=90..182 y=746..838`），不是 app 渲染；故本用例判红属预期，截图内容有效，并在证据里写明「换主题只能减少不能消除」 | `docs/evidence/plan2/p2-fgs-01-notify.txt`（含 `p2-fgs-01-whitepixels.ps1` 输出）、`p2-fgs-01-theme.txt` |
+| D129 | `RecordViewModel` 简报没写 `: ViewModel()`，且 `stateIn` 的共享策略给了二选一 | 必须 `) : ViewModel()` + `stateIn(viewModelScope, Eagerly, RecordUiState())` | 计划 Task 4 §0 第 1 条 |
+| D130 | `RecordingStarter.stop()/cancel()` 最自然的写法是 `stopService`，会绕过 `onRecordingFinished` → 永不到 DONE、一条梦都不落库 | 三者都走 action（`startForegroundService(ACTION_START)` / `startService(ACTION_STOP)` / `startService(ACTION_CANCEL)`），禁用 `stopService` | 计划 Task 4 §0 第 2 条 |
+| D131 | Task 4 的接线断层：`DreamKeeperRoot` 只收四个参数、首页 `:134` 是「录音还没做」假按钮、entry 没人消费 | `DreamKeeperRoot` 增 5 个参数、`MainActivity` 用 `mutableStateOf` + `LaunchedEffect`、假按钮改真导航、entry 从 `backStackEntry` 取 | 计划 Task 4 §0 第 3 条 |
+| D132 | 权限只有 `hasPermission: () -> Boolean` + 一个布尔，表达不出 ASKABLE/BLOCKED/GRANTED；首装 `shouldShowRequestPermissionRationale` 也 false，会把新用户直接送到「去设置」 | `RecordUiState.permissionState` 三态 + 持久化 `askedOnce` + 每次 RESUMED 递增 `permissionEpoch`；文案「允许麦克风」/「去设置」 | 计划 Task 4 §0 第 4 条 |
+| D133 | 简报要求「假 session」，但 `RecordingSession`/`DreamRepository` 都是 final 无可注入 seam | 用真的：Robolectric + 内存 Room + `setMain(StandardTestDispatcher())`，只 fake `RecordingStarter` | 计划 Task 4 §0 第 5 条 |
+| D134 | 简报写 `bytes > 0` 与 `rawAudioMs = bytes/32`，但 `RecordingSnapshot` 没有 `bytes` 字段；二次读文件在文件缺失时会抛异常 | `rawAudioMs = snapshot.elapsedMs`、空判定 `elapsedMs > 0L`、禁止二次读文件 | 计划 Task 4 §0 第 6 条 |
+| D135 | `DONE(0)`（快速点按）不落库，但服务已建 44 字节占位头文件 → Task 6 会把它恢复成一条 0 秒空梦 | DONE 且 `elapsedMs == 0` 时删文件，并补「文件不存在」测试 | 计划 Task 4 §0 第 7 条 |
+| D136 | 进程内已在录音时再按一次：服务静默丢弃重复 START，VM 却用本地新 UUID 落库 → 草稿指向不存在的文件 | `phase != IDLE` 直接 return；`dreamId/filePath` 以 `session.state` 为唯一真源 | 计划 Task 4 §0 第 8 条 |
+| D137 | 手势只处理正常抬起：来电/系统手势/协程取消都没有 up，`onStop` 永不执行 → 录音停不下来 | `try/finally` 兜底 + `up == null` 走中断分支（`interrupted` 标记 + 「继续录」/「就这样」）、`<200ms` 直接取消、`awaitFirstDown(requireUnconsumed = false)` | 计划 Task 4 §0 第 9 条 |
+| D138 | 简报把「取消立即删文件」写成契约，但 CANCEL 是异步的、fd 还开着 → 可能 DONE 一条指向已删文件的草稿 | VM 只发 `starter.cancel()`，删文件归服务；测试改成「收到 IDLE 后文件不存在」 | 计划 Task 4 §0 第 10 条 |
+| D139 | `BackHandler` 只挡 RECORDING，FINISHING 按返回会丢草稿；跳 FollowUp 无 `popUpTo` → 返回死循环 | `BackHandler(enabled = RECORDING || FINISHING)`；导航用 `popUpTo(inclusive) + launchSingleTop`，`savedDreamId` 当一次性事件 | 计划 Task 4 §0 第 11–12 条 |
+| D140 | 视觉与坐标不自洽：`EmberDeep` 直接放 `Night` 上只有 2.68:1、`NightVoid` 与 `Night` 只差 1.04:1、圆心在 50% 单手够不到、`check-near-white.ps1` 没有 `-MaxRatio` 参数、FINISHING 亚秒级截不到图 | 底色 `Night`；主钮 `EmberDeep` + 1.5dp `Ember` 描边 + `Paper` 字；圆心 65%；`ThemeContrastTest` 加 `EmberDeep on Night ≥ 3.0`（预期红，逼出描边）；证据改 `-Path … -TopOffset 100` 并把 nearWhite=0 写进 txt；FINISHING 用冻结帧 + 日志 | 计划 Task 4 §0 第 13–14 条 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
