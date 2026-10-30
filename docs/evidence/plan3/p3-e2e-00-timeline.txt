@@ -1,0 +1,29 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:01:25+08:00
+REPLAY=C:/Users/17383/AppData/Local/Android/Sdk/platform-tools/adb.exe shell date
+
+# p3-e2e-00 设备时间线（每步当场 adb shell date）
+[step 1 install] 2026-10-31T01:01:25+08:00  Sat Oct 31 01:01:25 CST 2026
+E2E_START=2026-10-31T01:05:08+08:00  Sat Oct 31 01:05:08 CST 2026（打开 seed-dream-2 小说化 tab、点生成前）
+LLM_CALLS_BASELINE_B=2
+BASELINE_ROW_1=id=d27ea509-222d-4942-823c-f45684d271ba dreamId=seed-dream-4 kind=FAITHFUL httpStatus=401 error=AUTH costMicroYuan=0 usageJson=NULL createdAt=1793377036721（2026-10-30T16:17:16.721Z / 2026-10-31 00:17:16 +08）
+BASELINE_ROW_2=id=3c033476-e3f1-45a7-8071-a59e9b5d2cb4 dreamId=seed-dream-4 kind=FAITHFUL httpStatus=401 error=AUTH costMicroYuan=0 usageJson=NULL createdAt=1793377335372（2026-10-30T16:22:15.372Z / 2026-10-31 00:22:15 +08）
+BASELINE_NOTE=上面 2 行来自 Task 9b smoke 的 AUTH 失败（早于 E2E_START，且当时没有 DKLLM 日志）；本轮 M 必须等于 logcat 的 DKLLM failed 条数，N（check-cost 统计的全表 failed 数）=B+M。
+TABLE_LIST_RAW=android_metadata dream_tags dreams generation_jobs llm_calls media_assets novel_messages novel_versions room_master_table tags（排除 android_metadata 后 9 张 = 8 张 @Entity + room_master_table）
+
+[step 2a 原样整理 v1] 2026-10-31T01:05:23/24 logcat（DKLLM kind=FAITHFUL status=ok http=200）
+[step 2b 误二次点击「原样整理」→ v2] 2026-10-31T01:05:39（D406 场景，版本线多一版忠实稿；如实记录）
+[step 3 小说化 v3] 2026-10-31T01:06:11 logcat（DKLLM kind=NOVEL status=ok http=200；补写 4 处）
+[step 4a 首次改稿被 G3 拦] 2026-10-31T01:07:42（REVISE status=ok，但 UI「闸门未过（G3）」，旧版保留、未建版）
+[step 4b 克制改稿 v4] 2026-10-31T01:09:44（REVISE status=ok，新建 v4，改末句）
+[step 4c ASK 判定（不建版）] 2026-10-31T01:14:41（REVISE status=ok，novel_messages versionId=NULL，版本仍 v7）
+[step 5 选中 v4] 2026-10-31T01:15:40（设备 adb shell date，见 p3-e2e-05-selected.txt）
+[step 6 导出三格式] 2026-10-31T01:16:32（设备 adb shell date，见 p3-e2e-06-export.txt）
+[step 7 查看器探针/打开] 2026-10-31T01:17:40–01:18:35（query-activities + Resolver/HTML Viewer 失败 + PDF 黑屏，见 p3-e2e-07-viewer-probe.txt）
+[step 8 飞行模式失败→重试→联网成功] 2026-10-31T01:20:18–01:21:20（8 条 DKLLM failed + 01:21:06 成功 v1，见 p3-e2e-09-failed.txt / p3-e2e-09b-retry.txt）
+[step 9 force-stop 拉库三件+合并] 2026-10-31T01:21:42（设备 adb shell date，见 p3-e2e-08-db-sidecar.txt）
+[step 10 check-cost D405 对账] host 侧执行，设备时间窗口 01:21:42–01:25:29（见 p3-e2e-09-check-cost.txt）
+[step 11 check-export 三子命令 + check-faithful] host 侧执行，设备时间窗口约 01:24–01:26:14（见 p3-export-04-check-export.txt Phase B 段 / p3-e2e-11-faithful.txt）
+[step 12 font_scale 1.3 大字体] 2026-10-31T01:27:11（设备 adb shell date，见 p3-e2e-10-fontscale.txt；随后恢复 1.0）
+[step 13 全量 logcat] 2026-10-31T01:29:37（force-stop 后唯一一次全量抓取，见 p3-e2e-12-logcat.txt）
+E2E_END=2026-10-31T01:29:37+08:00

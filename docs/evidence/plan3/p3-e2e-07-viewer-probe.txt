@@ -1,0 +1,44 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:25:29+08:00
+REPLAY=adb shell cmd package query-activities -a android.intent.action.VIEW -t text/plain ; adb shell cmd package query-activities -a android.intent.action.VIEW -t application/vnd.openxmlformats-officedocument.wordprocessingml.document ; adb shell cmd package query-activities -a android.intent.action.VIEW -t application/pdf ; adb shell am start -a android.intent.action.VIEW -d content://media/external/downloads/62 -t text/plain ; adb shell am start -a android.intent.action.VIEW -d content://media/external/downloads/63 -t application/pdf
+PROBE_WINDOW_START=2026-10-31T01:17:40+08:00
+PROBE_RECHECK=2026-10-31T01:25:29+08:00
+PROBE_WINDOW=约 7 分 49 秒（>=5 分钟，D376）
+
+=== MIME probe: text/plain ===
+No activities found
+
+=== MIME probe: docx ===
+No activities found
+
+=== MIME probe: application/pdf ===
+1 activities found:
+  Activity #0:
+    priority=0 preferredOrder=0 match=0x608000 specificIndex=-1 isDefault=true
+    labelRes=0x7f140c26 nonLocalizedLabel=null icon=0x0
+    ActivityInfo:
+      name=com.google.android.apps.viewer.PdfViewerActivity
+      packageName=com.google.android.apps.docs
+      enabled=true exported=true directBootAware=false
+
+=== 实际打开尝试（txt, content://media/external/downloads/62, mime text/plain）===
+Starting: Intent { act=android.intent.action.VIEW dat=content://media/... typ=text/plain }
+ResolverActivity 列出 Chrome / HTML Viewer（无专用 txt 查看器）
+选择 HTML Viewer（Just once）后 HTMLViewerActivity 显示：
+  Webpage not available
+  The webpage at content://media/external/downloads/62 could not be loaded because:
+  net::ERR_FILE_NOT_FOUND
+该截图 nearWhite ratio=0.1056% > 0（白底错误页），不作为证据图片保留；证明「设备无可用 txt 查看器」= 环境限制。
+
+=== 实际打开尝试（docx, content://media/external/downloads/64）===
+系统无 docx 查看器（query-activities 无活动）；未做无意义 fallback 截图。
+
+=== 实际打开尝试（pdf, content://media/external/downloads/63, mime application/pdf）===
+topResumedActivity=com.google.android.apps.docs/com.google.android.apps.viewer.PdfViewerActivity
+PdfViewerActivity 打开后页面全黑（等待 6s 截图 bytes=32089 不变，无文字渲染）；
+按 D359 该打开态截图 p3-e2e-07-pdf-open.png 排除 nearWhite 判定。
+
+=== A5 结论 ===
+txt/docx 设备打开态：PENDING（环境限制：模拟器镜像未安装 txt/docx 查看器；HTML Viewer 不认 content:// URI）
+pdf 设备打开态：PENDING（环境限制：模拟器 Google PDF 查看器黑屏，未渲染）
+pdf 结构级校验：GREEN（check-export.py --pdf RESULT: GREEN，见 p3-export-04-check-export.txt Phase B 段）

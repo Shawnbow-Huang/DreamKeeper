@@ -1,0 +1,25 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:21:42+08:00 (Sat Oct 31 01:21:42 CST 2026; force-stop 后拉库；check-cost 在主机跑）
+REPLAY=python scripts/check-cost.py --db-copy docs/evidence/plan3/p3-e2e-08-db.db --require-rows
+CHECK_COST_RAW=[FAILED] 401 AUTH cost=0 usage=NULL
+CHECK_COST_RAW=[FAILED] 401 AUTH cost=0 usage=NULL
+CHECK_COST_RAW=[OK] 5d386d03-e303-450c-8751-dc446c15f9e7 cost=2352 peak=False
+CHECK_COST_RAW=[OK] 5e702a62-17aa-4172-ab78-29ac92417f37 cost=219 peak=False
+CHECK_COST_RAW=[OK] db57593d-928c-431a-b319-ade8b2d5afea cost=3961 peak=False
+CHECK_COST_RAW=[FAILED] none NETWORK cost=0 usage=NULL（×8，逐行）
+CHECK_COST_RAW=[OK] 4dd3c5df-5ae3-4cbc-855f-e2bf125fa553 cost=4005 peak=False
+CHECK_COST_SUMMARY=rows=14 mismatches=0 failed=10
+CHECK_COST_EXIT=0
+DB=docs/evidence/plan3/p3-e2e-08-db.db，sha256=ed62b2bd256bcc5fd307b3c9c1908719e17b4c2bf9c63d20ab93f17b454466cc（与 sidecar MERGED_SHA256 相等）
+FAILED_RECON_N=10（llm_calls 里 error IS NOT NULL 行数）
+FAILED_RECON_B=2（历史基线 AUTH 401：d27ea509…、3c033476…，createdAt 1793377036721/1793377335372 均早于 E2E_START=2026-10-31T01:05:08+08:00）
+FAILED_RECON_M=N-B=8
+FAILED_RECON_LOG=adb logcat -d | grep "DKLLM attempt" | grep "status=failed" | grep -E "kind=(FAITHFUL|NOVEL)" | wc -l → 8
+FAILED_RECON_ASSERT=M == logcat 独立来源 → 8 == 8，成立
+REVISE_EXCLUDED=8（kind=REVISE 的 DKLLM 行：01:06:50.967 / 01:07:40.150 / 01:07:42.357 / 01:09:44.234 / 01:10:38.746 / 01:12:00.393 / 01:12:27.465 / 01:14:41.656；ReviseOrchestrator 按 D387 不写 llm_calls，故被对账口径排除）
+EACH_FAILED_ROW=cost==0、usageJson IS NULL、formulaVersion=""、四 token 列 NULL、error 分别为 AUTH / NETWORK（D316）——check-cost 的失败行断言逐行通过
+NEGATIVE_CONTROL=cp 合并库到 .scratch/check-cost-negative.db，把历史失败行 d27ea509… 的 costMicroYuan 改为 1 →
+NEGATIVE_CONTROL_RAW=[MISMATCH] d27ea509-222d-4942-823c-f45684d271ba (check-cost-negative.db#0)
+NEGATIVE_CONTROL_SUMMARY=rows=14 mismatches=1 failed=10（exit 1，RED）
+NEGATIVE_CONTROL_ORIGINAL=原证据库 sha256 未变：ed62b2bd256bcc5fd307b3c9c1908719e17b4c2bf9c63d20ab93f17b454466cc
+D405_NOTE=按 Lead D405：N=全表 failed、B=2、M=N-B；本轮 M=8（A7 失败行来自飞行模式段），未删改任何历史行。

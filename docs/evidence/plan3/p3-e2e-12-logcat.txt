@@ -1,0 +1,31 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:29:37+08:00
+REPLAY=adb shell am force-stop com.dreamkeeper ; adb logcat -d > .scratch/full-logcat.txt（构建完成/重装/清空前唯一一次全量抓取）
+LOGCAT_FILE=.scratch/full-logcat.txt（不入库：29386 行 / 4027275 字节）
+LOGCAT_SHA256=b838e1d0634eadd2b92bb12035e2af7c9ccf40408320ce82704fefbbed662b1d
+
+=== A15 FATAL EXCEPTION 计数 ===
+FATAL_EXCEPTION_COUNT=0
+
+=== A9 Key 泄漏检查（证据文本 grep）===
+DKKEY_LINES=14
+DKKEY_RAW=10-31 01:05:23.428 11673 11673 D DKKey   : load: 已配置
+DKKEY_RAW=10-31 01:05:39.097 11673 11673 D DKKey   : load: 已配置
+DKKEY_RAW=10-31 01:06:08.757 11673 11673 D DKKey   : load: 已配置
+DKKEY_RAW=10-31 01:06:50.249 11673 11673 D DKKey   : load: 已配置
+DKKEY_NOTE=新进程 (pid 11673) 全部为 `load: 已配置`；不读取、不记录 Key 内容
+KEY_LEAK_GREP_COUNT=0（真实 Key 形态 grep -E "sk-[A-Za-z0-9]{16,}" 与 "api[_-]?key=" 均 0 命中；REPLAY 与证据文本均不含 Key）
+
+=== DKLLM 对账（生成链）===
+DKLLM_FAILED_GEN_COUNT=8（= check-cost 的 M=8，D405）
+DKLLM_OK_GEN_COUNT=4（FAITHFUL v1/v2 + NOVEL v3 + sd4 NOVEL v1）
+FAILED_RAW=10-31 01:20:18.203 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=NOVEL status=failed http=none
+FAILED_RAW=10-31 01:20:19.293 11673 11673 D DeepSeekClient: DKLLM attempt n=2 kind=NOVEL status=failed http=none
+FAILED_RAW=10-31 01:20:21.503 11673 11673 D DeepSeekClient: DKLLM attempt n=3 kind=NOVEL status=failed http=none
+REVISE_LINES_EXCLUDED=8（D387 改稿不写 llm_calls，按 Lead m00550 排除）
+REVISE_RAW=10-31 01:06:50.967 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=REVISE status=ok http=200
+REVISE_RAW=10-31 01:07:40.150 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=REVISE status=ok http=200
+REVISE_RAW=10-31 01:07:42.357 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=REVISE status=ok http=200
+
+=== 结论 ===
+A15: FATAL EXCEPTION=0；A9: 证据内无 Key 泄漏、DKKey 全部 `已配置`；DKLLM failed 8 条与 check-cost failed 对账（p3-e2e-09-check-cost.txt）一致。

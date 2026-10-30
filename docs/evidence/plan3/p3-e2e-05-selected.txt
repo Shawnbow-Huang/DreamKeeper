@@ -1,0 +1,10 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:15:40+08:00 (Sat Oct 31 01:15:40 CST 2026, emulator-5554)
+REPLAY=adb shell input tap 152 541（点版本线 v4 chip）; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-05-selected.png
+PNG_SHA256=33545C40C11CEAAAA721E8671426CB2079AE848A6D4C6A83DED63FD68484139B
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13 (scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0)
+DEVICE_DATE_RAW=Sat Oct 31 01:15:40 CST 2026
+CURRENT_VERSION_RAW=当前 v4 · 已选中
+VERSION_LINE_RAW=v4 · 末句改为「教室很静」，其余逐字未动 · 改动 0 处 / v3 · 无说明 / v2 · 无说明 / v1 · 无说明
+SELECT_QUERY_RAW=SELECT novelSelectedVersion FROM dreams WHERE id='seed-dream-2' → 4（本轮导出前 DB 反查；最终合并库见 p3-e2e-08-db-sidecar.txt）
+NOTE=计划字面「选中 v2」不再适用：v2 是误二次点击「原样整理」产生的忠实稿（D406），v3 为小说化，v4 为真实改稿版；故选 v4（有稿、有 changeLog、可证 -v4 文件名与选中态）。版本线为 LazyRow，首屏只显示 v7..v4 的尾部 v4/v3/v2/v1，当前 v7 由「当前 vN」行显示。

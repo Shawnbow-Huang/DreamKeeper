@@ -1,0 +1,8 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:19:04+08:00
+REPLAY=adb shell am start -a android.intent.action.VIEW -d content://media/external/downloads/63 -t application/pdf ; 等待 6s 后 adb exec-out screencap -p > .scratch/open-pdf.png（本文件 png 即该图）
+PNG_SHA256=939CCDB5B4BCF0AAF7D5AF92C8686208E8DDF46FC63A169E53CEE5DC24CAF168
+PNG_BYTES=32089
+PNG_DIMS=1080x2400
+NEAR_WHITE=按 D359 排除 nearWhite 判定（实测 nearWhite=0 ratio=0.0000% center=#0D0E12；页面全黑）
+CONTENT=Google PDF 查看器（com.google.android.apps.docs/com.google.android.apps.viewer.PdfViewerActivity）打开后全黑、未渲染文字；属模拟器环境限制，A5 打开态 PENDING；pdf 结构级校验 GREEN 见 p3-export-04-check-export.txt Phase B 段

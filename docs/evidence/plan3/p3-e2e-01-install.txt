@@ -1,0 +1,30 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:01:25+08:00
+REPLAY=C:/Users/17383/AppData/Local/Android/Sdk/platform-tools/adb.exe install -r android/app/build/outputs/apk/debug/app-debug.apk
+
+# p3-e2e-01 安装与 APK 指纹（§0.6 步骤 0–1）
+
+设备：emulator-5554（1080x2400 @ 420dpi），Android 系统版本以 badging 的 compileSdk/targetSdk 为准。
+安装命令与结果（原样）：
+  adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+  Performing Streamed Install
+  Success
+  （设备时间：Sat Oct 31 01:01:25 CST 2026）
+
+安装后设备路径（pm path，原样）：
+  package:/data/app/~~yyhesYDMv8iN0GeLN8sWNg==/com.dreamkeeper-YPTrB1cMQ4TQopUVwIjOvQ==/base.apk
+
+adb pull 该路径到 .scratch/e2e-apk/base.apk（原样）：
+  /data/app/~~yyhesYDMv8iN0GeLN8sWNg==/com.dreamkeeper-YPTrB1cMQ4TQopUVwIjOvQ==/base.apk: 1 file pulled, 0 skipped. 29.5 MB/s (13860885 bytes in 0.447s)
+
+sha256sum（主机 pulled 文件 / 主机构建产物 / 设备端原文件）三处相等，原样：
+  8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8  .scratch/e2e-apk/base.apk
+  8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8  android/app/build/outputs/apk/debug/app-debug.apk
+  8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8  /data/app/~~yyhesYDMv8iN0GeLN8sWNg==/com.dreamkeeper-YPTrB1cMQ4TQopUVwIjOvQ==/base.apk
+
+aapt2 dump badging（只认 pulled 出的 APK，原样）：
+  package: name='com.dreamkeeper' versionCode='1' versionName='0.1.0' platformBuildVersionName='17' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='17'
+  application-label:'梦匣'
+  launchable-activity: name='com.dreamkeeper.MainActivity'  label='' icon=''
+
+APK 构建：./gradlew assembleDebug（构建日志 .scratch/assemble-debug.log，不入库）；构建后 APK 13860885 字节。

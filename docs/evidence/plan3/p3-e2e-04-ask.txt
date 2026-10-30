@@ -1,0 +1,10 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:15:00+08:00 (Sat Oct 31 01:15:00 CST 2026, emulator-5554)
+REPLAY=adb shell input text "it%sfeels%sa%sbit%soff"; adb shell input tap 962 1496; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-04-ask.png
+PNG_SHA256=2DADCF5D33F5C08B5F53D651D738C2D8C1716C5EF31152E7D01822C2E812989F
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13 (scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0)
+DEVICE_DATE_RAW=Sat Oct 31 01:15:00 CST 2026
+ASK_LLM_LOG=10-31 01:14:41.656 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=REVISE status=ok http=200
+VERSION_BEFORE=当前 v7（版本线 v7/v6/v5/v4/v3/v2/v1 中可见 v4/v3/v2/v1，当前 v7）
+VERSION_AFTER=当前 v7（未新建版本；输入框 placeholder 变为「回它一句」= ASK 分支）
+NOTE=「it feels a bit off」无坐标（§5.1 歧义先问不猜）→ 模型 action=ASK，versionId=NULL，不建版；DB novel_messages 最后一条 ASSISTANT 的 versionId 为 NULL。此前两轮纯英文提问（Why does the classroom feel so quiet? / What does the paper with my name mean?）被模型误路由为 REVISE 并各建一版（v5/v6），加上「the paper?」建 v7，共 3 例；属模型分流行为偏差，记偏差候选，不改代码不删库行。

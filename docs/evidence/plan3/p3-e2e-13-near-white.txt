@@ -1,0 +1,29 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:31:05+08:00
+REPLAY=powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-near-white.ps1 -Path "docs/evidence/plan3/*.png" -TopOffset 100 -MaxRatio 0
+NEAR_WHITE_SUMMARY（全部 p3 证据 PNG，TopOffset=100，MaxRatio=0）
+
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-01-generated.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=7621E3B3C5BBED1FA1ED08244005320F59C389518F1DAC5C2D6D3609476159E4
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-02-novel.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=24F443A9BB88891768422DB7D0C5246606AB42BD42D3CDFE8A318B040EE94F5D
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-03-revise.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=777070F3D8F046A69A12B543B8CBE9CB15B41F694FE4248DA78AA068A6BE1ED4
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-04-ask.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=2DADCF5D33F5C08B5F53D651D738C2D8C1716C5EF31152E7D01822C2E812989F
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-05-selected.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=33545C40C11CEAAAA721E8671426CB2079AE848A6D4C6A83DED63FD68484139B
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-06-export.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#12161F sha256=0B4F286325E0D7FCC1F9AD21179E1E80F4E92932A358E013C73B57FF5D983FD8
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-07-pdf-open.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0D0E12 sha256=939CCDB5B4BCF0AAF7D5AF92C8686208E8DDF46FC63A169E53CEE5DC24CAF168
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-09-failed.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=C0744FA4BC57EC4D0C5DD00D60D89F1B9FE17CDBDD86E9E8A6C3DFBEF8817895
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-09b-retry.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=0AF14005206D2F7AA91D21EA5CE29CBE6BF2C056C12BD980B6DDEEE12D61544E
+RESULT: FAIL image=D:\DreamKeeper\docs\evidence\plan3\p3-e2e-10-fontscale.png reason=near-white ratio 0.003% > max 0.000% dims=1080x2400 samples=69120 nearWhite=2 ratio=0.0029% center=#0B0E13
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-key-01-cleared.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=44A40624D8413DC95FAA0540FCC10DCF768C7C1C06CD953363165F24E1A8DBB9
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-key-01-editing.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=8AD28C032F06D3B28D876A6E261E8E5FD1E313ADCDC722647FD3D98A0AF94E22
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-key-01-saved.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=0CB453ABC95379EAC0C94029218BC6DC213EC121684F2D3772776EC0A22E7201
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-key-05-configured.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=EE9619C3224DAE8C2F247FDD33C1C301D2AE86927939D95E17449F6E2FFC3BCC
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-mig-02-after.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=00A10FDF36084BFC734354A10F413BC7B031EF7C2F01B3C39CECA45FD00490EF
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-settings-01-idle.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=51B546489F623EAACF6251E68678C5AE0EF0AFFC42547773B3D810BC6963BB3B
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-wire-01-buttons.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=AF5DB525D8F9F3A8F4426D6A570D387C4055A055077D6DD83154CDC58C13DC6C
+RESULT: OK image=D:\DreamKeeper\docs\evidence\plan3\p3-wire-02-failed.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=E5988A122969E8F41747BB2A8E7970BE48980E295DF67C518E901B07E1EBC81D
+
+=== 结论 ===
+除 p3-e2e-10-fontscale.png 外全部 nearWhite=0 ratio=0.0000%。
+p3-e2e-07-pdf-open.png 按 D359 排除 nearWhite 判定（本文件实测为 0，仅作参考）。
+p3-e2e-10-fontscale.png nearWhite=2（ratio=0.0029%），2 像素为系统输入法「隐藏键盘」chevron（坐标 (102,2332)/(108,2338)，非 App 界面）；App 区域 0、center=#0B0E13。已列为偏差候选，请 Lead 决定是否属于环境 chrome 例外。
+A16/A14：其余截图均满足深色主题硬规则。

@@ -1,0 +1,20 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:20:35+08:00 (Sat Oct 31 01:20:35 CST 2026, emulator-5554)
+REPLAY=adb shell cmd connectivity airplane-mode enable; adb shell input tap 453 410（小说化）; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-09-failed.png
+PNG_SHA256=C0744FA4BC57EC4D0C5DD00D60D89F1B9FE17CDBDD86E9E8A6C3DFBEF8817895
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13 (scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0)
+DEVICE_DATE_RAW=Sat Oct 31 01:20:35 CST 2026
+DREAM=seed-dream-4（10月22日「楼梯」，title=null，raw/faithful 14 字，无小说稿、无 novel_versions）
+AIRPLANE_CHECK=enable 后 `adb shell settings get global airplane_mode_on` → 1；disable 后 → 0
+UI_FAILED_RAW=没生成成：网络没通（重试按钮 [925,500][999,553]）
+FAILED_ATTEMPT_LOG_RAW=10-31 01:20:18.203 D DeepSeekClient: DKLLM attempt n=1 kind=NOVEL status=failed http=none
+FAILED_ATTEMPT_LOG_RAW=10-31 01:20:19.293 D DeepSeekClient: DKLLM attempt n=2 kind=NOVEL status=failed http=none
+FAILED_ATTEMPT_LOG_RAW=10-31 01:20:21.503 D DeepSeekClient: DKLLM attempt n=3 kind=NOVEL status=failed http=none
+FAILED_ATTEMPT_LOG_RAW=10-31 01:20:25.621 D DeepSeekClient: DKLLM attempt n=4 kind=NOVEL status=failed http=none
+RETRY_OFFLINE=点「重试」(962,526) 后仍失败，第二组 4 条同样 status=failed http=none：
+RETRY_OFFLINE_LOG_RAW=10-31 01:20:43.163 D DeepSeekClient: DKLLM attempt n=1 kind=NOVEL status=failed http=none
+RETRY_OFFLINE_LOG_RAW=10-31 01:20:44.180 D DeepSeekClient: DKLLM attempt n=2 kind=NOVEL status=failed http=none
+RETRY_OFFLINE_LOG_RAW=10-31 01:20:46.290 D DeepSeekClient: DKLLM attempt n=3 kind=NOVEL status=failed http=none
+RETRY_OFFLINE_LOG_RAW=10-31 01:20:50.360 D DeepSeekClient: DKLLM attempt n=4 kind=NOVEL status=failed http=none
+FAILED_COUNT_LOG=8（`adb logcat -d | grep "DKLLM attempt" | grep "status=failed" | grep -cE "kind=(FAITHFUL|NOVEL)"`）
+NOTE=0 条 DB 历史行被改动；本轮失败 attempts 将按 D316 记 cost=0、usageJson=NULL、error=NETWORK，共 8 行；步骤 10 用 M=N-B 对账（B=2）。

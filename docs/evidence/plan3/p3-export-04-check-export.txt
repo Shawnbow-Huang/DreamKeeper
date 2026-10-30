@@ -28,3 +28,70 @@ REPLAY=cd /d/DreamKeeper && python scripts/check-export.py --self-test
 [MUTATION] 原件 sha256 未变：是（2ff8faf5c5d9599f2053a7b261f9d19b3f1a03913bc039936eef919c34fe45b4）
 [SELF-TEST] 错 sha 的 DB → RED（符合预期）
 RESULT: GREEN
+
+=== Phase B（设备真实导出三件套，2026-10-31，D357/D358/D372/D374） ===
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:26:14+08:00（设备 adb shell date，其余主机侧动作同会话）
+EXPORTED=docs/evidence/plan3/20261008-教室-v4.txt / .docx / .pdf（设备拉取原件，原文入库；sha 见 p3-e2e-06-export.txt 的 EXPORT_SHA256）
+DB=docs/evidence/plan3/p3-e2e-08-db.db（合并库；sidecar MERGED_SHA256=ed62b2bd256bcc5fd307b3c9c1908719e17b4c2bf9c63d20ab93f17b454466cc）
+
+=== 子命令 1：--txt（含 --mutation） ===
+$ python scripts/check-export.py --txt docs/evidence/plan3/20261008-教室-v4.txt --file-name 20261008-教室-v4.txt --from-db docs/evidence/plan3/p3-e2e-08-db.db --dream-id seed-dream-2 --mutation
+[MUTATION] 改期望串一个字符 → RED（符合预期）
+[MUTATION] 改 CRLF → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（721612e6f36144dd70082db65f3600c1938decc2ebd7bc3b1db5402385a9a991）
+[OK] 无 UTF-8 BOM
+[OK] 正文逐字节 == DB 推导期望串
+[OK] CR 计数 == 0（LF-only）
+[OK] 首字符 == '#'（header 第 1 行）
+[OK] footer 形如 `共 N 字`
+[OK] footer N == contentCharCount(正文)
+[OK] 文件名 == DB 推导名
+[OK] --file-name == DB 推导名
+RESULT: GREEN
+EXIT=0
+
+=== 子命令 2：--docx（含 --mutation） ===
+$ python scripts/check-export.py --docx docs/evidence/plan3/20261008-教室-v4.docx --file-name 20261008-教室-v4.docx --from-db docs/evidence/plan3/p3-e2e-08-db.db --dream-id seed-dream-2 --mutation
+[MUTATION] 删 docx 一个 w:p → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（ea2205352a245209dacae8668812d20ab7eb196cc2fb01e40545cf99a658475f）
+[OK] zip 只含三件套
+[OK] document.xml 可 xml.etree 解析
+[OK] 首段 run 带 <w:rPr><w:b/></w:rPr>
+[OK] 全文只有标题段加粗（<w:rPr><w:b/></w:rPr> 恰好 1 处）
+[OK] 段数 == 头部段数 + 正文行数
+[OK] 首段 == 头部第 1 行（# 标题）
+[OK] paragraph 序列 == DB 推导期望串（含空行空段）
+[OK] 无非法控制字符
+[OK] 无孤立代理项
+[OK] _rels 关系完整（officeDocument）
+[OK] [Content_Types] 覆盖 document.xml
+[OK] 文件名==DB 推导名
+[OK] --file-name==DB 推导名
+RESULT: GREEN
+EXIT=0
+
+=== 子命令 3：--pdf（含 --mutation） ===
+$ python scripts/check-export.py --pdf docs/evidence/plan3/20261008-教室-v4.pdf --file-name 20261008-教室-v4.pdf --from-db docs/evidence/plan3/p3-e2e-08-db.db --dream-id seed-dream-2 --mutation
+[INFO] PDF 字体锚：Type3 字体对象 62 处（Android PdfDocument 嵌入 CJK 字形，无 /BaseFont；偏差候选待编号）
+[MUTATION] PDF 尾部追加垃圾（破坏 %%EOF） → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（14876cff3e40aeb226a74b4456b7ff01aa9740236e5dfbb3f11237f947e42f1c）
+[OK] %PDF- 在 byte 0
+[OK] 尾部 200 字节内有 %%EOF
+[OK] 有 /Type /Pages
+[OK] 至少一个 /Type /Page
+[OK] 有 /Count
+[OK] /Count == /Type /Page 对象数
+[OK] 每页 /Contents 非空
+[OK] /Contents 引用对象 66 存在
+[OK] 每页有 MediaBox
+[OK] 至少一处字体绘制锚（/BaseFont 或 Type3 /Font+/FontMatrix）
+[OK] 字节数 > 2KB
+[OK] 无 /Encrypt
+[OK] 文件名 == --file-name
+RESULT: GREEN
+EXIT=0
+
+=== 偏差候选（待 Lead 分配 D 号） ===
+计划 §0.5 / D374 写「pdf 全文至少一处 /BaseFont」；设备 android.graphics.pdf.PdfDocument 把 CJK 字形嵌入为 Type3 字体（实测 62 处 /Subtype /Type3、62 处 /FontMatrix、无 /BaseFont），
+故 check-export.py 的字体锚断言改为「/BaseFont 或 Type3（/Type /Font + /Subtype /Type3 + /FontMatrix）」，其余 pdf 断言不变。只改主机校验脚本，不涉及 APK。

@@ -1,0 +1,10 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:09:58+08:00 (Sat Oct 31 01:09:58 CST 2026, emulator-5554)
+REPLAY=adb shell input text "Only%schange%sthe%slast%ssentence%sto%sbe%squieter%sand%skeep%severy%sother%ssentence%sexactly%sthe%ssame."; adb shell input tap 962 1496; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-03-revise.png
+PNG_SHA256=777070F3D8F046A69A12B543B8CBE9CB15B41F694FE4248DA78AA068A6BE1ED4
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13 (scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0)
+DEVICE_DATE_RAW=Sat Oct 31 01:09:58 CST 2026
+REVISE_LLM_LOG=10-31 01:09:44.234 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=REVISE status=ok http=200
+VERSION_LINE_RAW=v4 · 末句改为「教室很静」，其余逐字未动 · 改动 0 处 / v3 · 无说明 / v2 · 无说明 / v1 · 无说明
+CURRENT_VERSION_RAW=当前 v4
+NOTE=REVISE 成功建版（v4）。本轮 seed-dream-2 上 v2 是误二次点击「原样整理」产生的忠实稿（D406 入口可见性缺陷），v3 为小说化，v4 为本次改稿；证据按实际版本线原样记录，不回退不删行。

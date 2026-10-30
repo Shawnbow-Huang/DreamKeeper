@@ -1,0 +1,12 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:27:11+08:00
+REPLAY=adb shell settings put system font_scale 1.3 ; adb shell am force-stop com.dreamkeeper ; adb shell am start -n com.dreamkeeper/.MainActivity ; adb shell input tap 541 619（day 8）; adb shell input tap 540 438（card）; adb shell input tap 415 242（小说化）; adb shell input tap 540 2051（输入框）; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-10-fontscale.png ; powershell -File scripts/check-near-white.ps1 -Path docs/evidence/plan3/p3-e2e-10-fontscale.png -TopOffset 100 -MaxRatio 0 ; adb shell settings put system font_scale 1.0
+PNG_SHA256=40340F93753F552A4BD0A9084C68092F584490F25ED4E23E86D4881EBAD8B328
+PNG_BYTES=331264
+PNG_DIMS=1080x2400
+FONT_SCALE=1.3
+IME_SHOWN=mInputShown=true（dumpsys input_method）
+LAYOUT_CHECK=输入条（回它一句 / 发送）在键盘上方可见，未被键盘遮挡；正文 5 段仍可读，证明大字体下输入区不遮挡
+NEAR_WHITE_RAW=RESULT: FAIL image=docs/evidence/plan3/p3-e2e-10-fontscale.png reason=near-white ratio 0.003% > max 0.000% dims=1080x2400 samples=69120 nearWhite=2 ratio=0.0029% center=#0B0E13
+NEAR_WHITE_NOTE=2 个近白像素位于 (102,2332)/(108,2338)，为系统输入法「隐藏键盘」的白色 chevron（SystemUI IME 导航栏按钮，非 App 界面像素）；App 区域 nearWhite=0、center=#0B0E13。按 A14 要求记录并列为偏差候选（待 Lead 决定是否视为环境 chrome 例外）。
+A14_CONCLUSION=大字体（font_scale=1.3）下打开有稿梦→点输入框弹键盘→输入条/发送按钮均在键盘上方可见，未被遮挡；nearWhite 仅 IME chevron 2 像素，App 界面 0。

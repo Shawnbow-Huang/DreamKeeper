@@ -141,3 +141,34 @@ design v1.5 的 §14 共 8 条；本节只写「本轮（Plan 2 / Task 9）结�
 | §14.8 | 检索 / 相似梦 | 不在 Plan 2 范围 | Plan 3 |
 
 本轮偏差（编号接 Task 8 的 D209，从 **D210** 起）与逐项细节见 `.superpowers/sdd/2026-10-30-audio-and-transcription/task-9-report.md` 的「偏差」一节。
+
+## 3d 生成与成本证据表（Plan 3 / Task 10）
+
+> 时段：2026-10-31 01:05–01:31（设备 CST）；APK sha256 `8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8`；基线 `2fa4538`，代码 `7a7e5d4`，Phase A 证据 `97d841e`，Phase B 修正与证据见本次提交。逐项细节与 PENDING 见 `docs/evidence/plan3/FINAL-REVIEW.md`。
+
+| 能力/断言 | 证据文件 | 结论 |
+|---|---|---|
+| A1 生成链 T0 真实入库 | `p3-e2e-00-timeline.txt`、`p3-e2e-09-check-cost.txt`、`p3-e2e-12-logcat.txt` | ✅ PASS |
+| A2 五闸门全绿（含 T2/T3 JVM） | `p3-e2e-11-faithful.txt`、`p3-export-03-full.txt` | ✅ PASS |
+| A3 版本线/选中/撤回 | `p3-e2e-03-revise.txt`、`p3-e2e-05-selected.txt`、`p3-e2e-08-db-sidecar.txt` | ✅ PASS |
+| A4 ASK 不建版 | `p3-e2e-04-ask.txt` | ✅ PASS（纯提问误路由另记偏差候选） |
+| A5 导出文件可打开（pdf 结构级 + 查看器） | `p3-export-04-check-export.txt`、`p3-e2e-07-viewer-probe.txt`、`p3-e2e-07-pdf-open.txt` | ⚠️ pdf 结构 ✅；txt/docx/pdf 打开态 PENDING（环境限制） |
+| A6 成本复算 | `p3-e2e-09-check-cost.txt` | ✅ PASS（rows=14 mismatches=0 failed=10） |
+| A7 失败行记账 | `p3-e2e-09-failed.txt`、`p3-e2e-09-check-cost.txt`、`p3-e2e-12-logcat.txt` | ✅ PASS（8 条 error 行 cost=0/usage NULL） |
+| A8 提示词指纹 | `p3-e2e-14-misc-checks.txt` | ✅ PASS |
+| A9 Key 安全 | `p3-e2e-12-logcat.txt` | ✅ PASS（Key 形态 grep 0） |
+| A10 无新依赖 | `p3-e2e-14-misc-checks.txt` | ✅ PASS |
+| A11 schema 不变 | `p3-e2e-08-db-sidecar.txt` | ✅ PASS（9 表 / user_version=2 / integrity=ok） |
+| A12 列表页仍显示原样稿 | `p3-e2e-14-misc-checks.txt` | ✅ PASS |
+| A13 文件名清洗 | `p3-e2e-06-export.txt`、全量 JVM | ✅ PASS |
+| A14 大字体输入条不被遮挡 | `p3-e2e-10-fontscale.txt`、`p3-e2e-13-near-white.txt` | ✅ PASS（nearWhite=2 为 IME chevron，偏差候选） |
+| A15 logcat FATAL EXCEPTION 0 | `p3-e2e-12-logcat.txt` | ✅ PASS |
+| A16 证据头三行/sha | 本目录全部 `p3-e2e-*` / `p3-export-*` | ✅ PASS |
+| A17 复跑命令可执行 | `FINAL-REVIEW.md` §六 与各 REPLAY | ✅ PASS |
+| A18 PENDING 白名单只收环境限制 | `FINAL-REVIEW.md` §五 | ✅ PASS |
+| A19 §9 偏差都有 D 号 | `FINAL-REVIEW.md` §四 | ⚠️ 本轮候选待 Lead 编号 |
+| A20 看板 10/10 + 验收段 | `docs/PROGRESS.md`、本节 | ✅ PASS |
+| A21 FINAL-REVIEW 第三方可复现 | `docs/evidence/plan3/FINAL-REVIEW.md` | ✅ PASS |
+| A22 生成入口可点、失败可重试 | `p3-e2e-09-failed.txt`、`p3-e2e-09b-retry.txt` | ✅ PASS |
+| A23 降级/兜底链证据 | `p3-e2e-14-misc-checks.txt`、全量 JVM | ✅ PASS（STT 未用 → PENDING） |
+| A24 导出下界 API29+ | `p3-e2e-06-export.txt`、`p3-e2e-14-misc-checks.txt` | ✅ API29+ 三格式；⚠️ API26–28 下界 PENDING（无镜像） |

@@ -1,0 +1,10 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:21:20+08:00 (Sat Oct 31 01:21:20 CST 2026, emulator-5554)
+REPLAY=adb shell cmd connectivity airplane-mode disable; adb shell input tap 962 526（重试）; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-09b-retry.png
+PNG_SHA256=0AF14005206D2F7AA91D21EA5CE29CBE6BF2C056C12BD980B6DDEEE12D61544E
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13 (scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0)
+DEVICE_DATE_RAW=Sat Oct 31 01:21:20 CST 2026
+AIRPLANE_CHECK=disable 后 `adb shell settings get global airplane_mode_on` → 0
+SUCCESS_LOG_RAW=10-31 01:21:06.285 11673 11673 D DeepSeekClient: DKLLM attempt n=1 kind=NOVEL status=ok http=200
+UI_SUCCESS_RAW=补写 4 处 · 查看；当前 v1（seed-dream-4 首版小说化）
+NOTE=三段式：飞行模式失败（4 attempts failed）→ 重试仍失败（4 attempts failed）→ 关飞行模式后重试成功（1 attempt ok），符合 D368。失败/成功 attempts 均经 GenerationOrchestrator 记账；本轮 8 条失败行进入步骤 10 的 M。

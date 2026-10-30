@@ -1,0 +1,8 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:06:30+08:00
+REPLAY=点击「小说化」→ 等生成完成（DKLLM 01:06:11 kind=NOVEL status=ok http=200，补写 4 处）→ powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-02-novel.png ; powershell -File scripts/check-near-white.ps1 -Path docs/evidence/plan3/p3-e2e-02-novel.png -TopOffset 100 -MaxRatio 0
+PNG_SHA256=24F443A9BB88891768422DB7D0C5246606AB42BD42D3CDFE8A318B040EE94F5D
+PNG_BYTES=352488
+PNG_DIMS=1080x2400
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13
+CONTENT=小说化成功 v3（正文 5 段、补写 4 处、版本线 v3/v2/v1）；v2 为误二次点击的忠实稿（D406）

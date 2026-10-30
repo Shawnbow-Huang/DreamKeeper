@@ -1,0 +1,8 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:06:00+08:00
+REPLAY=点击 seed-dream-2 小说化 tab「原样整理」→ 等生成完成 → powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-01-generated.png ; powershell -File scripts/check-near-white.ps1 -Path docs/evidence/plan3/p3-e2e-01-generated.png -TopOffset 100 -MaxRatio 0
+PNG_SHA256=7621E3B3C5BBED1FA1ED08244005320F59C389518F1DAC5C2D6D3609476159E4
+PNG_BYTES=150768
+PNG_DIMS=1080x2400
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#0B0E13
+CONTENT=原样整理成功 v1（DKLLM 01:05:24 kind=FAITHFUL status=ok http=200），版本线出现 v1；随后误二次点击产生 v2（D406 场景，见 p3-e2e-02-novel.txt）

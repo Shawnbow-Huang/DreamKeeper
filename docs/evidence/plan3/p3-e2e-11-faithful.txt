@@ -1,0 +1,33 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:26:14+08:00
+REPLAY=python - <<'PY' (从 docs/evidence/plan3/p3-e2e-08-db.db 导出 seed-dream-2 的 rawTranscript 与 novel_versions v1/v3/v4 文本到 .scratch/) ; python scripts/check-faithful.py --input .scratch/faithful-in-raw.txt --output .scratch/faithful-v1.txt ; python scripts/check-faithful.py --kind revise --input .scratch/faithful-v3.txt --output .scratch/faithful-v4.txt
+
+=== 数据来源（合并库 p3-e2e-08-db.db，只读） ===
+SELECT rawTranscript FROM dreams WHERE id='seed-dream-2';           -> 37 字
+SELECT text FROM novel_versions WHERE dreamId='seed-dream-2' AND version=1; -> 37 字（origin=GENERATE, promptId=faithful）
+SELECT text FROM novel_versions WHERE dreamId='seed-dream-2' AND version=3; -> 263 字（origin=GENERATE, promptId=novel）
+SELECT text FROM novel_versions WHERE dreamId='seed-dream-2' AND version=4; -> 266 字（origin=REVISE, promptId=novel_revise；导出 txt/docx/pdf 即此版本）
+
+=== faithful 门：rawTranscript -> v1（原样整理） ===
+$ python scripts/check-faithful.py --input .scratch/faithful-in-raw.txt --output .scratch/faithful-v1.txt
+== 五闸门 ==  kind=faithful  结论=通过
+  [OK  ] G1     新增 数量/颜色/方位/专名               value=0
+  [OK  ] G2     正文长度比 ≤ 1.10（不计标点空白）         value=1.0
+  [OK  ] G3     原文 2-gram 覆盖率 ≥ 95%          value=1.0
+  [OK  ] G4     跨场景因果连接词 = 0                 value=0
+  [OK  ] G5     不确定词保留率 = 100%               value=0
+EXIT=0
+
+=== revise 门：v3（改稿前） -> v4（改稿后，即导出内容） ===
+$ python scripts/check-faithful.py --kind revise --input .scratch/faithful-v3.txt --output .scratch/faithful-v4.txt
+== 五闸门 ==  kind=revise  结论=通过
+  [OK  ] G1     新增 数量/颜色/方位/专名               value=0
+  [OK  ] G2     正文长度比 ≤ 1.15（不计标点空白）         value=1.0093
+  [OK  ] G3     原文 2-gram 覆盖率 ≥ 95%          value=1.0
+  [OK  ] G4     跨场景因果连接词 = 0                 value=0
+  [OK  ] G5     不确定词保留率 = 100%               value=1
+  提示（不判红，喂给重试提示词）：室很、很静
+EXIT=0
+
+=== 结论 ===
+faithful 与 revise 两条链在设备真实产物上均五闸门通过；check-faithful.py 只用仓库内合并库 + 导出正文即可复跑（D362）。

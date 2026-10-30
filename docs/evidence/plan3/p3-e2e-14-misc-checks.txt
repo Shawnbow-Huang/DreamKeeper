@@ -1,0 +1,32 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:31:15+08:00
+REPLAY=adb shell am start -n com.dreamkeeper/.MainActivity ; adb shell input tap 541 593 ; adb shell uiautomator dump /sdcard/ui.xml ; adb pull /sdcard/ui.xml .scratch/ui.xml ;（A12 列表页断言）; python (sqlite3 只读合并库 → A8/A23 计数); git diff --stat 2fa4538..HEAD -- android/app/build.gradle.kts android/gradle/libs.versions.toml ; adb shell getprop ro.build.version.sdk
+
+=== A12 列表页仍显示原样稿（重启 App → 10月8日列表卡片 dump） ===
+'10月8日 周四'
+'教室'
+'教室最后一排，黑板上的字在动，像水。'   ← 原样稿 rawTranscript（不是小说正文）
+A12=PASS（列表卡片正文未变，仍是原样稿）
+
+=== A8 提示词指纹（novel_versions 行，合并库 p3-e2e-08-db.db） ===
+v1 promptId=faithful promptVersion=0 promptHash=5b9702ee5b78af11caa378f236eab63980c9c97d613f07d95be180dd6f042f57 model=deepseek-flash
+v2 promptId=faithful promptVersion=0 promptHash=5b9702ee5b78af11caa378f236eab63980c9c97d613f07d95be180dd6f042f57
+v3 promptId=novel promptVersion=0 promptHash=f189dad80796a1dc165022b96e57b89fbbc4abc32e33a1dc77c925ecdb9a84e2
+v4 promptId=novel_revise promptVersion=1 promptHash=2ebba6303a83e28603096e5e57ad8947e82dd6404f92a954408a5af1f5049a13
+v5–v7 同 v4（promptId=novel_revise promptVersion=1 promptHash=2ebba630…4f92a954408a5af1f5049a13）
+A8=PASS（同 promptId 的版本指纹一致；冻结向量一致性由全量 JVM 39 类/362 例覆盖）
+
+=== A23 降级/兜底链计数（generation_jobs 8 行 vs llm_calls 14 行） ===
+generation_jobs 8 行：legacy AUTH×2（seed-dream-4，T0，attemptNo=1）；seed-dream-2 T0 成功×3（v1/v2/v3 生成任务）；seed-dream-4 T0 NETWORK 失败×2（各 attempts=4）；seed-dream-4 T0 成功×1。
+llm_calls 14 行 = 2(legacy AUTH) + 2(FAITHFUL v1/v2 各 1 attempt) + 1(NOVEL v3) + 8(飞行模式两轮 × 4 attempt) + 1(联网重试成功) ＝ 14。
+llm_calls 按 kind：FAITHFUL 4 行(2 failed=legacy AUTH)、NOVEL 10 行(8 failed=NETWORK)。
+A23=PASS（generation_jobs 与 llm_calls 的 attempt 数可对账；T2/T3 由 JVM GenerationOrchestratorTest #4/#5 覆盖；STT 未用，PENDING 见 FINAL-REVIEW）
+
+=== A10 无新依赖（基线 2fa4538 → HEAD 的构建文件 diff） ===
+git diff --stat 2fa4538..HEAD -- android/app/build.gradle.kts android/gradle/libs.versions.toml android/build.gradle.kts android/settings.gradle.kts
+（输出为空）
+A10=PASS
+
+=== A24 设备 API ===
+ro.build.version.sdk=37（Android 17），ro.build.version.release=17 → API29+ 条件成立，三格式导出已实测（p3-e2e-06）。
+API26–28 下界（按钮禁用+文案）无对应模拟器镜像，PENDING（环境限制，见 FINAL-REVIEW）

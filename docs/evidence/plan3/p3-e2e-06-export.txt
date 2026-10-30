@@ -1,0 +1,37 @@
+APK_SHA256=8de9a0b46c44361417de79db0677e628adddc311377405ce200fec33b03d27b8
+DEVICE_TIME=2026-10-31T01:16:32+08:00 (Sat Oct 31 01:16:32 CST 2026, emulator-5554)
+REPLAY=adb shell input tap 962 377; adb shell input tap 540 1011（txt）; adb shell input tap 540 1011（docx）; adb shell input tap 540 1158（pdf）; adb shell ls -l /sdcard/Download/DreamKeeper/; adb shell sha256sum …（间隔 2s 两次）; adb pull /sdcard/Download/DreamKeeper/<file>; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-e2e-06-export.png
+PNG_SHA256=0B4F286325E0D7FCC1F9AD21179E1E80F4E92932A358E013C73B57FF5D983FD8
+NEAR_WHITE=nearWhite=0 ratio=0.0000% center=#12161F (scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0)
+DEVICE_DATE_RAW=Sat Oct 31 01:16:32 CST 2026
+EXPORT_DIR_DEVICE=/sdcard/Download/DreamKeeper/
+DEVICE_LS_RAW=total 188
+-rwxrwx--- 1 u0_a228 media_rw   1543 2026-10-31 01:16 20261008-教室-v4.docx
+-rwxrwx--- 1 u0_a228 media_rw 171092 2026-10-31 01:16 20261008-教室-v4.pdf
+-rwxrwx--- 1 u0_a228 media_rw    829 2026-10-31 01:16 20261008-教室-v4.txt
+IS_PENDING_CHECK=文件已可见且 size>0；sha256sum 两次（间隔 2s）结果完全一致：
+DEVICE_SHA256_RUN1=721612e6f36144dd70082db65f3600c1938decc2ebd7bc3b1db5402385a9a991  /sdcard/Download/DreamKeeper/20261008-教室-v4.txt
+DEVICE_SHA256_RUN1=ea2205352a245209dacae8668812d20ab7eb196cc2fb01e40545cf99a658475f  /sdcard/Download/DreamKeeper/20261008-教室-v4.docx
+DEVICE_SHA256_RUN1=14876cff3e40aeb226a74b4456b7ff01aa9740236e5dfbb3f11237f947e42f1c  /sdcard/Download/DreamKeeper/20261008-教室-v4.pdf
+DEVICE_SHA256_RUN2=721612e6f36144dd70082db65f3600c1938decc2ebd7bc3b1db5402385a9a991  /sdcard/Download/DreamKeeper/20261008-教室-v4.txt
+DEVICE_SHA256_RUN2=ea2205352a245209dacae8668812d20ab7eb196cc2fb01e40545cf99a658475f  /sdcard/Download/DreamKeeper/20261008-教室-v4.docx
+DEVICE_SHA256_RUN2=14876cff3e40aeb226a74b4456b7ff01aa9740236e5dfbb3f11237f947e42f1c  /sdcard/Download/DreamKeeper/20261008-教室-v4.pdf
+PULL_RESULT_RAW=/sdcard/Download/DreamKeeper/20261008-教室-v4.txt: 1 file pulled, 0 skipped. 0.1 MB/s (829 bytes in 0.007s)
+PULL_RESULT_RAW=/sdcard/Download/DreamKeeper/20261008-教室-v4.docx: 1 file pulled, 0 skipped. 0.4 MB/s (1543 bytes in 0.004s)
+PULL_RESULT_RAW=/sdcard/Download/DreamKeeper/20261008-教室-v4.pdf: 1 file pulled, 0 skipped. 16.6 MB/s (171092 bytes in 0.010s)
+HOST_LS_RAW=-rw-r--r-- 1 ZUOYOU 197609    829 Oct 31 01:16 docs/evidence/plan3/20261008-教室-v4.txt
+HOST_LS_RAW=-rw-r--r-- 1 ZUOYOU 197609   1543 Oct 31 01:16 docs/evidence/plan3/20261008-教室-v4.docx
+HOST_LS_RAW=-rw-r--r-- 1 ZUOYOU 197609 171092 Oct 31 01:16 docs/evidence/plan3/20261008-教室-v4.pdf
+HOST_SHA256_VS_DEVICE=三件逐字节相等：txt 721612e6…a9a991；docx ea220535…847f；pdf 14876cff…42f1c
+EXPORT_SHA256=721612e6f36144dd70082db65f3600c1938decc2ebd7bc3b1db5402385a9a991  20261008-教室-v4.txt
+EXPORT_SHA256=ea2205352a245209dacae8668812d20ab7eb196cc2fb01e40545cf99a658475f  20261008-教室-v4.docx
+EXPORT_SHA256=14876cff3e40aeb226a74b4456b7ff01aa9740236e5dfbb3f11237f947e42f1c  20261008-教室-v4.pdf
+EXPORT_SHA_MEASURE=EXPORT_SHA256 按入库 LF 字节计算：txt 实测 CR=0、无 BOM、首 5 字节 `# 教`（0x23 0x20 E6 95 99），host sha == LF blob sha == 设备 sha；docx/pdf 为二进制，git 不转换，host sha == 设备 sha。
+SELECT_NOTE=SELECT novelSelectedVersion FROM dreams WHERE id='seed-dream-2' 与 SELECT version,origin,promptId FROM novel_versions WHERE dreamId='seed-dream-2' ORDER BY version 的原始输出见本文件末尾 SELECT_RAW 段（步骤 9 拉最终合并库后回填）。
+EXPORT_IMPL=MediaStore.Downloads（RELATIVE_PATH=Download/DreamKeeper，IS_PENDING=1→写完置 0），API29+ 免权限、无 FileProvider、manifest 未改；文件名 <yyyyMMdd>-<清洗标题>-v<选中版本>.ext，正文 = resolveFinalNovel(selected ?: maxVersion)，头部四行 + `共 N 字`（N=contentCharCount，仅正文）。
+
+SELECT_RAW=sqlite3 docs/evidence/plan3/p3-e2e-08-db.db "SELECT novelSelectedVersion FROM dreams WHERE id='seed-dream-2';"
+SELECT_RAW_ROW=4
+SELECT_RAW=sqlite3 … "SELECT version, origin, promptId FROM novel_versions WHERE dreamId='seed-dream-2' ORDER BY version;"
+SELECT_RAW_ROWS=(1,'GENERATE','faithful') (2,'GENERATE','faithful') (3,'GENERATE','novel') (4,'REVISE','novel_revise') (5,'REVISE','novel_revise') (6,'REVISE','novel_revise') (7,'REVISE','novel_revise')
+SELECT_NOTE2=导出文件名 -v4 与库内 novelSelectedVersion=4 一致；v2 是 D406 误双击「原样整理」的忠实稿，故计划字面「选 v2」改为选 v4（真实改稿版），理由见 p3-e2e-05-selected.txt。
