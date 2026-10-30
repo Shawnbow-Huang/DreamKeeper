@@ -1,6 +1,7 @@
 APK_SHA256=n/a (host-only JVM test; no APK involved)
 DEVICE_TIME=host-only 2026-10-30T15:38:31Z
 REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.ReviseOrchestratorTest" --tests "com.dreamkeeper.ui.detail.VersionStripTest" --rerun-tasks --console=plain
+RED_BASELINE=可编译空壳（c1c8d75 之前的工作区：接口+按钮+状态枚举+空回调；GenerationStore 新方法保留 D380 默认实现抛 UnsupportedOperationException）。空壳未入库，REPLAY 在 HEAD 上重放会绿——红态只能由该空壳复现
 > Task :app:syncPromptAssets
 > Task :app:preBuild
 > Task :app:preDebugBuild

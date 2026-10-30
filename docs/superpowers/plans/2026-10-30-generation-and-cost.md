@@ -714,7 +714,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 - Expected：3/3 绿；全量 **36 类 / 347 例**（344 + 3）0 失败（若并入既有类则类数不变，报告须说明差 1 原因）；证据
   `p3-wire-00-red.txt`（host-only 头）、`01-green.txt`、`02-mutation.txt`（回调改成空 → 用例 1 红）、`03-full.txt`；设备两图 +
   同名 txt（`APK_SHA256`/`DEVICE_TIME`/`REPLAY`，截图 `nearWhite=0`）。
-- 闸门：**Task 9b 验收段通过后才允许 Task 10 开工**；Task 9 验收段只能写「UI 可点性 PENDING → 9b」。
+- 闸门：**Task 9b 验收段通过后才允许 Task 10 开工**；Task 9 验收段只写两处 PENDING：「UI 可点性 → 9b」「设备渲染/交互截图 → Task 10」。
 
 ### Task 10 导出（txt/docx/pdf）+ 端到端验收与证据
 
@@ -722,7 +722,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   `export/DocxExporter.kt`、`export/PdfExporter.kt`、`ui/detail/ExportSheet.kt`、`ui/detail/DetailViewModel.kt`（导出动作）、
   `ui/detail/DetailScreen.kt`（导出入口两处）、`data/DreamRepository.kt`（读 `resolveFinalNovel` 与选中版本）、
   `test/.../export/TxtExporterTest.kt`、`test/.../export/DocxExporterTest.kt`、`test/.../export/ExportNamingTest.kt`、
-  `llm/DeepSeekClient.kt`（D370：只加一行每次尝试的 logcat 日志，供 `failed=N` 独立对账）、
+  `llm/DeepSeekClient.kt`（D370：每次尝试打一行 `DKLLM` 日志，供 `failed=N` 独立对账）、`llm/ChatModels.kt`（D392：`ChatRequest` 加 `kind: String = ""`，只为日志透传、**不上 wire**；toString 已有 Key 掩码）、`llm/GenerationOrchestrator.kt`（D392：构造 `ChatRequest` 处传 `kind="FAITHFUL"` / `"NOVEL"`，两行）、`llm/ReviseOrchestrator.kt`（D392：传 `kind="REVISE"`，一行——改稿不记账（D387），日志里必须能把它排除）、
   `scripts/check-export.py`（新）、`scripts/check-cost.py`（D337/D366：必须支持 error 行；新增 `--require-rows` 硬门，
   `.gitattributes`（D377：补 `docs/evidence/plan3/*.txt text eol=lf` 与 `*.db binary`；只加规则，不动已有条目）、
   输出 `failed=N` 与逐行 `[FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET` 格式）、
@@ -800,9 +800,11 @@ T3  不调用模型                                   → faithfulText = rawTran
      `p3-e2e-08-db.db` 证据**；`p3-e2e-08-db-sidecar.txt` 记：三件合并前 bytes+sha（溯源）、`DEVICE_DB_SHA256=`（合并前 .db）、
      `MERGED_SHA256=`（合并后 .db，check-export 断言这个）+ 合并前后 bytes（D371）；所有 check-cost / check-export / 负向对照都只跑在合并后的副本上（D279「wal/shm 不入库」仍成立）。
  10. `check-cost.py --db-copy p3-e2e-08-db.db --require-rows` → 断言 `mismatches=0`、`failed=N`（N == `error IS NOT NULL`
-     行数且 >=1），每个 error 行 `cost==0 && usageJson IS NULL`，逐行 `[FAILED]` 原文入库；`failed` 的独立来源 =
-     `adb logcat -d | grep DKLLM | grep -c " kind="`（D370 的那行日志），两者必须相等；
-     负向对照：**复制** `p3-e2e-08-db.db` 到 `.scratch/`、把一行 error 的 `costMicroYuan` 改成 1 → 必须 RED → 结束校验原证据
+    行数且 >=1），每个 error 行 `cost==0 && usageJson IS NULL`，逐行 `[FAILED]` 原文入库；`failed` 的独立来源 =
+    **只数生成链**：`adb logcat -d | grep "DKLLM" | grep "status=failed" | grep -E "kind=(FAITHFUL|NOVEL)" | wc -l`
+    （D370/D392 的那行日志；改稿行 `kind=REVISE` 因 D387 不记账，必须排除，排除条数也写进证据），两者必须相等；
+    旧口径 `grep -c " kind="` 已作废（它连成功行与改稿行一起数，D392）。
+负向对照：**复制** `p3-e2e-08-db.db` 到 `.scratch/`、把一行 error 的 `costMicroYuan` 改成 1 → 必须 RED → 结束校验原证据
      sha256 未变、副本 `cmp` 原文入库（D372）。
  11. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令（含 `--mutation`，结束恢复 + `cmp` 原件）+ `scripts/check-faithful.py --input --output`
      （A1–A24 与生成相关项）+ `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 扫除 pdf-open 外的全部截图。
@@ -994,7 +996,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D367 | T10-17：T2/T3 降级链以 JVM 用例（`GenerationOrchestratorTest` #4/#5）为证据，设备只走 happy path；A22/A23 明确入口可点与兜底证据口径 | 设备上强制 T2 需要可控坏模型返回，E2E 不引入假 client；JVM 已覆盖判据（`isConservativeOk`、T3 不调模型） |
 | D368 | T10-18：§0.6 步骤 8 增加「失败 → 重试仍失败 → 联网重试成功」三段，A22 一并验收 | happy path 下重试入口无证据；只测一次失败无法区分「重试没接上」与「重试接上但网络仍断」 |
 | D369 | T10-19：A14 大字体遮挡改为设备步骤 12（`font_scale 1.3` + 键盘 + 截图 `p3-e2e-10-fontscale.png`） | 原 A14 在 §0.6 无对应步骤，不可机器判定；加一步即可留证 |
-| D370 | T10-20：`llm/DeepSeekClient.kt` 只加一行每次尝试的 logcat 日志（`DKLLM attempt n=<i> status=<s> kind=<k>`），`failed=N` 用 logcat 计数做独立对账 | 同表自证（N == error 行数）不能证明「失败被观察到」；不加日志就没有第三方可读的失败次数真源 |
+| D370 | T10-20：`llm/DeepSeekClient.kt` 每次尝试打一行 logcat 日志（`DKLLM attempt n=<i> kind=<k> status=<s> http=<code|none>`）；D392 修订：`kind` 由 `ChatRequest` 透传，Files 扩到 4 个文件，对账只数 `kind=(FAITHFUL|NOVEL)`，`failed=N` 用 logcat 计数做独立对账 | 同表自证（N == error 行数）不能证明「失败被观察到」；不加日志就没有第三方可读的失败次数真源 |
 | D371 | T10-21：设备 DB 三件齐拉 → 主机 rw 打开 `wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是入库证据**；`p3-e2e-08-db-sidecar.txt` 记三件合并前 bytes+sha、`DEVICE_DB_SHA256=`（合并前 .db）、`MERGED_SHA256=`（合并后 .db）、合并前后 bytes；check-export 前置断言 `--db` sha == `MERGED_SHA256` | 只拉 .db 会拿到 4096B 残缺快照（数据在 WAL），本地三件同目录能跑绿但第三方在证据上必 RED；sidecar 只记合并前 sha 会让 check-export 在正确产物上恒 RED（合并必然改写主库） |
 | D372 | T10-22：负向对照一律在 `.scratch/` 的副本上做，结束后校验原证据 sha 未变、副本 `cmp` 相同 | 直接改证据会污染已取证文件；`--db-copy` 以 ro 打开也改不了，原流程无法执行 |
 | D373 | T10-23：头部与文件名确定性——日期 Asia/Shanghai、标签 `tagId ASC` + `、`、title 换行压空格、「共 N 字」只算正文；`check-export --file-name` 断言文件名 == 推导名（含 `-v<n>`/`-raw`） | 时区/标签顺序/换行不钉死，exporter 与 checker 会各写一套（互红或一致地错）；不验文件名就无法证明导出的是选中版 |
@@ -1016,6 +1018,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D389 | T9-10：ASK 的 assistant `content` 是 `summary\nquestion` 两段拼成一条（D354 原定 `content = question ?: summary`） | 仍是**一条** content、不建版、`versionId=null`，与「不双写」初衷不冲突；摘要给上文、问题给用户回话。用例 1 断言包含 question 且恰好两条消息 |
 | D390 | T9-11：【最近三轮对话】槽值里手工前置 `【最近三轮对话】\n` | `PromptRepository.replaceSlot` 整行替换槽占位行（含标签），不补标签渲染后就没有这行小标题；改渲染器不在白名单。语义不变，渲染文本与模板标签一致 |
 | D391 | T9-12：NovelTab 正文区由 `BodyScroll` 改为内联段落渲染（按空行切段），以便同一滚动列里穿插 ASK 气泡 | 计划要求气泡在正文下方、输入条上方且同屏可滚；`BodyScroll` 是单一 Text，无法插入气泡。字号/颜色沿用 `bodyLarge`+`Paper`，与原样 tab 一致 |
+| D392 | T10-30：`failed=N` 的独立对账改为「只数生成链的失败日志」——`ChatRequest` 加 `kind`（FAITHFUL/NOVEL/REVISE，不上 wire），两个 orchestrator 各传自己的 kind，logcat 按 `status=failed` + `kind=(FAITHFUL|NOVEL)` 计数；Task 10 Files 加 `ChatModels.kt`/`GenerationOrchestrator.kt`/`ReviseOrchestrator.kt` | 原 D370 的 `grep -c " kind="` 会**同时数成功行与改稿行**（它们走同一个 `DeepSeekClient`），与 `llm_calls` 的 error 行数必不相等；且 `ChatRequest` 无 kind 字段（`ChatModels.kt:40-47`），DeepSeekClient 单文件造不出 `kind=<k>`；改稿不记账（D387）使「日志有、库无」成为常态，必须能过滤 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
@@ -1183,7 +1186,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 - 证据：`p3-revise-00-red.txt`（可编译空壳 10/10 failed）、`01-green.txt`（XML 10/0）、`02-mutation.txt`（两段变异+恢复原文）、`03-full.txt`
   （35/344/0 + 逐类统计），首三行均 host-only 例外头，REPLAY 为真实命令。
 - 偏差：D380–D391（12 条，见 §9；均为「批准」级，无返工项）。
-- PENDING（承接）：设备端渲染与交互（chips 横滚、AskBubble、输入条与 PlaybackBar 同屏、选版/失败态）归 Task 10 截图；
+- PENDING（承接）：设备端渲染与交互（chips 横滚、AskBubble、输入条与 PlaybackBar 同屏、选版/失败态）——UI 可点性归 Task 9b，设备截图归 Task 10；
   生成入口 UI（「原样整理/小说化」按钮 + 三态 + 重试）归 Task 9b（D363）；真实 DeepSeek 的 ASK/闸门重试未跑（全 fake Llm）；
   并发改稿未验证（D388）；UI 层选版失败路径无用例；改稿不记账（D387）。
 - 结论：**通过**（含上述 PENDING，均已在后续任务范围或计划偏差中登记）。
