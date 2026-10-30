@@ -1,0 +1,62 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T14:59:00Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --rerun-tasks
+
+# 目的
+
+Task 4 收尾加 `DbBackupTest`（D292）后，全量单测出现随机红；本文件记录根因、修复与修复后的连续复跑。
+
+# 修复前失败原文（Lead 后台 job 输出摘录；该次输出未落盘，故仅存关键行）
+
+    com.dreamkeeper.stt.TranscriptWriterTest > stale rawAudioMs does not write FAILED
+    kotlinx.coroutines.test.UncaughtExceptionsBeforeTest
+        at com.dreamkeeper.DreamKeeperApp$onCreate$1.invokeSuspend(DreamKeeperApp.kt:35)
+    java.lang.IllegalStateException: Pre-packaged database has an invalid schema:
+        dreams(com.dreamkeeper.data.db.DreamEntity)
+
+实测概率：1/3 次全量红（修复前）。单跑 `TranscriptWriterTest` 与 `data.db.* + stt.*` 均绿 → 跨测试类竞争。
+
+# 根因
+
+`DreamKeeperApp.onCreate` 在 `appScope.launch` 里无条件（debug 下）跑 `SeedData.seedIfEmpty(container.database)`；
+Robolectric 每个用例都会执行 `onCreate`，而 `DbBackupTest` / `MigrationTest` 会删除并重建
+`databases/dreamkeeper.db`（含 `-wal/-shm`）。后到的 seed 协程可能打开一个「SQLite 认为是新建库、
+但 schema 已非空」的半成品库，Room 在 `RoomOpenHelper.onCreate` 抛
+`IllegalStateException: Pre-packaged database has an invalid schema`；
+coroutines-test 把它记成「下一个用例开始前已有未捕获异常」，于是随机砸在别的用例上。
+
+# 修复（D293）
+
+`android/app/src/main/java/com/dreamkeeper/di/AppContainer.kt` 新增：
+
+    val seedDemoOnStart: Boolean
+        get() = BuildConfig.SEED_DEMO_DATA &&
+            Build.FINGERPRINT != "robolectric" && Build.MODEL != "robolectric"
+
+`DreamKeeperApp.kt:34` 的 `if (BuildConfig.SEED_DEMO_DATA)` 改为 `if (container.seedDemoOnStart)`。
+与既有 `audioScanOnStart` 同一门闩模式；生产 debug 行为不变。
+
+# 修复后连续复跑（每次均 --rerun-tasks）
+
+                                                              classes tests failures errors skipped exit
+    1) 2026-10-30 22:19 Lead 全量（DbBackupTest + 8 例 Task 5）    30    301      0       0       0      0
+    2) 2026-10-30 22:56 Lead 全量（连跑第 1 次）                   30    301      0       0       0      0
+    3) 2026-10-30 22:57 Lead 全量（连跑第 2 次）                   30    301      0       0       0      0
+
+XML 统计命令（与 `p3-mig-07` 同口径）：
+
+    python - <<'PY'
+    import glob, xml.etree.ElementTree as ET
+    t=f=e=s=0
+    for p in glob.glob("android/app/build/test-results/testDebugUnitTest/*.xml"):
+        r = ET.parse(p).getroot()
+        t += int(r.get("tests",0)); f += int(r.get("failures",0))
+        e += int(r.get("errors",0)); s += int(r.get("skipped",0))
+    print(f"classes={len(glob.glob('android/app/build/test-results/testDebugUnitTest/*.xml'))} tests={t} failures={f} errors={e} skipped={s}")
+    PY
+
+# 读法
+
+- 修复前 1/3 红 → 修复后连续 3 次全量绿；两次连跑之间无源码改动，只改了文档与计划。
+- 301 = 289（Task 5 前提交基线）+ 4（`DbBackupTest`，D292）+ 8（`DeepSeekClientTest`，D297）。
+- 该门闩只影响 Robolectric（测试）；生产包 `Build.FINGERPRINT` / `Build.MODEL` 恒不等于 `"robolectric"`。

@@ -473,13 +473,43 @@ T3  不调用模型                                   → faithfulText = rawTran
 ### Task 6 提示词资产与 PromptRepository
 
 > **0.0（Lead 补充）**：`assets.srcDir` 的 Sync 只许拷 `prompts/`，**不许覆盖 `assets/pricing/`**（Task 3 建）；Sync 目标目录要 `delete false` 或只清 `prompts` 子目录。
+>
+> **0.1–0.8（Lead，2026-10-30，派工前修订；依据 prompt-engineer 两轮只读预审）**
+> - **0.1 EOL 已钉**：`.gitattributes` 有 `prompts/*.md text eol=lf`（D284）。`5b9702ee`/`f189dad8`/`2ebba630`
+>   只在 LF 工作区成立；实施者先在 fresh clone 复算（`git clone --no-checkout . /tmp/x && git -C /tmp/x reset --hard`，
+>   CRLF 行数必须 0）再把三个 sha256_8 写死。任一不符 → 启动即抛 `IllegalStateException`（fail fast，不降级）。
+> - **0.2 槽语法是【…】不是 `{{…}}`（D294）**：三份文件里占位符写作 `【名】`，全库无 `{{}}`（与 plan §5:103 同口径）。
+>   9 槽 = faithful 1【待理顺转写】+ novel 3【原始转写】【理顺稿】【标签 / 选填】+ revise 5
+>   【原始转写】【当前小说稿】【当前改动清单】【用户这一条意见】【最近三轮对话】；`PromptSpec.slots` 只装这 9 个。
+> - **0.3 条件标记必须带载荷（D294）**：非槽【…】全库仅 4 处——faithful.v2:217【只做标点】、:220【上一版违规清单】、
+>   :288（在尾部变更记录内，剥尾后消失）、revise.v1:240【上一版违规清单】。`【只做标点】`是纯开关；
+>   `【上一版违规清单】`是「若附带则逐条读」的标题，**必须能送渲染好的清单文本**（`extraBlocks`/`markerPayload`），
+>   且写死追加在输入块之后；只给 `Set<Marker>` 会让 Task 8 返工。
+> - **0.4 槽位元数据**：`SlotSpec(name, required, allowEmpty)`；**7 required / 2 optional**
+>   （optional 仅【标签 / 选填】【最近三轮对话】）；`【待理顺转写】` allowEmpty=true
+>   （faithful.v2:212「只有输入为空时，才允许输出为空」）。required 槽为 null 抛 `IllegalArgumentException`；
+>   optional 槽为 null 不抛。槽名与可空性照此表写死，不许实施者自定。
+> - **0.5 剥头到 `## 输入`**：送出串从 `## 输入` 起；frontmatter（kind/version/file/temperature/outputSchema/
+>   sourceOfTruth/design/updated）、`# 标题`（faithful:16/novel:15/revise:15）、`> 对齐口径`
+>   （faithful:17-20、novel:18-19、revise:18-19）全部剥掉；断言 `startsWith("## 输入")` 且不含
+>   `sourceOfTruth:`/`对齐口径`/`kind:`。
+> - **0.6 三份统一剥尾「变更记录」（D295）**：faithful.v2:279、novel.v2:319、novel_revise.v1:301 都到 EOF；
+>   断言三份送出串都不含「变更记录」；`novel.v2 §4.4` 的完整示例是**有意 few-shot，不要剥**。
+> - **0.7 槽提示行一起替换**：9 槽各带一行 `<…>` 提示（如 faithful.v2:26）；渲染必须「替换【名】+其下提示行」，
+>   否则发送串残留 9 行占位说明。`faithful.v2:158/160/218/230` 的「§x/设计 §y」是行内引用，可留。
+> - **0.8 不写库 / README（D296）**：漂移只 `Log.w`（D285），不建 `prompt_versions`、不改 `DreamDatabase`；
+>   `prompts/README.md:30-37` 删「20 条真实梦 + 1–5 分」（D81/d275f4a），`:3` 与 plan:98-99 相反的
+>   sourceSets 说法改掉，补一句「槽=【名】，条件标记另行追加」。
 
 - Files：`android/app/build.gradle.kts`（Sync 任务 + `assets.srcDir`）、`llm/PromptRepository.kt`、
-  `llm/PromptSpec.kt`（槽位表）、`test/.../PromptRepositoryTest.kt`。
-- 要点：三个提示词的 sha256_8 作为**内置断言向量**（`5b9702ee`/`f189dad8`/`2ebba630`，任一不符即启动即失败）；
-  剥头、槽位替换、缺槽抛错；送出串不含 `promptId:` 与 `<!--`。
-- Steps：先写（哈希向量、剥头、槽位、缺槽、无注释残留）5 条，红 → 实现 → 绿；`processDebugAssets` 后
-  `unzip -l app-debug.apk | grep prompts/` 显示 `assets/prompts/*.md`。
+  `llm/PromptSpec.kt`（槽位表 + 标记枚举 + 载荷参数）、`prompts/README.md`、`test/.../PromptRepositoryTest.kt`。
+- 要点：三 sha256_8 内置断言（0.1）；从 `## 输入` 起（0.5）；三份剥尾（0.6）；9 槽替换（0.2/0.7）；
+  required/allowEmpty（0.4）；标记开关+载荷（0.3）；不写库（0.8）；Sync 只拷 `prompts/`（0.0）。
+- Steps：先写 9 条用例（哈希向量、`startsWith("## 输入")`、三份无「变更记录」、9 槽全部替换、
+  缺 required 抛错、optional 为 null 不抛、`【只做标点】`开关、`【上一版违规清单】`载荷追加在输入块后、
+  送出串无注释/无槽提示残留）→ 红 → 实现 → 绿；再跑 `processDebugAssets` + `assembleDebug` 做 0.0 证据。
+- Expected：9/0 绿，且变异（不剥尾 / 把 `【上一版违规清单】`当纯开关）至少各红一次；`unzip -l app-debug.apk`
+  里三件 `assets/prompts/*.md` 与 `assets/pricing/deepseek.json` 同现（后者 sha 不变）。
 
 ### Task 7 五闸门 Kotlin 移植
 
@@ -599,6 +629,20 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D290 | T5-5：`EMPTY_CONTENT`/`INVALID_JSON` 不进 client 重试链，覆盖设计 §9:374「解析失败按一次失败计入重试链」 | 这两类大概率是确定性坏返回，重试 4 次=4 倍成本；修复归 Task 7 闸门与 Task 8 编排；用户侧有重试按钮兜底 |
 | D291 | T5-6：`sleeper` 改 `suspend (Long)->Unit`（默认 `delay`）；超时用 `client.newBuilder()` 派生；取消断言用 `EventListener.canceled` 计数；`Attempt` 补 `requestId`/`startedAtMs` 且每交换必记 | Thread.sleep 版 sleeper 会让退避中取消等满 4s；不派生 builder 则注入单例超时覆盖参数（超时用例挂 180s）；测试取不到内部 Call；峰谷判定必须按尝试时刻（跨 12:00 的重试） |
 
+| D292 | T4-18：Task 4 收尾补测发现 `DbBackup.readUserVersion` 对损坏库会删文件，改传 no-op `DatabaseErrorHandler`，并补 `DbBackupTest` 4 例 | 默认 `DefaultDatabaseErrorHandler` 在 NOTADB/CORRUPT 时 `deleteDatabase()`，而该探针跑在 Room 打开前——等于「备份动作先毁掉要备份的库」（违反 §0.8）；实测改前 `exists=false len=0`、改后 `exists=true len=32` |
+
+| D293 | T4-19：Robolectric 下不灌种子（`AppContainer.seedDemoOnStart`），修掉全量单测随机红 | Application 的 IO seed 协程会与 `DbBackupTest`/`MigrationTest` 删建 `dreamkeeper.db` 抢同一个文件，schema 校验异常被 coroutines-test 记进「下一个用例开始前」；实测 3 次全量里 1 次 `TranscriptWriterTest` 报 `UncaughtExceptionsBeforeTest`（栈顶 `DreamKeeperApp.kt:35`）；与 `audioScanOnStart` 同一门闩模式，生产 debug 不受影响 |
+| D294 | T6-1：Task 6 提示词渲染把「槽」与「条件标记」拆成两个入参，槽位写死 9 个【…】+ 7 required/2 optional 元数据，条件标记带载荷（`extraBlocks`） | prompt-engineer 逐行读三份提示词：占位符是 `【名】` 不是 `{{}}`；非槽【…】仅 4 处（faithful.v2:217/220/288、revise.v1:240）；`【上一版违规清单】`必须送渲染好的清单文本，纯 `Set<Marker>` 送不出；若统一当槽，可选槽会被强制填值或漏追加 |
+| D295 | T6-2：送出串除剥头外还要剥 novel.v2 尾部「变更记录」整段 | R8：该段在文件末尾、无特殊标记，原计划只剥头会把内部变更记录整段送进模型 |
+| D296 | T6-3：剥头锚点从「去掉 `<!-- -->` 块」改为「从 `## 输入` 起」，`prompts/README.md` 随 Task 6 一起对齐 | 只剥注释块会漏掉 frontmatter（kind/version/outputSchema/sourceOfTruth…）、`# 标题`、`> 对齐口径` 三段，全部会进模型；README `:30-37` 与 D81/d275f4a 冲突、`:3` 与 plan:98-99 相反 |
+| D297 | T5-1：Task 5 按 8 条用例执行（派工书 Step 2/4 仍写「7 条 / 289+7=296」） | 派工书与计划 §0.1–§0.10 自相矛盾：`332bcd8` 已把契约定为 8 条（多「退避中取消 <200ms」）；干净基线全量应为 289+8=**297**；工作树实测 301 = 289 + `DbBackupTest` 4 例（D292）+ 8 |
+| D298 | T5-2：`ChatResponse.latencyMs` 定为端到端（含退避），单次 HTTP 交换耗时看 `attempts[i].latencyMs` | 契约只写 `latencyMs` 未定义口径；Task 8 记账用 `attempts`（每尝试一行），响应级展示取端到端更符合用户感知；已在 KDoc 写明 |
+| D299 | T5-3：超时用例显式 `RetryPolicy(maxAttempts=1)`，只验证「分类=TIMEOUT + 总耗时 <2s」，不验证「超时会重试」 | `LlmException.Kind.TIMEOUT.isRetryable=true`，默认 4 次尝试会突破验收里的「<2s」；要验证超时重试需放宽耗时或注入假超时，留给 Task 8 联调 |
+| D300 | T5-4：`Retry-After` 只测秒值（`2`→2000ms），HTTP 日期（RFC1123）分支未测；注入的 `clock` 必须是 epoch ms（日期分支依赖它算差值） | 8 条用例只覆盖秒值；日期分支用 `ZonedDateTime.parse` − `clock()`，若 Task 8 传单调时钟（`nanoTime` 量级）会得到被 clamp 成 60s 的错误值 |
+| D301 | T5-5：解析失败（`EMPTY_CONTENT`/`INVALID_JSON`）不新增 `Attempt`，而是把最后一条 200 的 `errorKind` 改写为该 kind；请求体额外带 `Accept: application/json`（契约未要求，无害） | 与 D290「解析失败不重试」一致：一次 HTTP 交换仍只有一条 Attempt；若 Task 8 需要「解析失败单独一行」需再约定 |
+| D302 | T5-6：`p3-llm-00-red.txt` 对应用例 1 的早期断言（enabled 请求 `messages` 1→2 修正后未重跑红） | 红阶段 8/8 失败由 stub 的 `NotImplementedError` 决定，用例 1 断言修正只放宽了 `messages` 条数（1→2），不改变「8 条全红」结论；红证据保留原样以证明先红 |
+| D303 | T5-7：Task 5 全程离线（本地 `HttpServer`），真实 `api.deepseek.com` 未访问；403/5xx/普通 `IOException` 重试、`readTimeout` 单独触发、jitter 随机性均无用例 | 契约 G-3 要求零真实调用；这些路径归 Task 8 真机联调 + Task 10 验收 PENDING |
+
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
 ## 10. 自审记录
@@ -647,11 +691,34 @@ T3  不调用模型                                   → faithfulText = rawTran
 ### Task 4 验收（Lead，2026-10-30）
 
 - 交付：`c800a87`（31 文件 +3088/−10，全部在白名单内）+ `d681247`（`p3-mig-06` 负向对照入库）+ `b2054ba`（证据补件 7 文件 +176/−5）。
-- Lead 独立复跑：`:app:testDebugUnitTest --rerun-tasks` 全绿，XML **28 类 / 289 例 / 0 失败 / 0 错误 / 0 跳过**（`p3-mig-07-full-tests.txt`）；`MigrationTest` 单跑 3/3 PASS。
+- Lead 独立复跑：`:app:testDebugUnitTest --rerun-tasks` 全绿，补测后 XML **29 类 / 293 例 / 0 失败 / 0 错误 / 0 跳过**（`p3-mig-07-full-tests.txt` 是补测前 28 类/289 例的快照）；`MigrationTest` 单跑 3/3 PASS。
 - 设备侧逐字节复核（evidence collector 独立做，Lead 复读）：装机包 sha256 `661d1d6b…ac093` == 证据 APK；设备 `databases/dreamkeeper.db` sha256 `30e8566c…230e` 与入库 `p3-mig-02-after.db` 相同；`files/db-backup/dreamkeeper-v1-20261030-214235.db` sha256 `ea73f2a4…c87e` 与入库 baseline 相同；live dump 对 baseline `--diff` → `RESULT: GREEN`。
 - 迁移口径：`tables 5→9`、`user_version 1→2`、`dreams rows 5` 逐列 20 列等值、`updatedAt` 5/5 不变、两新列 10/10 为 NULL、`identity_hash 3150a0bc…→166666e5…`、integrity ok、FK 0。
 - 变异反证：删 `novel_messages` 的 CREATE+索引 → 3/3 红（`Migration didn't properly handle: novel_messages(com.dreamkeeper.data.db.NovelMessageEntity)`）；恢复后 3/3 绿（`p3-mig-04`）。负向数据对照：改 `seed-dream-1` 的 title → `RESULT: RED: 1 处不一致`、exit 1（`p3-mig-06`）。
 - SQL 同源：`MIGRATION_1_2` 的 8 条 CREATE 与 `2.json` 的 8 条新增**逐字一致**（A 6/6、B 8/8，`p3-mig-08-sql-verbatim.txt`）；`create()` 挂 `addMigrations` 1 次、`fallbackToDestructiveMigration` 代码调用 **0 处**（只在注释里出现 2 次字样）。
 - 降级：装回 v1 包 → `IllegalStateException: A migration from 2 to 1 was required but not found`（`p3-mig-05`）；唯一兜底是升级前 `files/db-backup/` 副本（D270）。
-- PENDING（不阻断验收，均有 D 号/归属）：release 包升级与物理真机（不可 `run-as`）、迁移耗时（§14.5 归 Plan 4）、WAL-resident 形态、`p3-mig-05` 的 v1 包需自备（D281）、`DbBackup` 四分支单测（Lead 指派 Mobile App Builder 补测中）。
+- 收尾补测（D292）：`DbBackupTest` 4/4 绿——`v1SnapshotCopiesDbAndPresentSidecarsWithTimestampedName`（真 WAL 三件 `db=20480/wal=8272/shm=32768`）、`v2LibraryPrunesOldSnapshotsKeepingOnlyNewest`（留一份 + 连旧 `-wal/-shm` 一起清）、`missingDatabaseReturnsNullAndDoesNotCreateBackupDir`、`unreadableDatabaseReturnsNullWithoutThrowing`。补测暴露 `DbBackup.readUserVersion` 用默认 `DatabaseErrorHandler` 在 NOTADB/CORRUPT 时会**删掉原库文件**；已改 no-op handler（`NO_DELETE_ON_CORRUPTION`），实测 `corruptProbe exists=true len=32 expectedLen=32`（改前 `exists=false len=0`）。
+- PENDING（不阻断验收，均有 D 号/归属）：release 包升级与物理真机（不可 `run-as`）、迁移耗时（§14.5 归 Plan 4）、WAL-resident 形态、`p3-mig-05` 的 v1 包需自备（D281）、`DbBackup.isIntact` 未同步硬化（不在 `readUserVersion` 调用链，P2 观察项，D292）。
 - 结论：**Task 4 验收通过**（迁移逻辑 + 证据链闭合；上面 PENDING 项不改变「数据一字不丢」的结论）。
+
+### Task 5 验收（Lead，2026-10-30）
+
+- 交付：`05af3a2`（基于 `332bcd8`，8 文件 +1368）：`llm/LlmClient.kt`（`suspend fun chat` + `RetryPolicy`）、
+  `llm/ChatModels.kt`（`Thinking`/`ReasoningEffort`/`ChatRequest`/`Usage`/`Attempt`/`ChatResponse`/`LlmException` 8 种 kind + `isRetryable`）、
+  `llm/DeepSeekClient.kt`（345 行：派生超时、取消、指数退避 + `Retry-After`、usage 解析、Key 掩码）、
+  `test/.../llm/DeepSeekClientTest.kt`（515 行 / 8 例，Robolectric sdk=34 + 本地 `com.sun.net.httpserver`）、
+  `docs/evidence/plan3/p3-llm-{00-red,01-green,02-mutation,03-full}.txt`。
+- Lead 独立复跑：`--tests "com.dreamkeeper.llm.DeepSeekClientTest" --rerun-tasks` → BUILD SUCCESSFUL 16s（8/8）；
+  全量 `--rerun-tasks` **连续两次** BUILD SUCCESSFUL（24s），XML **30 类 / 301 例 / 0 失败 / 0 错误 / 0 跳过**（含 D292 的 `DbBackupTest` 4 例，同时验证 D293 的随机红门闩已生效）。
+- 契约逐条：§0.1 注入 + `client.newBuilder().callTimeout/readTimeout`；§0.2 每次交换/传输错误各一条 `Attempt`；
+  §0.3 usage 四字段 + `requestId/httpStatus/latencyMs/finishReason`；§0.4 `CancellationException` 透传 +
+  `invokeOnCancellation { call.cancel() }` + `ensureActive` 守卫；§0.5 8 种 kind、D290（EMPTY/INVALID 不重试）；
+  §0.6 显式 import；§0.7 Robolectric；§0.8 `thinking` 顶层、enabled 才发 `reasoning_effort` 且不发 temperature、
+  `response_format` 仅 jsonMode；§0.9 无 DB/prompts 引用；§0.10 退避 1000/2000/4000 + `Retry-After` 优先并夹 60s。
+- 变异：`invokeOnCancellation { call.cancel() }` → 空实现，用例 7 红（`EventListener.canceled` 实际 0，
+  `8 tests completed, 1 failed`），恢复后 8/8 绿；原文 `p3-llm-02-mutation.txt`。
+- 证据：`p3-llm-00`（8/8 失败，6×`NotImplementedError`）→ `01`（8/8 绿 + XML）→ `02`（变异 1/8 红）→
+  `03`（全量 30 类 / 301 例 / 0 失败）；host-only 头 `APK_SHA256=n/a` / `DEVICE_TIME=host-only <UTC>` / `REPLAY=gradlew`。
+- PENDING（D297–D303）：真实 API 联调、403/5xx/普通 IOException 重试、`Retry-After` 日期形式、`readTimeout`、
+  jitter 随机性；`latencyMs` 口径与「解析失败是否单独占一行」在 Task 8 记账时确认。
+- 结论：**Task 5 验收通过**。

@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 22:05 —— **Plan 3 4/10：Task 1–4 验收通过**（数据库 v2 迁移证据链闭合），Task 5 派工中
+> 最后更新：2026-10-30 22:58（Task 5 验收通过：8/8 用例 + 全量 301 例绿，专家复核闭环）
 
 ## 一、当前在做
 
@@ -51,15 +51,15 @@
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
 
 
-## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 4/10
+## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 5/10
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | 1 接线：权限、依赖、设置页骨架 | ✅ 完成 | `INTERNET` + debug 明文放行、OkHttp、`Settings` 路由、`AppContainer` 三个 lazy |
 | 2 Key 加密存储 | ✅ 完成 | AES/GCM + Keystore，只存 base64 密文，日志零明文 |
 | 3 价卡与成本计算 | ✅ 完成 | 资产 price card、峰谷判定、整数微元、`check-cost.py` 复算 |
-| 4 数据库 v2 迁移 | ✅ 完成 | `c800a87`+`d681247`+`b2054ba`：四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest + `check-migrate.py`；升级前 DbBackup 快照；设备实证 5→9 表、20→22 列逐列全等、降级必崩有原文（`p3-mig-0*`） |
-| 5 LlmClient（OkHttp + org.json） | ⬜ | 顶层 thinking/effort、空 content 判失败、429 退避、取消 |
+| 4 数据库 v2 迁移 | ✅ 完成 | `c800a87`+`d681247`+`b2054ba`：四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest + `check-migrate.py`；升级前 DbBackup 快照；设备实证 5→9 表、20→22 列逐列全等、降级必崩有原文（`p3-mig-0*`）；收尾补 `DbBackupTest` 4 例（D292） |
+| 5 LlmClient（OkHttp + org.json） | ✅ 完成 | `05af3a2`：`ChatModels`/`LlmClient`/`DeepSeekClient`（派生超时、取消落 OkHttp Call、退避 1000×2 + `Retry-After`、usage 四字段、8 种错误分类）+ 8 例本地 `HttpServer` 单测（先红后绿 + 变异红）；全量 30 类/301 例绿（`p3-llm-0*`） |
 | 6 提示词资产与 PromptRepository | ⬜ | Sync 到 build/gen、剥头、槽位、sha256_8 断言 |
 | 7 五闸门 Kotlin 移植 | ⬜ | 断言失败闸门集合、2-gram/PUNCT 照搬、T2 等值校验 |
 | 8 GenerationOrchestrator | ⬜ | T0–T3 失败链、单飞、每次尝试一行 llm_calls |
@@ -119,7 +119,8 @@
 - §14 七条验收里，Plan 1 只覆盖 §14.7（负向证据：无网络权限、uid 无收发包）；其余六条都在 Plan 2/3/4，已逐条写明原因与补测时点。
 - **转写两处缺口（Plan 2 遗留，Task 8 前必须决策）**：① 一次成功转写后再补录，补录段的写回 CAS 双 0 行、永远进不了 `rawTranscript`（D202）；② PENDING 卡死没有任何重试入口（单飞跳过 + dataSize 变化丢弃 + 进程被杀 → 详情页永久「正在转写…」）。两者都会让理顺/小说化拿半截原文 → Task 8 必须加闸门 `transcriptStatus==OK && rawTranscript.trim().isNotEmpty()`；修法 F1（启动补转写）/F3（单飞补跑）优先，F2（后缀追加 CAS）进 Task 8 契约。
 - **`DreamRepository.save()` 是整行 `@Insert(onConflict=REPLACE)`**：Task 8/9 若拿旧 Dream 写稿，会把并发写回的转写文本覆盖成空 + PENDING（Plan 2 的 CAS 拦不住整行替换）→ 必须新增 `updateFaithfulText`/`updateNovelText` 窄更新 + stale-save 回归用例。
-- **`DbBackup` 四分支无单测**：Lead 已指派 Mobile App Builder 补测中，不阻断 Task 4 验收。
+- **`DbBackup` 四分支已有单测（`DbBackupTest` 4 例，D292）**；补测顺带修掉「损坏库探测会删原文件」的副作用（`isIntact` 未同步硬化，P2 观察项）。
+- **全量单测曾有 1/3 概率随机红**（`TranscriptWriterTest` 报 `UncaughtExceptionsBeforeTest`，根因是 `DreamKeeperApp` 的 IO seed 协程与 `DbBackupTest`/`MigrationTest` 删建 `dreamkeeper.db` 抢文件）→ 已加 Robolectric 门闩 `AppContainer.seedDemoOnStart`（D293），连跑 3 次全量绿。
 
 ## 七、这一轮的真实收获（不是计划内的）
 
