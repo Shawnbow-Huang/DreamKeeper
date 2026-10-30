@@ -1,0 +1,57 @@
+APK_SHA256=96c550ec0625d818..  (9,629,108 B, release 未签名产物 + debug keystore 重签; 完整 sha 见下)
+DEVICE_TIME=Sat Oct 31 04:08:51 CST 2026
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:assembleRelease --console=plain
+
+# T7 证据 01：release 构建 / 重签 / 装机 / 冷启动 ×3
+
+## 构建
+```
+BUILD SUCCESSFUL in 1m 22s
+51 actionable tasks: 12 executed, 1 from cache, 38 up-to-date
+android/app/build/outputs/apk/release/app-release-unsigned.apk   9,612,189 B
+```
+- release 没有 signingConfig（`android/app/build.gradle.kts` 只配了 `SEED_DEMO_DATA=false`），
+  产物是 `-unsigned`；为了让「安装」这一步可验证，用 debug keystore 重签成可安装包——
+  **这只是验证载体，不是发布签名**，正式发布签名与密钥保管不在本计划范围。
+- 重签命令（JAVA_HOME 用 Studio JBR；apksigner 在 build-tools/36.0.0）：
+  `apksigner sign --ks ~/.android/debug.keystore --ks-pass pass:android --key-pass pass:android --ks-key-alias androiddebugkey <apk>`
+- 重签后 sha256 `96c550ec0625d8186fa66668b56e364759623c5102b9b84e35aeab4734286c40`，9,629,108 B。
+
+## 装机与双端一致
+- `adb install -r` → `Success`。
+- `pm path com.dreamkeeper` → `/data/app/~~AbFfkigwv696cPpX8KVpyA==/com.dreamkeeper-72JZ9cZWyFnU5bep-NtC1g==/base.apk`，
+  `adb pull` 回来后 sha256 与重签包**逐字节相同**（前16 `96c550ec0625d818`）。
+
+## 冷启动 ×3（force-stop 后重新 am start -W）
+| 次 | Status | TotalTime |
+| --- | --- | --- |
+| 1 | ok | 934 ms |
+| 2 | ok | 866 ms |
+| 3 | ok | 898 ms |
+
+- 3 次冷启动后 `pidof com.dreamkeeper` = 23163（存活），`logcat -d | grep -c "FATAL EXCEPTION"` = **0**。
+- 数据保留：首页「共 5 天有梦」、日历 10/1、10/8、10/15、10/22、10/30 五点仍在——
+  说明 release 覆盖安装没有清库，`DB v3` 迁移后老数据可读。
+
+## 包内资产（release 必须与 debug 一致）
+```
+678   assets/pricing/deepseek.json
+22062 assets/prompts/CHANGELOG.md
+3951  assets/prompts/README.md
+22272 assets/prompts/faithful.v2.md
+30795 assets/prompts/novel.v2.1.md
+24516 assets/prompts/novel_revise.v1.1.md
+29344 assets/prompts/novel.v2.md
+23142 assets/prompts/novel_revise.v1.md
+...（其余留档版本同样在包内）
+```
+`assets/pricing/deepseek.json` 678 B 与 debug 包同尺寸；三份在用提示词尺寸与仓库源一致。
+
+## 读法 / 局限
+- release 的 `SEED_DEMO_DATA=false` 是构建期常量（`build.gradle.kts` release 块），本包**没有**做
+  「卸载后全新首次启动」验证：release 不可 `run-as`，卸载会丢掉本机证据库。全新安装的种子行为
+  记 PENDING（真机发布前再做）。
+- 本次没有做 R8/混淆：`assembleRelease` 走的就是默认配置，`minifyEnabled` 未开，所以不存在
+  需要补 keep 规则的失败面。
+
+PNG（冷启动画面）= `p4-release-02-launch.png`

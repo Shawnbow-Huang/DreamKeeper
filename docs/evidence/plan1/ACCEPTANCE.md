@@ -172,3 +172,26 @@ design v1.5 的 §14 共 8 条；本节只写「本轮（Plan 2 / Task 9）结�
 | A22 生成入口可点、失败可重试 | `p3-e2e-09-failed.txt`、`p3-e2e-09b-retry.txt` | ✅ PASS |
 | A23 降级/兜底链证据 | `p3-e2e-14-misc-checks.txt`、全量 JVM | ✅ PASS（STT 未用 → PENDING） |
 | A24 导出下界 API29+ | `p3-e2e-06-export.txt`、`p3-e2e-14-misc-checks.txt` | ✅ API29+ 三格式；⚠️ API26–28 下界 PENDING（无镜像） |
+
+## 3e 语音追加与小说化显式触发证据表（Plan 4 / T7）
+
+> 分支 `plan4-voice-append`，基线 `00a9cf2`；终态全量 **49 类 / 418 例 / 0 失败**。
+> 逐项细节见 `docs/evidence/plan4/FINAL-REVIEW.md`；PENDING 白名单见其 §五。
+
+| 能力/断言 | 证据文件 | 结论 |
+|---|---|---|
+| B1 详情页「补一段」入口常驻（原样 tab） | `p4-append-05-ui.png/.txt` | ✅ PASS |
+| B2 追加复用同一 WAV、`rawAudioMs` 推进 | `p4-append-06-append.png/.txt`（140844 B = 44+4400×32） | ✅ PASS |
+| B3 只转写尾段、不重复旧段 | `p4-append-03-tailwriter.txt`、`TranscriptAppendTest` 7 例 | ✅ PASS（真实中文 STT PENDING，P1） |
+| B4 水位 CAS 幂等 + save() 不回退水位 | `p4-append-00..02`、`AppendTranscriptTest` 10 例、`DreamRepositoryTranscriptWatermarkTest` 2 例 | ✅ PASS（变异必红） |
+| B5 启动 reconcile + 重试/跳过入口 | `p4-append-03`、`p4-append-05`（「还有 2 秒没转成文字」） | ✅ PASS（设备转写失败停 PENDING 交补跑） |
+| B6 忠实稿落库 + 小说化两槽分离 | `p4-faithful-00-base.txt`（变异 2 处必红） | ✅ PASS |
+| B7 小说化显式触发 + 想法对话框 | `p4-novel-00..02`（弹框 / 生成 v8 / 无自动触发用例） | ✅ PASS（中文想法输入 PENDING，P6） |
+| B8 `novel.v2.1` 第 4 槽 + `novel_revise.v1.1` 分流 | `PromptRepositoryTest` 11 例、APK 资产清单 | ✅ PASS（真实质量未评，D417） |
+| B9 版本线过滤 faithful + 列表用选中版 | `p4-ui-01..02`、`VersionStripFilterTest`、`LibraryPreviewTest` | ✅ PASS |
+| B10 成本行 + 生成 app-scope | `p4-ui-03-cost`（¥0.0105）、`p4-ui-04-scope`（离开再回 ¥0.0114/v9）、`GenerationScopeTest` 4 例 + `AppendEntryTest` 第 7 例 | ✅ PASS（进程被杀恢复 PENDING，P7） |
+| B11 DB v2→v3 迁移与回填 | `p4-mig-00..02`、`MigrationV2ToV3Test` 3 例、`check-migrate --diff` v1→v2 逐字不变 | ✅ PASS |
+| B12 release 构建/装机/冷启动 ×3 | `p4-release-01-build.txt`、`p4-release-02-launch.png` | ✅ PASS（全新安装种子 PENDING，P3） |
+| B13 API 26–28 导出门禁 | `p4-api26-01.txt` | ⚠️ PENDING（无镜像，P4） |
+| B14 三格式打开态 | `p4-api26-01.txt`（只 htmlviewer） | ⚠️ PENDING（环境，P5） |
+| B15 全量绿 + 证据头/Key/偏差纪律 | 全量 XML 49/418/0；`FINAL-REVIEW.md` §四 | ✅ PASS（D415–D460 全部登记） |

@@ -472,7 +472,11 @@ suspend fun commitSuccess(
 | D454 | 2026-10-31 | T6b | 新增 5 例（4 例 `GenerationScopeTest` + 1 例 `AppendEntryTest`），不是计划写的 4 例 → 49 类/418 例 | 纯 tracker 单测杀不掉「VM 忘了写 tracker」这个变异；第 5 例用真 Room + 门闩 runner 证明 `publishPhase` 真的同步了两处 |
 | D455 | 2026-10-31 | T6b | 设备截图 nearWhite≈0.13% 沿用 D441 的状态栏例外 | 两张图都是详情页深色背景，白像素集中在状态栏与手势条；正文本体 nearWhite=0 |
 | D456 | 2026-10-31 | T6b | 设备证据用「离开再回来成本 0.0105→0.0114、版本 v8→v9」证明 app-scope，Running 瞬态未截到 | 本机生成约 25s，导航往返约 6s，回来时已完成；Running 语义由第 5 例与 `runningPhaseSurvivesOutsideTheViewModel` 守，不硬凑截图 |
-## 10. 自审记录
+
+| D457 | 2026-10-31 | T7 | release 未签名，用 debug keystore 重签后安装验证 | 仓库没有 signingConfig，`app-release-unsigned.apk` 装不上；重签只为验证「release 变体可构建/可启动」，不是发布签名，正式签名与密钥保管不在本计划 |
+| D458 | 2026-10-31 | T7 | API 26–28 导出门禁保持 PENDING（无镜像） | SDK 只有 `system-images/android-37.0/x86_64`；代码门禁（SDK_INT>=Q）已落，缺的是可启动的 API 28 设备 |
+| D459 | 2026-10-31 | T7 | 三格式「打开态」保持 PENDING（无查看器） | `pm list packages` 只匹配 `com.android.htmlviewer`，无 PDF/Office 查看器；结构断言仍 GREEN |
+| D460 | 2026-10-31 | T7 | release 全新安装的种子行为未验证 | release 不可 `run-as`，卸载会丢本机证据库；`SEED_DEMO_DATA=false` 只在构建配置层面确认 |## 10. 自审记录
 
 ### T0 契约冻结（Lead，2026-10-31）
 - 交付：`724d13e`（计划 404 行）、`71cd30b`（Voice AI 复核收紧）、本文档后续修订。
@@ -582,3 +586,13 @@ suspend fun commitSuccess(
 - **证据**：`p4-ui-05-tests.txt`（host-only）、`p4-ui-03-cost.{png,txt}`（成本行 ¥0.0105）、`p4-ui-04-scope.{png,txt}`（离开再回来：¥0.0114、v9、补写 4 处）。
 - **PENDING**：进程被杀后的 Running 恢复（tracker 是内存态）；真实网络的长时间离开（T7 真机）；成本行在 0 请求梦上的设备截图（JVM 已锁）。
 - **结论**：通过。Task 6 收口；下一步 T7（发布就绪与终验）。
+
+### Task 7 验收（Lead，2026-10-31）
+
+- **交付**：release 变体构建（未签名）→ debug keystore 重签 → 安装；`p4-release-01-build.txt`/`p4-release-02-launch.png`；`p4-api26-01.txt`；`docs/evidence/plan4/FINAL-REVIEW.md`；`docs/evidence/plan1/ACCEPTANCE.md` `## 3e`；看板 8/8。
+- **Lead 独立复跑**：全量 `--rerun-tasks` **49 类 / 418 例 / 0 失败 / 0 错误 / 0 跳过**（T6b，54s，T7 无新增单测）；release 冷启动 ×3（934/866/898 ms）、`FATAL EXCEPTION` 0、双端 APK sha 一致 `96c550ec0625d818…`。
+- **契约核对**：release 包内 `assets/prompts/novel.v2.1.md`(30795B)/`novel_revise.v1.1.md`(24516B)/`pricing/deepseek.json`(678B) 与 debug 同源；`SEED_DEMO_DATA=false`（构建配置）；覆盖安装后库数据 5 天仍在（v3 迁移可读）。
+- **环境探测**：`system-images` 仅 `android-37.0/x86_64` → A24/B13 PENDING；`pm list packages` 仅 `com.android.htmlviewer` → 打开态 B14 PENDING。
+- **证据**：`p4-release-01..02`、`p4-api26-01`、`FINAL-REVIEW.md`、ACCEPTANCE `## 3e`。
+- **PENDING**：P1–P9（FINAL-REVIEW §五）。
+- **结论**：通过。Plan 4 8/8；下一步 Plan 5（UI 打磨/生图/真机/发布）。

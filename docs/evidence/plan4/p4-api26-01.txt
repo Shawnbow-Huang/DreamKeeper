@@ -1,0 +1,33 @@
+APK_SHA256=96c550ec0625d818..  (release 重签包，见 p4-release-01)
+DEVICE_TIME=Sat Oct 31 04:08:51 CST 2026
+REPLAY=adb shell pm list packages | grep -iE "pdf|viewer|office|wps" ; ls "C:/Users/17383/AppData/Local/Android/Sdk/system-images"
+
+# T7 证据 02：API 26–28 与「打开态」的环境探测（A24 / A5 为什么只能是 PENDING）
+
+## API 26–28：本机没有可启动镜像
+```
+ls .../Sdk/system-images  →  android-37.0/x86_64   （唯一一个）
+```
+- 现有 AVD（emulator-5554）是 API 37；`emulator -list-avds` 只有这一个。
+- 结论：**A24（API 26–28 导出门禁）无法实机验证**，保持 PENDING；代码侧门禁已落
+  `Build.VERSION.SDK_INT >= Q`（`DetailScreen.kt` 的 `exportSupported`），并有
+  `p4-ui` 系列设备证据证明 API 37 下可用。
+- 补齐办法（不在本计划内）：装 `system-images;android-28;google_apis;x86_64` 建 AVD，
+  跑一次导出，断言按钮禁用 + 文案「系统版本过低」。
+
+## 打开态：没有 PDF/Office 查看器
+```
+pm list packages | grep -iE "pdf|viewer|office|wps"
+package:com.android.htmlviewer        ← 只匹配到 htmlviewer，不是 PDF/Office 查看器
+```
+- AOSP 镜像没有 PDF 阅读器，也没有 Word 查看器；系统「文件」App 可以打开文本类，
+  但 PDF 打开会黑屏（Plan 3 已实测，D359）。
+- 因此 A5「txt/docx/pdf 三格式在设备上可打开」保持 PENDING：
+  - txt：结构 + 内容断言已 GREEN（`check-export`），系统文件 App 可预览；
+  - docx：结构断言 GREEN（zip + word/document.xml + 段序），打开态 PENDING；
+  - pdf：结构断言 GREEN（`/Type /Pages`、`/Contents`、`/BaseFont`），打开态 PENDING。
+- 补齐办法：真机上装 WPS/Google PDF Viewer 各开一次，各截一张图；或换带查看器的镜像。
+
+## 与 Plan 3 的口径一致
+Plan 3 的 FINAL-REVIEW 已把 A5/A24 记 PENDING（环境限制，不是实现缺陷）；本计划没有改变
+导出实现，只改变其前置（梦的最终稿来源 `resolveFinalNovel`），结构断言仍必须 GREEN。
