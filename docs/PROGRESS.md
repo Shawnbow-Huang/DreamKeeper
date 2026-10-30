@@ -65,9 +65,9 @@
 | 7 五闸门 Kotlin 移植 | ✅ 完成 | `b4242b4`：`GateResult`/`FaithfulGates`（G1–G5 全算不短路、按码点复刻 `check-faithful.py`：25 码点空白、`\p{Nd}`、bigram/24 窗/±6 ctx、G4 跨场景、G5 防回绕）+ 15 条冻结向量 15/15 （plain JUnit + 手写 MiniJson）；变异 G1 恒空 → 7 红；全量 32 类/326 例绿（`p3-gates-0*`） |
 | 8 GenerationOrchestrator | ✅ 完成 | `cd297d8`：T0–T3 失败链（T2 只认 `isConservativeOk`）、NOVEL 单次 JSON、单飞 `tryLock`、每次 HTTP 交换一行 `llm_calls`（失败行 cost=0/usageJson=null）、成功一个事务写 `novel_versions` + `dreams` 窄更新；8 例先红后绿 + 两处变异（2 红 / 1 红）；全量 33 类/334 例绿（`p3-gen-0*`）；UI 接线归 Task 9（D351/D352） |
 | 9 对话改稿 + 多版本 | ✅ 完成 | `c1c8d75`：`ReviseOrchestrator`（ASK 只落两条消息不建版 / REVISE 必建版 + 闸门重试载荷）、`VersionStrip`、`ReviseSheet` 六快捷 chips、`resolveFinalNovel = selected ?: maxVersion`、`selectVersion` 只窄更新；10 例（8+2）先红后绿 + 两处变异（2 红/1 红）；全量 35 类/344 例绿（`p3-revise-0*`）；偏差 D380–D391 |
-| 10 导出与验收证据 | ⬜ | txt/docx/pdf、check-export、ACCEPTANCE §3d、终审 |
+| 10 导出与验收证据 | ✅ 完成 | `7a7e5d4`+`97d841e`+`57eee1e`+`af88286`：导出 txt/docx/pdf（零依赖）、`check-export.py`、设备 E2E 0–13 步、A1–A24、FINAL-REVIEW；D406 修入口可见性（`a774ebe`），全量 39 类/365 例绿 |
 
-任务书：[plans/2026-10-30-generation-and-cost.md](superpowers/plans/2026-10-30-generation-and-cost.md) · 分支 `plan3-generation`（从 `plan2-done` 的 `bb11fe2` 切出）
+任务书：[plans/2026-10-30-generation-and-cost.md](superpowers/plans/2026-10-30-generation-and-cost.md) · Plan 4 任务书待建 · 分支 `plan3-generation`（从 `plan2-done` 的 `bb11fe2` 切出）
 
 **Plan 3 的目标**：用用户自己的 DeepSeek Key，「理顺」得到忠于原梦的原样稿（四级失败链 + 五闸门），
 「小说化」得到能读的小说稿（改动清单可查），不满意能对着稿子说人话让它改（ASK 先问 / REVISE 必留版），
@@ -80,11 +80,11 @@
 
 | # | 需求 | 落点 | 状态 |
 |---|---|---|---|
-| 1 | 只接 DeepSeek 官方 API；模型 + 思考强度按钮 | Plan 3 | ⬜ 接线 + Key 已完成（`059a821`/`19bb3d6`），模型/强度按钮待 Task 5–8 |
+| 1 | 只接 DeepSeek 官方 API；模型 + 思考强度按钮 | Plan 3 | ✅ 接线 + Key 已完成（`059a821`/`19bb3d6`）；模型/思考档位随 Task 5 客户端落地（`ChatRequest.thinking/effort`），UI 档位选择待 Plan 4 |
 | 2 | 两种模式都调 LLM（理顺 = 必调） | 设计 v1.4 §6.1 | ✅ |
 | 3 | 去 AI 味只走提示词，不依赖梦境样本 | 提示词 v2 | ✅ 三份 v2 已定（`aa39b90`），Kotlin 闸门待 Task 7 移植 |
-| 4 | token 与金额计量栏目 | Plan 3（仿 dsh-cost-meter） | ⬜ 价卡与复算已完成（Task 3），账面栏 UI 待 Task 8 |
-| 5 | 导出 .txt（+.docx/.pdf） | Plan 3 | ⬜ |
+| 4 | token 与金额计量栏目 | Plan 3（仿 dsh-cost-meter） | ✅ 价卡 + 复算（Task 3）+ 每次尝试记账（Task 8 `llm_calls`）；账面栏 UI 拆到 Plan 4 |
+| 5 | 导出 .txt（+.docx/.pdf） | Plan 3 | ✅ `7a7e5d4` 三格式 + 双侧 sha 证据 |
 | 6 | 美学增强（生图模型） | Plan 4 / 独立一轮 | ⬜ |
 
 ## 三·五、Plan 1 终审（whole-branch final review）
