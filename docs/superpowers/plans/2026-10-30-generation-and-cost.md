@@ -749,6 +749,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 - §0.3 落点与分享（D339）：用 `MediaStore.Downloads` 写入 `Download/DreamKeeper/`（API 29+ 无需权限、不新增 FileProvider、
   不改 manifest）；`ExportResult(uri, displayName, bytes)`；`ExportSheet` 三个按钮 + 成功后一行「已保存到 下载/DreamKeeper/<名>」
   + 「分享」按钮（`ACTION_SEND` + `FLAG_GRANT_READ_URI_PERMISSION`）。失败给可读文案（磁盘满/无存储/未生成小说稿），不静默吞。
+  **API 26–28（minSdk 26 但无 `MediaStore.Downloads`）：不做导出**——三个按钮禁用 + 一行「系统版本过低，导出需要 Android 10 及以上」，FINAL-REVIEW 记 PENDING「API<29 未验证」（D379）。
 
 - §0.4 导出闸门（D342）：只有 `resolveFinalNovel != null` 或 `faithfulText ?: rawTranscript` 非空才允许导出；正文为空 →
   `ExportSheet` 按钮禁用 + 一行「这篇还没有可导出的正文」。导出的 docx/txt 正文必须与详情页当前显示**逐字相同**（同一函数取文），
@@ -804,7 +805,7 @@ T3  不调用模型                                   → faithfulText = rawTran
      负向对照：**复制** `p3-e2e-08-db.db` 到 `.scratch/`、把一行 error 的 `costMicroYuan` 改成 1 → 必须 RED → 结束校验原证据
      sha256 未变、副本 `cmp` 原文入库（D372）。
  11. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令（含 `--mutation`，结束恢复 + `cmp` 原件）+ `scripts/check-faithful.py --input --output`
-     （A1–A21 与生成相关项）+ `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 扫除 pdf-open 外的全部截图。
+     （A1–A24 与生成相关项）+ `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 扫除 pdf-open 外的全部截图。
  12. 大字体与键盘：`adb shell settings put system font_scale 1.3` → 打开有小说稿的梦 → 点输入框弹键盘 → 截图
      `p3-e2e-10-fontscale.png`（输入条不被遮挡）→ `font_scale 1.0` 恢复；A14 以该图 + 目视结论为准（D369）。
  13. 时间线与日志顺序：每步执行时当场 `adb shell date` 落 `p3-e2e-00-timeline.txt`（步骤号 / 设备时间 / 主机时间），
@@ -820,13 +821,14 @@ T3  不调用模型                                   → faithfulText = rawTran
   A15 全程无崩溃（logcat `FATAL EXCEPTION` 计数 0）；A16 证据头三行齐全且 sha 可复算；A17 复跑命令逐条可执行（JVM/sha 类逐字节复现；E2E 类写「同步骤产生新证据且断言全绿」，D362）；
   A18 PENDING 清单与理由（白名单只收环境限制：无查看器 / 无麦克风 / 无网络代理；**实现缺陷一律 RED，不许 PENDING**，D376）；A19 计划 §9 偏差全部有 D 号；A20 看板 10/10 与验收段；A21 FINAL-REVIEW 结论可被第三方复现；A22 生成入口可点且失败可重试（Task 9b 证据 + §0.6 步骤 8）；
   A23 降级/兜底链有可查证据（T2/T3 走 JVM，`generation_jobs.stage` 与 `llm_calls` 行数对得上；STT 若未验则进 PENDING 白名单）。
+  A24 导出下界：API 29+ 三格式 GREEN；API 26–28 只验按钮禁用与文案（若能起 API 28 模拟器则补一张截图，否则 PENDING，D379）。
 
 - §0.8 `docs/evidence/plan3/FINAL-REVIEW.md` 结构固定六节：结论（Plan 3 是否可交付）→ 交付物与提交链 → 证据索引（文件 ↔ 断言）→
-  偏差索引（D275–D343）→ PENDING 与理由 → 复跑命令（逐条可粘贴）。`ACCEPTANCE.md` 的 `## 3d` 只放一张表：能力 / 证据文件 / 结论。
+  偏差索引（D275–D379）→ PENDING 与理由（含 D379「API<29 未验证」、无 PDF 查看器、模拟器麦克风）→ 复跑命令（逐条可粘贴）。`ACCEPTANCE.md` 的 `## 3d` 只放一张表：能力 / 证据文件 / 结论。
 
 - Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **39 类 / 359 例** 0 失败
   （347 + 12；347 见 Task 9b）；设备端三格式文件全部 `check-export.py` GREEN；`check-cost.py --db-copy` `mismatches=0` 且 `failed=N`；
-  截图 `nearWhite=0`（`p3-e2e-07-pdf-open.png` 若拍到则按 D359 排除）；`FINAL-REVIEW.md` 六节齐全、A1–A21 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
+  截图 `nearWhite=0`（`p3-e2e-07-pdf-open.png` 若拍到则按 D359 排除）；`FINAL-REVIEW.md` 六节齐全、A1–A24 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
 
 ## 9. 偏差登记（从 D218 起）
 
