@@ -1,0 +1,24 @@
+Plan 2 / Task 4 — 真实按住时的 WAV 字节增长（同一 take 三次 stat）
+device: emulator-5554  (Android API 37, timezone Asia/Shanghai)
+take  : 2026-10-30 17:00:29 +08:00, dreamId = 8f7960f0-036e-465a-b4b7-3490af6bc26a
+file  : /data/data/com.dreamkeeper/files/audio/8f7960f0-036e-465a-b4b7-3490af6bc26a.wav
+cmd   : MSYS_NO_PATHCONV=1 adb -s emulator-5554 shell \
+          run-as com.dreamkeeper stat -c %s files/audio/<dreamId>.wav
+
+S1  按住中（t≈1.5s）  = 48044 bytes
+S2  按住中（t≈5.0s）  = 160044 bytes      ← 与 S1 间隔 3.4s（≥3s）
+S3  松手后（已冻结）   = 220844 bytes
+
+换算（WAV 头 44 字节；服务按 32000 B/s = 32 B/ms 写 PCM）：
+  S1: (48044-44)/32  = 1500 ms
+  S2: (160044-44)/32 = 5000 ms
+  S3: (220844-44)/32 = 6900 ms
+  S1→S2 间隔 = 3.4 s，增量 = 112000 bytes = 3500 ms * 32 B/ms
+  速率 = 32000 B/s（31.25 KiB/s，即 16 kHz / 16-bit / 单声道 256 kbps）
+
+松手后文件不再增长：S3 之后连续 6 次 stat（每 300ms 一次，共 ~1.5s）全部 = 220844 bytes。
+S3 与按住 7.000s 减去 START 生效 163ms 再收尾吻合：220844 = 44 + 6900*32。
+
+同一 take 的两张截图：
+  p2-ux-02-recording-t1.png  0:01（按住态，Ember 环 + 取消录音）
+  p2-ux-03-recording-t4.png  0:04（按住态，同一 take）

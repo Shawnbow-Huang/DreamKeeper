@@ -1,0 +1,34 @@
+Plan 2 / Task 4 — START/STOP 延迟取证（logcat 设备时钟 + adb shell date 锚点）
+device: emulator-5554  (Android API 37, timezone Asia/Shanghai, 时区与宿主一致)
+clock : `adb logcat -v threadtime` 的时间戳就是设备本地时钟；
+        锚点用 `adb shell date +%s.%N`（epoch 秒.纳秒）取两次，确认真机时钟未被宿主改写。
+
+■ 主取证 take C：2026-10-30 17:00:29（最终 APK 99822794）
+  press                17:00:29.785
+  → phase=RECORDING    17:00:29.948   +163 ms   （startForegroundService → AudioRecord 起来）
+  release              17:00:36.802
+  → phase=FINISHING    17:00:37.293   +491 ms   （startService(STOP) → 服务收尾）
+  → phase=DONE         17:00:37.307   + 14 ms   （FINISHING 窗口只有 14ms）
+  → navigate followup  17:00:38.238   +931 ms   （900ms 保存态 + 落库）
+  dreamId = 8f7960f0-036e-465a-b4b7-3490af6bc26a（同一次 take 的字节证据）
+
+■ 复核 take B：2026-10-30 16:48:58（含 900ms 保存态的中间构建）
+  设备锚点 DEV1 = 1793350136.889389900  (16:48:56.889)
+  press                16:48:58.058   = DEV1 + 1.169 s
+  → phase=RECORDING    16:48:58.241   +183 ms
+  release              16:49:04.085
+  → phase=FINISHING    16:49:04.594   +509 ms
+  → phase=DONE         16:49:04.605   + 11 ms
+  → navigate followup  16:49:05.540   +935 ms
+  设备锚点 DEV2 = 1793350145.113668200  (16:49:05.114)，= release + 1.029 s
+
+■ 结论
+  - 按下 → 真正开始录音：163–183 ms（可接受；屏内 starting 文案覆盖这段）。
+  - 松手 → 服务进入 FINISHING：491–509 ms（binder/startService 与停 AudioRecord 的固有开销）。
+  - FINISHING → DONE：11–14 ms，亚帧级。这是 -04 必须「真帧 + 日志」双证的原因：
+    p2-ux-04-finishing.png 是松手后 adb screencap 抢到的保存态真帧（0:05 冻结 +
+    「正在保存」+「正在保存…」+ 取消录音 + 主钮禁用），本文件给出同一次 take 的
+    phase 时间戳，二者互证；不要用重放/合成帧。
+  - DONE → FollowUp：最终构建固定多留 900ms 保存态（偏差 D147），所以视觉上能看见「正在保存…」。
+
+复跑命令（单次 take 的取证脚本与完整命令）：见 p2-ux-index.md 的「复跑命令」一节。
