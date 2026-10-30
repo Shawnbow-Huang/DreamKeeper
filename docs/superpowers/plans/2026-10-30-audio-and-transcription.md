@@ -135,7 +135,7 @@ interface WavWriter : Closeable {
 - [ ] 1.9 打印前 44 字节的 **xxd 风格** hexdump（带 offset 列 + ASCII 列，别用 `bytes.hex()` 单行，无法按 offset 引用）存 `docs/evidence/plan2/p2-wav-01-header.txt`，文件头 6 行写 `case / artifact / bytes / sha256 / generator / expect`。
 - [ ] 1.10 提交（**带 4 个证据文件**）：`feat(audio): WavStore 与 WAV 数学（占位头/单一写句柄/回填/repair/时长公式）`
 
-**Expected**：`testDebugUnitTest` 全绿且新增 ≥14 条；「占位头黄金 hex」与「回填头黄金 hex」两个常量都被逐字节断言；python fixture 与 `WavWriter` 产出 sha256 相同；ffprobe `duration=1.000000` 且 stderr 无 `[wav @` 行。
+**Expected**：`testDebugUnitTest` 全绿且新增 ≥14 条；「占位头黄金 hex」与「回填头黄金 hex」两个常量都被逐字节断言；python fixture 与 `WavWriter` 产出 sha256 相同；ffprobe `duration=1.000000` 且 stderr 无 `[wav @` 行。**`(bytes-44)%32 != 0` 时契约未规定怎么处理——不许自行裁剪、补齐或四舍五入，先在偏差表记一行（D91）再问 Lead**。
 
 ---
 
@@ -174,11 +174,19 @@ class RecorderCore(
 }
 ```
 
+**补零公式（唯一允许的算法，别自己发明）**
+- 每毫秒 32 字节（16 kHz × 1 ch × 2 B ÷ 1000 ms）；换样本时 1 ms = 16 样本。
+- `expectedSamples = (elapsedRealtime() - startMs) * 16`；`actualSamples = bytesWritten / 2`；`deficit = expectedSamples - actualSamples`（**单位是样本，不是毫秒**）。
+- **`deficit > 1600`（= 100 ms）才补**；先补等长零字节，**再**写刚读到的真实块（顺序反了会把声音推到静音之后）。
+- 只用 `elapsedRealtime()` 做基准，**禁止墙钟**（`System.currentTimeMillis()` 会被改时间/时区拖歪）。
+- 暂停恢复、追问窗口超时都必须**前移基准**（`startMs = now` 且已写字节数一并前移，等价 `rebase()`），否则暂停那几十秒会被补成静音。
+- 收尾顺序固定为 `stop() → join() → sync() → 回填 8 字节 → close()`，一步都不许提前、合并或省略。
+
 **Steps**
 - [ ] 2.1 写测试（先红）：正常三块 3200B → `bytes == 9600`、`zeroFillBytes == 0`；`read() == -1` → 返回 `reason="dead"`；`state() == STOPPED` → 结束；时钟前进 200ms 但只读到 3200B → `zeroFillBytes > 0` 且**零字节先写**（用记录写入顺序的假 sink 断言第 1 次写入长度 == deficit、第 2 次才是真实块）；缺口 ≤100ms 不补；`onChunk` 收到单调递增的 bytes。
 - [ ] 2.2 跑测试 → 红。
 - [ ] 2.3 实现 `RecorderCore` → 绿。
-- [ ] 2.4 **变异验证**：把「先补零再写」改成「先写再补零」→ 顺序断言必须红；把 `deficit > minGapMs` 改成 `>= 0` → 「缺口 ≤100ms 不补」必须红。改回。
+- [ ] 2.4 **变异验证**：把「先补零再写」改成「先写再补零」→ 顺序断言必须红；把 `deficit > minGapMs * 16` 改成 `>= 0` → 「缺口 ≤100ms 不补」必须红。改回。**注意单位**：`deficit` 是样本数，门槛是 `100 ms × 16 样本/ms = 1600`，别拿毫秒直接和样本比。
 - [ ] 2.5 提交：`feat(audio): RecorderCore 读循环、按单调钟补等长零帧、收尾原因`
 
 **Expected**：新增 ≥6 条用例；`zeroFillBytes` 与时钟缺口严格对应；写入顺序断言存在。
@@ -230,17 +238,18 @@ class RecordingService : Service() {
 ```
 
 **Steps**
-- [ ] 3.1 manifest 加四条权限 + `<service android:name=".service.RecordingService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false"/>`。
+- [ ] 3.1 manifest 加**四条**权限，名字逐字写对：`android.permission.RECORD_AUDIO`、`android.permission.POST_NOTIFICATIONS`、`android.permission.FOREGROUND_SERVICE`、`android.permission.FOREGROUND_SERVICE_MICROPHONE`（漏一个就是启动时 `SecurityException`）；再加 `<service android:name=".service.RecordingService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false"/>`。 **服务只能由可见 Activity 起**。
 - [ ] 3.2 写 `RecordingCommandTest`（纯逻辑，先红）：`ACTION_START` 缺 `dreamId` → 命令非法且不改状态；`STOP` 在 IDLE 时幂等；`CANCEL` 后状态回 IDLE 且 `error == null`。
 - [ ] 3.3 实现命令解析（抽成 `RecordingCommand` 纯函数，Service 只做副作用）→ 绿。
-- [ ] 3.4 实现 Service：`onStartCommand` 里 **先** `ServiceCompat.startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)`，**再**建 `AudioRecord` 并 `startRecording()`；权限不足 → `snapshot.fail("没有录音权限")` 并 `stopSelf()`；返回 `START_NOT_STICKY`。
+- [ ] 3.4 实现 Service：`onStartCommand` 里 **先** `ServiceCompat.startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)`，**再**建 `AudioRecord` 并 `startRecording()`（顺序反了在 12+ 上直接抛 `ForegroundServiceDidNotStartInTimeException`）；权限不足 → `snapshot.fail("没有录音权限")` 并 `stopSelf()`；返回 `START_NOT_STICKY`。
+- [ ] 3.4b `AudioRecord` 参数**钉死**：`MediaRecorder.AudioSource.VOICE_RECOGNITION`、`16_000`、`AudioFormat.CHANNEL_IN_MONO`、`AudioFormat.ENCODING_PCM_16BIT`；buffer 取 `max(AudioRecord.getMinBufferSize(...), 3200)`；读循环放**专用线程**并先 `Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)`；写文件**不套 `BufferedOutputStream`**（多一次拷贝、崩溃时丢缓冲）；每约 1 秒 `fd.sync()` 一次。
 - [ ] 3.5 实现通知：常驻、低优先级、`ContentIntent` 回详情、`ACTION_STOP` 按钮；channel 在 `RecordingNotifications` 里建（`IMPORTANCE_LOW`，锁屏可见性 `VISIBILITY_PRIVATE`）。
 - [ ] 3.6 `AppContainer` 加 `audioStore`（`WavStore(filesDir/audio)`）与 `recordingSession`。
-- [ ] 3.7 构建 + 安装，用 `adb shell am start-foreground-service -n com.dreamkeeper/.service.RecordingService -a com.dreamkeeper.action.START --es dreamId e2e-001` 验证：通知出现、`dumpsys activity services com.dreamkeeper` 有该服务、logcat 无 FATAL。
+- [ ] 3.7 构建 + 安装，**从可见页面起服务**（首页点「说梦」→ 按住 3 秒 → 松手）：通知出现、`dumpsys activity services com.dreamkeeper` 有该服务（`started=true`）、logcat 无 FATAL。**不要**用 `adb shell am start-foreground-service …` 去验 microphone 型 FGS——Android 14+ 禁止后台启动，必然抛 `ForegroundServiceStartNotAllowedException`，只会白烧一轮排障。
 - [ ] 3.8 证据：`p2-fgs-01-notify.png`（通知栏截图）、`p2-fgs-01-services.txt`（`dumpsys activity services`）、`p2-fgs-01-perms.txt`（`dumpsys package com.dreamkeeper | Select-String FOREGROUND_SERVICE|RECORD_AUDIO`）。
 - [ ] 3.9 提交：`feat(record): 前台录音服务（microphone 类型、通知、START/STOP/CANCEL）`
 
-**Expected**：通知出现在状态栏；服务列表里有 `RecordingService`；四条权限都在 `dumpsys package` 里；崩溃 0。
+**Expected**：通知出现在状态栏；服务列表里有 `RecordingService` 且由可见页面启动；四条权限都在 `dumpsys package` 里；崩溃 0。
 
 ---
 
@@ -284,7 +293,7 @@ class RecordViewModel(
 - [ ] 4.2 跑 → 红。
 - [ ] 4.3 实现 ViewModel → 绿。
 - [ ] 4.4 `MainActivity`：请求 `RECORD_AUDIO`（+ 33+ 的 `POST_NOTIFICATIONS`）；`setShowWhenLocked(true)`/`setTurnScreenOn(true)`，minSdk 26 分支补 `FLAG_SHOW_WHEN_LOCKED`；把 `intent.getStringExtra("entry")` 交给 `RecordRoute`。
-- [ ] 4.5 `RecordScreen`：全屏深色，中央大钮（`size(160.dp)`）**按住录、松手停**（`pointerInput` + `detectTapGestures(onPress/onRelease)`），计时文字由 `session.state.elapsedMs` 驱动（**不许自建计时器**），底部「取消」48dp。
+- [ ] 4.5 `RecordScreen`：全屏深色，中央大钮（`size(160.dp)`）**按住录、松手停**（`pointerInput` + `detectTapGestures(onPress/onRelease)`），计时文字由 `session.state.elapsedMs` 驱动（**不许自建计时器**）；振幅条读 `session.state.amplitude`（0..1，由 `RecorderCore.onChunk` 的 dBFS 归一化而来），**不许每帧随机**；底部「取消」48dp。
 - [ ] 4.6 `DreamKeeperRoot` 里 `DreamRoute.Record` 桩替换成真屏，`.route` 用 `RecordEntry.name`。
 - [ ] 4.7 构建安装 → 点首页「说梦」→ 按住 3 秒松手 → 截图三态。
 - [ ] 4.8 证据：`p2-ux-01-idle.png`、`p2-ux-02-recording.png`、`p2-ux-03-finishing.png`；`files/audio/` 里文件存在且 `stat -c %s` 两次不同（W1）。
@@ -331,6 +340,7 @@ class FollowUpViewModel(
 - [ ] 5.1 写测试（先红）：初始 `remainingMs == windowMs`；`onSpeakStart` 期间不递减（录音中不超时）；`onSpeakStop` 后恢复递减；`onTimeout` 后 `visible == false` 且仓库记录 `transcriptStatus == PENDING`、`rawTranscript` 非空；`onEditText` 直接改文本不改状态。
 - [ ] 5.2 跑 → 红；5.3 实现 → 绿。
 - [ ] 5.4 **变异验证**：把「录音中不递减」去掉 → 5.1 对应用例必须红。
+- [ ] 5.4b 追问录音前先 `rebase()`：把 `startMs` 与已写字节数一起前移，再起服务追加；超时收起时也前移一次。否则「松手到点麦克风」那几秒会按 32 B/ms 补成一大段静音，`rawAudioMs` 直接虚高。
 - [ ] 5.5 `FollowUpScreen`：极暗界面（禁纯白）、大号文字显示刚转出来的话、`10..0` 倒计时、麦克风按钮、超时自动收起。倒计时只由 `clock()` 驱动，不用独立 Timer。
 - [ ] 5.6 端到端：录 3 秒 → 松手 → 进追问页 → 再录 2 秒 → 超时收起 → 取文件比对 `durationMs` 增加约 2000ms。
 - [ ] 5.7 证据：`p2-followup-01.png`、`docs/evidence/plan2/audio/p2-followup-02-appended.wav`（取回文件）+ `p2-followup-02-ffprobe.txt`。
@@ -452,7 +462,7 @@ class AudioPlayback(private val scope: CoroutineScope) {
 **Steps**
 - [ ] 8.1 写测试（先红）：`Playing.positionMs` 单调不减；`durationMs` 优先取 `rawAudioMs`，为 null 时用 `WavMath.durationMs(fileBytes)`；`Error` 时进度条显示「打不开」而不是 0。
 - [ ] 8.2 跑 → 红；8.3 实现 → 绿。
-- [ ] 8.4 `DetailScreen` 播放条接 `AudioPlayback`：**先 repair 再 `MediaPlayer.setDataSource`**；播放/暂停切换；进度跟手；`rawAudioPath == null` 时按钮禁用并提示「这条梦没有录音」。
+- [ ] 8.4 `DetailScreen` 播放条接 `AudioPlayback`：**先 `WavStore.repair` 再 `MediaPlayer.setDataSource`**（残留 `0xFFFFFFFF` 头的文件 `MediaPlayer` 不一定能直接播）；`PlaybackBar` 的签名不动，只换内部实现；播放/暂停切换；进度跟手；时长显示用 `rawAudioMs`（不是 `MediaPlayer.duration`）；`rawAudioPath == null` 时按钮禁用并提示「这条梦没有录音」。
 - [ ] 8.5 端到端：录 5 秒 → 进详情 → 点播放 → 3 秒后截图（进度条非零）→ 点暂停 → 截图。
 - [ ] 8.6 证据：`p2-play-01-playing.png`、`p2-play-02-paused.png`、`p2-play-01-logcat.txt`（无 `MediaPlayer error`）。
 - [ ] 8.7 提交：`feat(detail): 详情页播放真实 WAV（播前 repair、时长取 rawAudioMs）`
@@ -468,16 +478,27 @@ class AudioPlayback(private val scope: CoroutineScope) {
 - Create `docs/evidence/plan2/` 下全部产物
 - Modify `docs/PROGRESS.md`（Plan 2 进度）
 
+**Interfaces**
+- Produces `docs/evidence/plan1/ACCEPTANCE.md` 的 `## 3b 音频证据表`，列固定为 `wav | bytes | RIFF/data 字段 | dataSize==bytes-44 | (bytes-44)/32 ms | ffprobe duration | Δms | RMS dBFS | 信号来源 | 结论`。
+- Produces `docs/evidence/plan2/` 下的 `p2-<case>-<nn>-<state>.{png,txt,wav}`（音频进 `docs/evidence/plan2/audio/`）。
+- Produces `docs/PROGRESS.md` 里的 Plan 2 进度段（9 个 Task 的完成状态 + 用例总数）。
+
 **Steps**
 - [ ] 9.1 干净安装 + `pm clear`，走完整链路：首页「说梦」→ 按住 4 秒 → 松手 → 追问页再录 2 秒 → 超时收起 → 详情页播放。
-- [ ] 9.2 权限两路：`pm revoke com.dreamkeeper android.permission.RECORD_AUDIO` → 点「说梦」→ 应给出「没有录音权限」而不是崩溃；`pm grant` 恢复后再走一遍。
+- [ ] 9.2 权限两路（做成三条）：
+  1. `pm revoke com.dreamkeeper android.permission.RECORD_AUDIO` → 点「说梦」→ 应给出「没有录音权限」而不是崩溃。**权限变更会杀进程**，pid 变化甚至为空是正常的，不是 bug。
+  2. 永久拒绝：`appops set com.dreamkeeper RECORD_AUDIO ignore` → 应给出去设置里打开的引导，不能死循环弹框。
+  3. 恢复：`pm grant com.dreamkeeper android.permission.RECORD_AUDIO` + `appops set com.dreamkeeper RECORD_AUDIO allow` → 再走一遍完整链路，并把 `dumpsys package com.dreamkeeper` 里的 `RECORD_AUDIO: granted=` 行存进证据。
 - [ ] 9.3 崩溃恢复：录音中 `am force-stop` → 重启 → 扫描修复 → 详情页能播。
 - [ ] 9.4 把 `## 3b 音频证据表` 填满，每行要有：`wav | bytes | RIFF/data 字段 | dataSize==bytes-44 | (bytes-44)/32 ms | ffprobe duration | Δms | RMS dBFS | 信号来源 | 结论`。
+  - `RIFF/data` 两列**必须按字节读 offset 4..8 与 40..44**，**不能只信 ffprobe**：实测占位头（两个字段 `FFFFFFFF`）的文件 ffprobe 照样报 `duration=1.000000`，它验不出头是脏的。
+  - `ffprobe duration` 只作第三方交叉校验，还要与 `(真实字节数-44)/32` 比：头有效时 ffprobe 用的是头里的 data size，尾部落了多余字节它看不见。
+  - 三层证据都要有：**W1** 字节在长 + 头回填正确；**W2** ffprobe 可解码且 duration 与公式一致；**W3** 信号来源（模拟器默认灌零，除非以 `-allow-host-audio` 启动——「文件有字节」不等于「录到声音」）。
 - [ ] 9.5 在 `## 0 构建绑定` 补一行「模拟器启动参数：`-allow-host-audio` 未启用（输入为静音）」，并在证据里写明「本机录音的 W3 信号来源 = seam / 静音，不代表真人说话质量」。
 - [ ] 9.6 冷启动 3 次 `am start -W`、`capture-logcat.ps1 -Runs 3`、近白闸门全图 `-TopOffset 100 -MaxRatio 0`。
 - [ ] 9.7 更新 `docs/PROGRESS.md`，提交；**不要自己打 tag**（Lead 验收后打 `plan2-done`）。
 
-**Expected**：链路走通；`(bytes-44)%32 == 0`；表格无空单元格；崩溃 0；`FATAL`/`ANR` 零命中。
+**Expected**：链路走通；`(bytes-44)%32 == 0`；表格无空单元格；崩溃 0；`FATAL`/`ANR` 零命中；真出现余数不为 0 时**不自行处理**，记偏差表再问 Lead。
 
 ---
 
@@ -488,7 +509,12 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D88 | Task 1 Step 1.7：造一个「占位头 + 1000ms PCM」的 WAV 当 fixture | 改成造**已回填**的 canonical 头（`riffSize=32036`、`dataSize=32000`）；占位头只由单测证明（`create` 只落 44 字节） | Evidence Collector 实测：占位头会让 ffprobe 报 `Ignoring maximum wav data size, file may be invalid` 并改按 bitrate 估算时长——这种文件本身不是合法 WAV，做不了 W2 的基准 | 实测结论 |
 | D89 | 初版 `WavStore` 的 `append(FileOutputStream, ...)` + `finish(File)` 两个入口 | 改成单一写句柄 `openWriter(file): WavWriter`（自带 `bytesWritten`/`write`/`finish`），`finish(file)`/`repair(file)` 只留作扫描与离线修复 | Mobile App Builder 预审：两个入口分裂时，调用方可能套缓冲或没 flush 就让 `finish` 回填，得到「短头」；且回填后仍能继续写，头又变脏。`placeholder` 语义同时钉死为「任一字段仍是 `0xFFFFFFFF` 即 true」 | 以为的坑 |
 | D90 | Task 1 只断言 `offset 4..8` 与 `40..44` | 补「整 44 字节逐字节等于黄金 hex」两条常量（占位头、回填头） | Mobile App Builder：只查两个长度字段时，`fmt ` 尾空格丢失、`byteRate` 写成 0、`bitsPerSample` 写错都照样绿 | 以为的坑 |
-| D91 | Task 1 实作的四处细节原计划没写死：①`openWriter` 对缺失或 <44 字节文件兜底写占位头；②`state()` 对 <44 字节抛 `IllegalStateException`；③`repair` 顺带纠正过期但非占位的尺寸；④追加场景 `bytesWritten` 从已有 PCM 起算。另计划里那条 python fixture 命令原本含一个真正的 NUL 字节 | 四条行为全部保留并用测试钉住（`WavStoreTest` 17 条）；NUL 换成 `\x00` 字面量使命令可复制执行 | Lead（`WavStore.kt:63-116` 复核 + python 修补） |
+| D91 | 契约只给 `rawAudioMs = (文件字节数-44)/32`，没规定余数不为 0 怎么办 | 余数不为 0 时**不裁剪、不补齐、不四舍五入**，先记偏差表再问 Lead | 契约没写的事不能由实现者当场决定，否则同一枚文件在不同机器上会算出两种时长 | 以为的坑 |
+| D92 | 旧稿用 `adb shell am start-foreground-service` 验 microphone 型前台服务 | 改成由可见页面（「说梦」按钮）起服务 | Android 14+ 禁止后台启动 microphone 型 FGS，`ForegroundServiceStartNotAllowedException` 必然出现，拿它当验收会误判成代码 bug | 实测结论 |
+| D93 | 旧稿说 `isOnDeviceRecognitionAvailable` 是 API 31+ | 改成 **API 33+** | 33 才有 `createOnDeviceSpeechRecognizer`/`checkRecognitionSupport`；按 31 写在 31/32 上会崩或退回网络识别（音频出机） | 实测结论 |
+| D94 | 旧稿「`ParcelFileDescriptor` 先 seek 跳过 44 字节头」 | 自己 `skip(44)`，把剩下的 PCM 灌进 `ParcelFileDescriptor.createPipe()` 写端 | 传给识别器的 PFD 不能 seek | 以为的坑 |
+| D95 | 权限只验 `pm revoke`/`pm grant` 两路 | 补 `appops set com.dreamkeeper RECORD_AUDIO ignore`（永久拒绝）并取 `dumpsys package` 授权行 | 只有 revoke 验不出「永久拒绝」分支；且 revoke 会杀进程，pid 变是正常的 | 实测结论 |
+| D96 | Task 1 实作的四处细节原计划没写死：①`openWriter` 对缺失或 <44 字节文件兜底写占位头；②`state()` 对 <44 字节抛 `IllegalStateException`；③`repair` 顺带纠正过期但非占位的尺寸；④追加场景 `bytesWritten` 从已有 PCM 起算。另计划里那条 python fixture 命令原本含一个真正的 NUL 字节 | 四条行为全部保留并用测试钉住（`WavStoreTest` 17 条）；NUL 换成 `\x00` 字面量使命令可复制执行 ；Lead 复核 `WavStore.kt:63-116` 并修补 | 实测结论 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
