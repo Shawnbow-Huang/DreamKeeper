@@ -55,49 +55,87 @@
 - Create `android/app/src/test/java/com/dreamkeeper/audio/WavMathTest.kt`
 - Create `android/app/src/test/java/com/dreamkeeper/audio/WavStoreTest.kt`
 
-**Interfaces**
+**Interfaces**（已按 Mobile App Builder 预审修订：单一写句柄、全 44 字节黄金断言、小端 helper）
 ```kotlin
 object WavMath {
     const val HEADER_BYTES = 44
     const val PLACEHOLDER_SIZE = 0xFFFF_FFFFL
-    const val SAMPLE_RATE = 16_000
+    const val SAMPLE_RATE = 16_000        // 本 Task 暂不调用，留给 AudioRecord（别删）
+    const val FRAME_BYTES = 2             // 同上
     const val BYTES_PER_MS = 32L          // 16000Hz * 2B / 1000ms
-    const val FRAME_BYTES = 2
-    fun dataBytes(fileBytes: Long): Long          // max(0, fileBytes - 44)
-    fun durationMs(fileBytes: Long): Long         // dataBytes / 32
-    fun trailingPartialBytes(fileBytes: Long): Int
-    fun bytesForMs(ms: Long): Long                // ms * 32
+    fun dataBytes(fileBytes: Long): Long                  // max(0, fileBytes - 44)
+    fun durationMs(fileBytes: Long): Long                 // dataBytes / 32
+    fun trailingPartialBytes(fileBytes: Long): Int         // (fileBytes-44) % 2 且 <0 时返回 0
+    fun bytesForMs(ms: Long): Long                         // ms * 32
+    fun writeU32(buf: ByteArray, offset: Int, value: Long)  // **小端**，内部 value.and(0xFFFFFFFFL)
+    fun readU32(buf: ByteArray, offset: Int): Long          // **小端**，返回无符号
 }
 
 data class WavState(
     val fileBytes: Long,
     val riffSize: Long,
     val dataSize: Long,
-    val placeholder: Boolean,     // 两个字段是否仍是 0xFFFFFFFF
-    val framesAligned: Boolean,   // (fileBytes - 44) % 2 == 0
+    val placeholder: Boolean,     // 两个字段**任一**仍是 0xFFFFFFFF 就是 true
+    val framesAligned: Boolean,   // fileBytes >= 44 && (fileBytes - 44) % 2 == 0
 )
 
 class WavStore(private val rootDir: File) {
     fun fileFor(dreamId: String): File
-    fun create(dreamId: String): File                       // 写 44 字节占位头
-    fun append(stream: FileOutputStream, buffer: ByteArray, length: Int)
-    fun finish(file: File): WavState                        // 回填 8 字节并返回状态
-    fun repair(file: File): WavState                        // 幂等：已是正确值则原样返回
-    fun state(file: File): WavState
+    fun create(dreamId: String): File      // rootDir.mkdirs()；已存在则截断重写 44 字节占位头
+    fun openWriter(file: File): WavWriter  // 唯一写句柄；写完必须 finish()
+    fun finish(file: File): WavState       // 扫描/离线用：等价 repair + sync
+    fun repair(file: File): WavState       // 幂等；fileBytes < 44 抛 IllegalStateException
+    fun state(file: File): WavState        // 文件不存在抛 java.nio.file.NoSuchFileException
+}
+
+/** 生产路径与测试路径**共用**这一个写出入口，避免两套头各写各的。 */
+interface WavWriter : Closeable {
+    val bytesWritten: Long             // 只算 PCM，不含 44 字节头
+    fun write(buffer: ByteArray, length: Int)
+    fun finish(): WavState             // sync() → 回填两字段 → close()；可重复调用
 }
 ```
 
+**44 字节 canonical 头（全小端；漏一个空格就废）**
+
+| offset | 字节 | 值（32044 字节样本时） |
+|---|---|---|
+| 0..4 | `RIFF` | 52 49 46 46 |
+| 4..8 | riffSize | `fileBytes-8` = 32036 = `24 7D 00 00`（占位期 `FF FF FF FF`） |
+| 8..12 | `WAVE` | 57 41 56 45 |
+| 12..16 | `fmt ` | 66 6D 74 **20**（第 4 个字节是空格） |
+| 16..20 | 16 | 10 00 00 00 |
+| 20..22 | format=1 | 01 00 |
+| 22..24 | channels=1 | 01 00 |
+| 24..28 | sampleRate=16000 | 80 3E 00 00 |
+| 28..32 | byteRate=32000 | 00 7D 00 00 |
+| 32..34 | blockAlign=2 | 02 00 |
+| 34..36 | bitsPerSample=16 | 10 00 |
+| 36..40 | `data` | 64 61 74 61 |
+| 40..44 | dataSize | `fileBytes-44` = 32000 = `00 7D 00 00`（占位期 `FF FF FF FF`） |
+
+**注意**：Kotlin 的 `DataOutputStream.writeInt` 是**大端**，本 Task 一律用 `WavMath.writeU32/readU32`；`0xFFFFFFFF` 不要当 `Int` 比较（`Int == Long` 直接编译错）。
+
 **Steps**
-- [ ] 1.1 写 `WavMathTest`（先红）：`durationMs(44)=0`、`durationMs(44+32000)=1000`、`dataBytes(43)=0`、`trailingPartialBytes(45)=1`、`bytesForMs(100)=3200`。
+- [ ] 1.1 写 `WavMathTest`（先红）：`durationMs(44)=0`、`durationMs(44+32000)=1000`、`dataBytes(43)=0`、`trailingPartialBytes(43)=0`、`trailingPartialBytes(45)=1`、`trailingPartialBytes(46)=0`、`bytesForMs(100)=3200`、`writeU32`/`readU32` 往返 `0xFFFFFFFF` 得 `4294967295L`。
 - [ ] 1.2 跑 `testDebugUnitTest --tests "*WavMathTest*"` → 期望 `Unresolved reference: WavMath`（红）。
 - [ ] 1.3 实现 `WavMath` → 跑绿。
-- [ ] 1.4 写 `WavStoreTest`（先红）：`create` 落盘 44 字节且 offset 4..8、40..44 都是 `0xFFFFFFFF`；`append` 后 `state().fileBytes` 增长；`finish` 回填后 `riffSize == fileBytes-8`、`dataSize == fileBytes-44`、`placeholder == false`；`repair` 对坏头纠正、对好头幂等（第二次调用不改字节）；`state()` 对不存在文件抛 `NoSuchFileException`。
-- [ ] 1.5 实现 `WavStore` → 跑绿。
-- [ ] 1.6 **变异验证**：把 `durationMs` 改成 `fileBytes / 32`（忘了减头）→ 1.1 必须红；把 `finish` 里的 `dataSize` 写成 `fileBytes` → 1.4 必须红。改回。
-- [ ] 1.7 手工造一个 32044 字节的 WAV（44 头 + 1000ms 零 PCM），用 python 打印前 44 字节 hexdump 存 `docs/evidence/plan2/p2-wav-01-header.txt`。
-- [ ] 1.8 提交：`feat(audio): WavStore 与 WAV 数学（占位头/回填/repair/时长公式）`
+- [ ] 1.4 写 `WavStoreTest`（先红）：
+  - `create` 落盘正好 44 字节，且**整 44 字节逐字节等于「占位头黄金 hex」常量**（不是只看 offset 4..8 和 40..44——只看那两处，`fmt ` 尾空格、byteRate、bits 全写错也会绿）；
+  - `openWriter` 写 32000 字节零 → `bytesWritten == 32000`；`finish()` 后 `riffSize == fileBytes-8`、`dataSize == fileBytes-44`、`placeholder == false`，且**整 44 字节逐字节等于「回填头黄金 hex」常量**；
+  - `repair` 对已回填文件**幂等**（调用两次字节完全不变）；对占位头的 32044 字节文件纠正成功；对 43 字节文件抛 `IllegalStateException`；`state()` 对不存在文件抛 `NoSuchFileException`。
+- [ ] 1.5 实现 `WavStore`/`WavWriter` → 跑绿。
+- [ ] 1.6 **变异验证**：把 `durationMs` 改成 `fileBytes / 32`（忘了减头）→ 1.1 必须红；把 `writeU32` 改成大端 → 1.4 的整头黄金断言必须红。改回。
+- [ ] 1.7 **第三方交叉校验**（用 python 独立造一枚 32044 字节、**已回填**的 canonical WAV；注意 `riffSize = 32036` 不是 32044、`b"fmt "` 尾空格、`open(...,'wb')`、`struct.pack('<I',...)`）：
+  ```powershell
+  python -c "import struct;h=b'RIFF'+struct.pack('<I',32036)+b'WAVE'+b'fmt '+struct.pack('<I',16)+struct.pack('<HHIIHH',1,1,16000,32000,2,16)+b'data'+struct.pack('<I',32000);assert len(h)==44;f=open('docs/evidence/plan2/audio/p2-wav-01.wav','wb');f.write(h+b' '*32000);f.close()"
+  ```
+  然后让本 Task 的 `create + writer.write(32000 零) + finish()` 产出另一枚文件，两者 **sha256 必须相同**；两个 sha256 都写进证据 txt。
+- [ ] 1.8 ffprobe 校验（**必须连 stderr 一起看**）：期望 `pcm_s16le / 16000 Hz / 1 channel / duration=1.000000 / size=32044`，且 stderr **不出现** `[wav @`（出现 `Ignoring maximum wav data size` / `Estimating duration from bitrate` / `Packet corrupt` 即判失败）。存 `docs/evidence/plan2/p2-wav-01-ffprobe.txt`。
+- [ ] 1.9 打印前 44 字节的 **xxd 风格** hexdump（带 offset 列 + ASCII 列，别用 `bytes.hex()` 单行，无法按 offset 引用）存 `docs/evidence/plan2/p2-wav-01-header.txt`，文件头 6 行写 `case / artifact / bytes / sha256 / generator / expect`。
+- [ ] 1.10 提交（**带 4 个证据文件**）：`feat(audio): WavStore 与 WAV 数学（占位头/单一写句柄/回填/repair/时长公式）`
 
-**Expected**：`testDebugUnitTest` 全绿且新增 ≥10 条；hexdump 里 `offset 4..8 = FFFFFFFF`、`offset 40..44 = FFFFFFFF`；`finish` 后两个字段等于实际值。
+**Expected**：`testDebugUnitTest` 全绿且新增 ≥14 条；「占位头黄金 hex」与「回填头黄金 hex」两个常量都被逐字节断言；python fixture 与 `WavWriter` 产出 sha256 相同；ffprobe `duration=1.000000` 且 stderr 无 `[wav @` 行。
 
 ---
 
@@ -295,7 +333,7 @@ class FollowUpViewModel(
 - [ ] 5.4 **变异验证**：把「录音中不递减」去掉 → 5.1 对应用例必须红。
 - [ ] 5.5 `FollowUpScreen`：极暗界面（禁纯白）、大号文字显示刚转出来的话、`10..0` 倒计时、麦克风按钮、超时自动收起。倒计时只由 `clock()` 驱动，不用独立 Timer。
 - [ ] 5.6 端到端：录 3 秒 → 松手 → 进追问页 → 再录 2 秒 → 超时收起 → 取文件比对 `durationMs` 增加约 2000ms。
-- [ ] 5.7 证据：`p2-followup-01.png`、`p2-followup-02-appended.wav`（取回文件）+ `p2-followup-02-ffprobe.txt`。
+- [ ] 5.7 证据：`p2-followup-01.png`、`docs/evidence/plan2/audio/p2-followup-02-appended.wav`（取回文件）+ `p2-followup-02-ffprobe.txt`。
 - [ ] 5.8 提交：`feat(record): 30 秒追问窗口，补录追加到同一 WAV`
 
 **Expected**：追加后 `(bytes-44)/32` 增加约 2000；ffprobe duration 与之相差 < 100ms（W2）；无崩溃。
@@ -447,7 +485,9 @@ class AudioPlayback(private val scope: CoroutineScope) {
 
 | 编号 | 原计划的写法 | 实际做法 | 原因 | 类型 |
 |---|---|---|---|---|
-| D88 | （执行中追加） | | | 以为的坑 / 实测结论 |
+| D88 | Task 1 Step 1.7：造一个「占位头 + 1000ms PCM」的 WAV 当 fixture | 改成造**已回填**的 canonical 头（`riffSize=32036`、`dataSize=32000`）；占位头只由单测证明（`create` 只落 44 字节） | Evidence Collector 实测：占位头会让 ffprobe 报 `Ignoring maximum wav data size, file may be invalid` 并改按 bitrate 估算时长——这种文件本身不是合法 WAV，做不了 W2 的基准 | 实测结论 |
+| D89 | 初版 `WavStore` 的 `append(FileOutputStream, ...)` + `finish(File)` 两个入口 | 改成单一写句柄 `openWriter(file): WavWriter`（自带 `bytesWritten`/`write`/`finish`），`finish(file)`/`repair(file)` 只留作扫描与离线修复 | Mobile App Builder 预审：两个入口分裂时，调用方可能套缓冲或没 flush 就让 `finish` 回填，得到「短头」；且回填后仍能继续写，头又变脏。`placeholder` 语义同时钉死为「任一字段仍是 `0xFFFFFFFF` 即 true」 | 以为的坑 |
+| D90 | Task 1 只断言 `offset 4..8` 与 `40..44` | 补「整 44 字节逐字节等于黄金 hex」两条常量（占位头、回填头） | Mobile App Builder：只查两个长度字段时，`fmt ` 尾空格丢失、`byteRate` 写成 0、`bitsPerSample` 写错都照样绿 | 以为的坑 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
