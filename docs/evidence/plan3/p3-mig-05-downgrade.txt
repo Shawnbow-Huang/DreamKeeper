@@ -28,3 +28,7 @@ adb shell am start -n com.dreamkeeper/.MainActivity
 Room 在 onDowngrade 里找不到 2→1 的迁移路径，直接 IllegalStateException 崩进程（见上原文）。
 唯一兜底是升级前留副本：本任务的 DbBackup 已在迁移前把 files/db-backup/dreamkeeper-v1-*.db 留好。
 [恢复] 重装 v2 APK 后冷启，topResumedActivity=com.dreamkeeper/.MainActivity，app 正常。
+
+[v1 包来源（D281）]
+`.scratch/p3-v1.apk` sha256=5ff054986f19fc9c…（与首行 OLD_APK_SHA256 前 16 位一致），由 plan3-generation HEAD 构建。
+`.scratch/` 被 `.gitignore` 忽略，包体不入库；复跑本文件 REPLAY 前需自行构建 v1 包放到该路径。

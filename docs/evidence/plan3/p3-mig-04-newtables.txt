@@ -24,3 +24,12 @@ Room 的 schema 自校验在迁移后发现缺表/表结构不符，直接判迁
 [恢复]
 从变异前备份 cp 回 DreamDatabase.kt，cmp 逐字节相同；同一命令重跑 BUILD SUCCESSFUL、3/3 绿。
 结论：前面的绿确实依赖四张新表的 CREATE，测试不是空转。
+
+[恢复后的绿（同一条命令 --rerun-tasks；Lead 补记，D282）]
+MigrationTest > migrationCreatesTheFourNewTablesAndTagIdIndex PASSED
+MigrationTest > v1DatabaseMigratesToV2AndKeepsEveryLegacyValue PASSED
+MigrationTest > fourNewTablesRoundTripChineseAndNewlines PASSED
+3 tests completed, BUILD SUCCESSFUL in 15s（XML failures=0 errors=0）
+DAO 往返（四张新表 insert + 中文 + 换行 + 重复版本号受限）由
+fourNewTablesRoundTripChineseAndNewlines 覆盖；本文件前半只记变异反证。
+注：恢复时用 `cp` 回备份并 `cmp` 逐字节相同，但 cmp 的原始输出当时未落盘（D282）。

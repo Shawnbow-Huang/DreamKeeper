@@ -1,0 +1,29 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=host-only 2026-10-30T14:01:06Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --rerun-tasks
+
+# p3-mig-07-full-tests：v2 全量 JVM 单测（Task 4 迁移改动后的回归）
+
+[命令与结果]
+$ cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --rerun-tasks
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 22s
+34 actionable tasks: 34 executed
+
+[XML 统计（app/build/test-results/testDebugUnitTest/*.xml，python ElementTree 复算）]
+classes=28 tests=289 failures=0 errors=0 skipped=0
+
+[与 Task 3 基线对比（计划 §10 Task 3 段：26 类 / 284 例）]
++2 类（MigrationTest、DreamRepositoryNovelSelectedTest）+5 例 → 28 类 / 289 例
+
+[MigrationTest 单独复跑]
+$ ... ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.MigrationTest" --rerun-tasks
+BUILD SUCCESSFUL in 15s
+MigrationTest > migrationCreatesTheFourNewTablesAndTagIdIndex   PASSED  0.065s
+MigrationTest > v1DatabaseMigratesToV2AndKeepsEveryLegacyValue  PASSED  0.053s
+MigrationTest > fourNewTablesRoundTripChineseAndNewlines        PASSED  0.060s
+failures=0 errors=0
+
+[读法]
+本文件解决「289 全绿只存在于被忽略的 .scratch 日志」的问题（D283）：命令、构建结论、
+逐类计数都落进仓库，任何人 clean checkout 后可复跑得到同一计数。

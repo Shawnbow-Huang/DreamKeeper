@@ -1,0 +1,48 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=host-only 2026-10-30T14:01:06Z
+REPLAY=python scripts/check-schema-verbatim.py
+
+# p3-mig-08-sql-verbatim：迁移 SQL 与 Room schema 的逐字一致性（在 check-migrate.py 之外的第二道闸）
+
+[为什么要有这一份]
+check-migrate.py 比对的是「迁移后的库」与「迁移前的库」的数据/表结构；它证明不了
+MIGRATION_1_2 的 SQL 与 2.json 的 createSql 是否同源。手抄 SQL 与 schema 一旦漂移，
+设备侧只会在某些机型/某些列上炸，或者根本测不出来。本文件把「逐字」这件事落盘。
+
+[复跑输出（原文）]
+== A. MigrationTest 手搭 v1 库 vs 1.json（测试字面量保留 ${TABLE_NAME} 占位符）==
+  table dreams                     verbatim_in_test=True
+  table tags                       verbatim_in_test=True
+  index index_tags_name            verbatim_in_test=True
+  table dream_tags                 verbatim_in_test=True
+  table media_assets               verbatim_in_test=True
+  index index_media_assets_dreamId verbatim_in_test=True
+  RESULT_A = PASS 6/6
+
+== B. MIGRATION_1_2 vs 2.json（期望 = 2.json 中 v1 没有的语句，排除被 ALTER 取代的 CREATE TABLE dreams）==
+  迁移 CREATE 语句数=8  2.json 应新增语句数=8
+  missing = 0   extra = 0
+    [OK ] index index_dream_tags_tagId
+    [OK ] table novel_versions
+    [OK ] index index_novel_versions_dreamId_version
+    [OK ] table novel_messages
+    [OK ] index index_novel_messages_dreamId_createdAt
+    [OK ] table generation_jobs
+    [OK ] table llm_calls
+    [OK ] index index_llm_calls_dreamId_createdAt
+  RESULT_B = PASS 8/8
+  注：2.json 的 CREATE TABLE `dreams` 不出现于迁移，由两条 ALTER TABLE 取代（预期）。
+
+== C. 其它硬断言 ==
+  ALTER ADD novelSelectedVersion : True
+  ALTER ADD generationStage      : True
+  addMigrations 调用次数         : 1
+  fallbackToDestructiveMigration 文本出现: 2 （注释中的字样；代码调用 0 处）
+  1.json identityHash            : 3150a0bccf0e3cb537faa8aac20e4186
+  2.json identityHash            : 166666e50d40204e526403725c8302ab
+
+[读法]
+- A 6/6：MigrationTest 手搭 v1 库的 4 张表 + 2 个索引与 1.json 同源，不是「凭记忆写的 v1」。
+- B 8/8：迁移里的 8 条 CREATE 恰好等于 2.json 相对 v1 的新增集合，缺失 0、多余 0。
+- C：dreams 只走 ALTER 加两列；addMigrations 恰好挂 1 次；`fallbackToDestructiveMigration`
+  只出现在注释里（2 处字样），代码调用 0 处。

@@ -1,12 +1,13 @@
 APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
-DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+DEVICE_TIME=Fri Oct 30 21:28:03 CST 2026
 REPLAY=python scripts/check-migrate.py --dump docs/evidence/plan3/p3-mig-01-baseline.db --out docs/evidence/plan3/p3-mig-01-baseline.json
 
-# p3-mig-01-baseline：升级前的 v1 库（含 2 条非种子行）
+# p3-mig-01-baseline：升级前的 v1 库（4 条种子 + 1 条真实录制；其中 seed-dream-1 被宿主改过）
 
 设备：emulator-5554（1080x2400 @420dpi），时区 Asia/Shanghai。
-首三行 DEVICE_TIME 是 00–05 这批证据的统一采集时刻，各步真实执行时刻见正文；v1 包 sha 链
-（`pm path` → `adb pull` → `sha256sum`）见 task-4-report.md:81。
+DEVICE_TIME 用基线库 pull 的真实设备时刻（来源 `.scratch/baseline-device-time.txt`）；02–05 的
+DEVICE_TIME 是 21:44 批次统一补记，各步真实执行时刻见各自正文（偏差见计划 §9 D280）。
+v1 包 sha 链（`pm path` → `adb pull` → `sha256sum`）见 task-4-report.md:81 与 p3-mig-05 的 [v1 包来源]。
 v1 APK：从 HEAD(plan3-generation) 构建，装后 pm clear 再冷启 → 仅 4 条种子。
 派工书 §四.2 声称随种子带有 7 条历史录音，实测设备上不存在（偏差 D277），基线按实际状态另造：
 在此基础上造基线（否则 destructive 迁移也会假绿）：
