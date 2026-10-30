@@ -66,16 +66,25 @@ GenerationJob：沿用现有表，补 stage / attemptNo / error 三列
 
 ## 4. 价格与成本（唯一真源 = 资产文件）
 
-`android/app/src/main/assets/pricing/deepseek.json`：
+`android/app/src/main/assets/pricing/deepseek.json`（**文件不自带 sha256 字段**——自指固定点且 JSON 无规范序列化；`sha256` 由加载器算 `rawBytes` 得到，写进 `PriceCard.cardSha256` 与每次调用的 `priceSnapshotJson`）：
 
 ```json
-{"version":"2026-10-30","effectiveFrom":"2026-10-30","sourceUrl":"https://api-docs.deepseek.com/quick_start/pricing",
- "sha256":"<文件自身内容的 sha256，自举留空>" ,
+{"version":"2026-10-30","effectiveFrom":"2026-10-30",
+ "provenance":"project-convention",
+ "provenanceNote":"峰谷时间窗取自 dsh-cost-meter 的工程约定；DeepSeek 官方定价页没有定义峰谷窗口",
+ "sourceUrl":"https://api-docs.deepseek.com/quick_start/pricing",
  "currency":"CNY","unit":"microYuanPerMillionTokens",
- "models":{"deepseek-flash":{"cacheHit":20000,"cacheMiss":1000000,"output":4000000,
-           "offPeak":{"cacheHit":20000,"cacheMiss":1000000,"output":4000000}},
-           "deepseek-v4-pro":{...}}}
+ "models":{
+   "deepseek-flash":{
+     "peak":{"cacheHit":20000,"cacheMiss":1000000,"output":4000000},
+     "offPeak":{"cacheHit":10000,"cacheMiss":500000,"output":2000000}},
+   "deepseek-v4-pro":{
+     "peak":{"cacheHit":150000,"cacheMiss":4500000,"output":13500000},
+     "offPeak":{"cacheHit":75000,"cacheMiss":2250000,"output":6750000}}}}
 ```
+
+- **每个 model 只认 `peak` / `offPeak` 两支**，加载时硬校验 `offPeak[f] * 2 == peak[f]`（峰价必须全偶，半价才整数精确）；`unit` / `currency` / `provenance` 不认识就拒绝加载。
+- **数值状态**：`deepseek-flash` 的 20000/1000000/4000000（= 0.02/1/4 元每百万）来自我 2026-10-29 读到的官方价目，**未二次核对**，登记为待核：`D259`。
 
 - 计价公式（整数微元，只在最后取整一次）：
   `costMicroYuan = (hit*Rhit + miss*Rmiss + out*Rout + 500000) / 1000000`，R 的单位是「微元 / 1M tokens」。
@@ -263,13 +272,72 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 3 价卡与成本计算
 
-- Files：`android/app/src/main/assets/pricing/deepseek.json`、`llm/Pricing.kt`（`PriceCard`/`PriceTable`/`PeakPolicy`）、
-  `llm/CostCalculator.kt`、`test/.../CostCalculatorTest.kt`、`scripts/check-cost.py`（host，复算闸门）。
-- Interfaces：`fun costMicroYuan(card: PriceCard, model: String, hit: Long, miss: Long, out: Long, at: Instant): Long`；
-  `fun isPeak(at: Instant, zone: ZoneId = ZoneId.of("Asia/Shanghai")): Boolean`。
-- Steps：先写 8 个高峰边界用例（08:59:59 / 09:00 / 11:59:59 / 12:00 / 13:59:59 / 14:00 / 17:59:59 / 18:00 与周末）
-  与 4 个算术用例，红 → 实现 → 绿；再写 `check-cost.py` 对导出库复算（见 Task 8 的证据）。
-- Expected：全部整数运算、无浮点；同一批 token 在峰/谷算出两倍差；`check-cost.py --db-copy` 报 `mismatches=0`。
+> 0. 派工前修订（Lead 按 Mobile App Builder / Evidence Collector 预审裁定，覆盖下文任何冲突）
+>
+> **0.1 资产文件不带自哈希字段**；加载器 `PriceCardSource.load()` 返回 `PriceCard(version, effectiveFrom, provenance, peers)` 并附 `cardSha256 = sha256(rawBytes)`。
+> 测试里用**内置期望常量**（`"deepseek-flash".peak.cacheMiss == 1000000L` 这类）钉住解析结果，另配一条 `cardSha256` 的黄金值常量（首次生成后人工抄入）。
+>
+> **0.2 `PriceCardSource` 必须是接口**：`interface PriceCardSource { fun load(): PriceCard }` + `AssetPriceCardSource(context)`；
+> 测试用 `FakePriceCardSource`（照 `data/security/KeystoreCipher.kt:23-30` 的 D237 形制）。理由：`assets/` 在纯 JVM 单测里读不到（**未验证** Gradle 测试工作目录的相对路径）。
+>
+> **0.3 计价函数的签名**：
+> `fun costMicroYuan(rates: Rates, hit: Long, miss: Long, out: Long): Long`（纯函数、无时钟、无 IO）
+> + `fun price(card: PriceCard, model: String, hit: Long, miss: Long, out: Long, at: Instant): Priced`（判峰谷 + 选 rates + 组装结果）。
+> 内部一律 `Math.multiplyExact` / `Math.addExact`，只在最后 `(sum + 500_000L) / 1_000_000L` 取整一次；参数**不许写 `Int`**（`20000/1_000_000` 在整数下等于 0 是典型事故）。
+>
+> **0.4 `Priced` 是 sealed**：`Ok(microYuan, isPeak, cardVersion, cardSha256)` / `UnknownModel(model)` / `CardNotApplicable(reason)` / `Overflow(detail)`。
+> **未知 model 在调用前就按白名单拒**（`deepseek-flash` / `deepseek-v4-pro`）；响应里冒出未知 id → `cost_micro_yuan = NULL` + `error='unknown_model'`，**绝不写 0**（0 与「免费」不可区分）。
+> 任何分支都仍必须写一行 `llm_calls`（设计「绝不静默丢弃」）。
+>
+> **0.5 陈旧价卡不是错误**：行内快照版本 ≠ 当前资产是**正常**（快照的全部意义）；只有「当前资产不可用」才 `CardNotApplicable` 硬失败，且**不回退旧卡、不用默认价**。
+> `at < effectiveFrom` 判 `CardNotApplicable`，不是谷价。时钟回退（`now < lastPricedAt - 60s`）不抛异常、不丢生成，写 `error='clock_skew'` 但保留 `pricedAtEpochMs`。
+>
+> **0.6 峰谷判定**：
+> `fun isPeak(at: Instant, zone: ZoneId = ZoneId.of("Asia/Shanghai")): Boolean`——`at.atZone(zone)`（不用 `LocalDateTime.atZone`），`dayOfWeek.value >= 6` 判谷，半开区间 `[09:00,12:00)` 与 `[14:00,18:00)`。
+> **`zone` 显式参数是测试项**：现有代码用 `ZoneId.systemDefault()`（`data/DreamRepository.kt:259`、`ui/record/RecordViewModel.kt:266`），本任务不许照抄。夹具 Instant 全取 2026 年（避开 `Asia/Shanghai` 1986–91 历史 DST 与 1901 前 LMT）。
+>
+> **0.7 包与目录**：`com.dreamkeeper.llm`（新包）；`android/app/src/main/assets/pricing/deepseek.json`（`assets/` 目录本任务**首次创建**）。
+> 与 Task 6 的 `assets.srcDir` Sync **不冲突**：Task 6 只 Sync `prompts/`，不许覆盖 `assets/pricing/`——这条写进 Task 6 §0。
+>
+> **0.8 「两倍差」的精确断言**：`hit = miss = out = 1_000_000` 时分子可被 1e6 整除，`peak == 2 * offPeak` 成立；
+> 但**任意 token 组合下取整会让差落在 −1..0**，所以通用用例写 `assertTrue(peak - 2*off in -1L..0L)`，只有整除那组写等式。另加资产级不变量 `offPeak[f] * 2 == peak[f]`（每个 model × 每个字段）。
+>
+> **0.9 证据向量先行**：`docs/evidence/plan3/p3-cost-01-vectors.json` 只放「输入 + 人手算的期望 + 推导原文」，Kotlin 测试**读这个文件**而不是在测试里另抄常量；
+> `git log --format='%h %ci %s' -- <vectors> <Pricing.kt>` 必须显示 vectors 先提交。JSON 不能带「首三行」，用同名 `.txt` 侧车放 `APK_SHA256=` / `DEVICE_TIME=host-only …` / `REPLAY=` / `JSON_SHA256=`。
+>
+> **0.10 边界向量 10 组**（`2026-10-30` 是周五）：`01:00Z`(=09:00 峰) / `08:59:59` / `03:59:59Z`(=11:59:59 峰) / `04:00:00Z`(=12:00 谷) / `05:00:00Z`(=13:00 谷，专抓「9–18 当连续」) / `05:59:59Z`(=13:59:59 谷) / `06:00:00Z`(=14:00 峰) / `09:59:59Z`(=17:59:59 峰) / `10:00:00Z`(=18:00 谷) / 周六 `02:00Z`(=10:00 谷)。
+> 另加**时区反事实**向量：`2026-10-30T01:00:00Z` 按 UTC 判应是谷、按 `Asia/Shanghai` 是峰；测试里 `TimeZone.setDefault(New_York)` 后重跑仍须峰（抓「偷偷读默认时区」）。
+>
+> **0.11 `scripts/check-cost.py` 不读被测代码**：`--vectors <json>` 与 `--db-copy <db>`（`sqlite3` 只读），断言五条——
+> ① `recomputed == costMicroYuan`；② `isPeak == isPeak(createdAt, Asia/Shanghai)`；③ `hit+miss==prompt_tokens` 且 `prompt+out==total_tokens`（取自 `usageJson`）；
+> ④ `formulaVersion` 不在白名单 → **exit 2**（不许静默变绿）；⑤ 用 `fractions.Fraction` 走精确有理数交叉比对整数式（抓漏 `+500000`、二次取整、混浮点）。
+> 复算真源是**行内** `priceSnapshotJson`（不是 `assets/pricing/deepseek.json`）。末行固定 `rows=N mismatches=M`，`--json`，退出码 0/1/2，形制照 `scripts/check-faithful.py:387-393`。
+>
+> **0.12 闸门的变红证明**（全在副本上做）：`costMicroYuan+1` → `mismatches=1` exit 1；`isPeak=1-isPeak` → 红；`priceSnapshotJson` 里 `cacheMiss` +1 → **必须红**（专抓「读资产不读快照」的实现）；未变异副本 → `mismatches=0` exit 0。
+>
+> **0.13 `--db-copy` 本轮跑不了**（`llm_calls` 表 Task 4 才建、行 Task 8 才写）：Task 3 的证据里这一条只能写 `PENDING: 待 Task 4 建表、Task 8 写行，Task 10 真跑`，**禁止用空库跑出 0 冒充通过**。
+>
+> **0.14 本任务无设备取证**：证据首三行写 `DEVICE_TIME=host-only 2026-…`，不伪造 adb 时间；截图不适用（纯逻辑，无可视界面）。
+
+- Files：`android/app/src/main/assets/pricing/deepseek.json`、`llm/Pricing.kt`（`Rates`/`PriceCard`/`PriceCardSource`/`AssetPriceCardSource`/`Priced`/`isPeak`/`price`）、
+  `llm/CostCalculator.kt`（`costMicroYuan`）、`test/.../llm/CostCalculatorTest.kt`、`test/.../llm/PricingTest.kt`（解析 + 不变量）、`scripts/check-cost.py`、
+  `docs/evidence/plan3/p3-cost-*`。
+- Interfaces：
+  `interface PriceCardSource { fun load(): PriceCard }`
+  `data class Rates(val cacheHit: Long, val cacheMiss: Long, val output: Long)`
+  `data class PriceCard(val version: String, val effectiveFrom: java.time.LocalDate, val provenance: String, val models: Map<String, Pair<Rates, Rates>>, val cardSha256: String)`
+  `fun costMicroYuan(rates: Rates, hit: Long, miss: Long, out: Long): Long`
+  `fun isPeak(at: java.time.Instant, zone: java.time.ZoneId = java.time.ZoneId.of("Asia/Shanghai")): Boolean`
+  `fun price(card: PriceCard, model: String, hit: Long, miss: Long, out: Long, at: java.time.Instant): Priced`
+- Steps：
+  1. 先写 `p3-cost-01-vectors.json`（10 组边界 + 2 组算术 + 2 组时区反事实，含人手算期望与推导原文）→ 提交（这一提交必须在实现之前）。
+  2. 写 `CostCalculatorTest` / `PricingTest` 读该 JSON，跑红 → 存 `p3-cost-00-red.txt`。
+  3. 实现 `Pricing.kt` / `CostCalculator.kt` / `deepseek.json` → 绿；`p3-cost-02-unit.txt`（XML 统计）。
+  4. 咬合反证：手工把任一 `expect_micro` +1 重跑必红 → 存 `p3-cost-00-red.txt` 末尾。
+  5. 写 `check-cost.py`（`--vectors` / `--db-copy` / `--self-test`）→ `p3-cost-03-gate.txt`；变异三条 → `p3-cost-04-mutation.txt`。
+  6. 两倍差展示 → `p3-cost-05-peak2x.txt`；`--db-copy` 写 PENDING → `p3-cost-06-dbcopy.txt`。
+- Expected：全部整数运算、无浮点、单次取整；`offPeak*2==peak` 与 `peak==2*offPeak`（整除组）都绿；
+  `check-cost.py --vectors` → `rows=N mismatches=0` exit 0，三条变异各 exit 1；`--db-copy` 记为 PENDING。
 
 ### Task 4 数据库 v2 迁移
 
@@ -293,6 +361,8 @@ T3  不调用模型                                   → faithfulText = rawTran
 - Expected：401 只发 1 次请求；429 共 4 次尝试且间隔递增；取消后服务端收到连接断开。
 
 ### Task 6 提示词资产与 PromptRepository
+
+> **0.0（Lead 补充）**：`assets.srcDir` 的 Sync 只许拷 `prompts/`，**不许覆盖 `assets/pricing/`**（Task 3 建）；Sync 目标目录要 `delete false` 或只清 `prompts` 子目录。
 
 - Files：`android/app/build.gradle.kts`（Sync 任务 + `assets.srcDir`）、`llm/PromptRepository.kt`、
   `llm/PromptSpec.kt`（槽位表）、`test/.../PromptRepositoryTest.kt`。
@@ -379,6 +449,16 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D250 | T2-14：`save()` 成功后清空 `draft`，`load()` 不把明文写进任何状态 | 明文只活在输入框草稿里；`maskedKey` 只存掩码。4 份 UI dump 里 needle=0 |
 | D251 | T2-15：证据头 `DEVICE_TIME` 取证据窗口内时刻，非秒级单调时间戳 | 设备时钟与主机一致（CST）；`capture-screen.ps1` 不输出时间戳。该字段只用于「证据何时取」，不影响内容复现 |
 | D252 | T2-16：首拍带输入法的截图在 `-MaxRatio 0` 下命中 2/69120 采样点（0.003%） | 键盘是系统 UI，不属于 App 主题；`input keyevent 4` 收起 IME 后重拍，四张全部 `nearWhite=0`；首版已删 |
+| D253 | T3-1：资产文件删掉自哈希 `sha256` 字段，改由加载器算 `rawBytes` 得到 `cardSha256` 写进快照 | JSON 自指固定点 + 无规范序列化，任何校验器都必然报错 |
+| D254 | T3-2：价卡结构改 `models[name] = {peak, offPeak}`，强制 `offPeak*2 == peak` | 原样例 `offPeak` 与 `peak` 同值，「峰谷两倍差」这条验收根本不成立；顶层裸字段与两支并存也说不清哪份是峰价 |
+| D255 | T3-3：峰谷时间窗标 `provenance=project-convention` | 09–12 / 14–18 来自 dsh-cost-meter 的工程约定，DeepSeek 官方定价页没有定义峰谷窗口；原 `sourceUrl` 会让人误读成官方口径 |
+| D256 | T3-4：新增 `PriceCardSource` 接口 + `AssetPriceCardSource`，测试用 Fake | 纯 JVM 单测读不到 `assets/`；也是 D237 同一形制 |
+| D257 | T3-5：`Priced` 改 sealed（Ok/UnknownModel/CardNotApplicable/Overflow），未知 model 前置拒 + `cost=NULL, error='unknown_model'` | 返回裸 `Long` 无法表达失败；写 0 会与「免费」混淆，check-cost 也辨不出 |
+| D258 | T3-6：`isPeak` 显式 `ZoneId` 参数；仓库现有 `ZoneId.systemDefault()` 不许照抄 | 换台机器答案就变；`Instant.atZone` 与半开区间才能与 10 组边界一一对应 |
+| D259 | T3-7：`deepseek-flash` 的 0.02/1/4 元每百万 token **未二次核对**，待核 | 数值来自 2026-10-29 单次读取；`deepseek-v4-pro` 的 0.15/4.5/13.5 同样是待核值 |
+| D260 | T3-8：`scripts/check-cost.py` 复算真源是行内 `priceSnapshotJson`，不是当前资产 | 调价后历史账目必须还能复算；变异实验里「改快照必须红、改资产不许变绿」专门抓这条 |
+| D261 | T3-9：`--db-copy` 本轮只能写 PENDING（表 Task 4 建、行 Task 8 写） | 空库跑出 `mismatches=0` 是假绿；真跑排到 Task 10 |
+| D262 | T3-10：证据向量 JSON 先于实现提交，测试读同一份 JSON，不另抄常量 | 同义反复的根源是「测试有自己的期望副本」；提交顺序本身即证据 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
