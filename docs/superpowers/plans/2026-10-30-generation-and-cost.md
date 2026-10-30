@@ -513,12 +513,14 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 7 五闸门 Kotlin 移植
 
-- Files：`llm/gates/FaithfulGates.kt`、`llm/gates/GateResult.kt`、`test/.../FaithfulGatesTest.kt`。
-- 移植 `scripts/check-faithful.py` 的 G1–G5；**自测断言「失败的闸门集合」**（现有 python 只比总通过，
-  把 G1 写成空函数也能全绿）；保留两个数词向量（一层→三层、过了三十）与「一下/七点」的**已知误报**（别顺手修）；
-  G5 的否定前缀 `不没未别莫` 与逐词非重叠计数照搬；2-gram 先 strip_ws 再删 34 字 PUNCT 集合（**不许** `Char.isPunctuation`）。
-- Steps：11 条变异向量 + 2 条边界（只加标点必须绿；删语气词必须绿）先红 → 实现 → 绿 → 变异（把 G1 改恒真，集合断言必须红）。
-- 另加：`contentChars(s)` 纯函数 + `isConservativeOk(in, out)`（T2 等值校验）。
+- Files：`llm/gates/GateResult.kt`（`enum Gate`、`enum GateMode`、`GateResult`、`GateReport`）、`llm/gates/FaithfulGates.kt`（`object FaithfulGates`）、`test/.../llm/gates/FaithfulGatesTest.kt`；向量真源 `docs/evidence/plan3/faithful-gate-vectors.json`（15 条，由 `scripts/check-faithful.py` 直接生成并冻结，`source_sha256=a3d84acbc2b49e33…`）。
+- §0.1 API（写死，Task 8 依赖）：`FaithfulGates.check(input, output, mode: GateMode = GateMode.FAITHFUL): GateReport`；`GateReport.failed: Set<Gate>`、`.passed`、`.results`；`GateResult(gate, passed, value: Double?, detail: List<String>, advisory: List<String>)`；`contentChars(s): String`（先删空白、再删 34 字标点，按码点）、`contentCharCount(s): Int`、`isConservativeOk(input, output) = contentChars(input) == contentChars(output)`（T2 逐字等值）。
+- §0.2 向量口径：**11 例与 `--self-test` 完全一致（9 红 + 2 绿）**，另加 2 条 revise 边界（正文比 112.5% → revise 绿 / faithful 红；122.5% → 两模式都红）+ 2 条已知误报锁定（输出新增「一下」「七点」→ G1 必红，**不许顺手修**），共 **15 条**。逐例断言 `assertEquals(expectedFailed, report.failed)`，禁止只比总 `pass`（现有 python 自测只比 pass，G1 写成空函数也全绿）。
+- §0.3 测试是 **plain JUnit4**（不碰 `android.*`/`org.json`/`Log`），不要 `@RunWith(RobolectricTestRunner)`；向量用 `repoRoot()` 上溯定位（同 `CostCalculatorTest.kt:221`），并在 `app/build.gradle.kts` 加 `inputs.file(.../faithful-gate-vectors.json)`（D273 同款，防 Gradle 假绿）。
+- §0.4 常量逐字：PUNCT 34 字（`，。！？；：、,.!?;:…—` + U+3000 + 半角空格 + `\n\r\t` + `“”"'（）()《》【】[]`，单测断言 `PUNCT.length == 34`）；`NEG_PREFIX=不没未别莫`；FILLERS 13 / UNCERTAIN 14 / CAUSAL 8 / SCENE_MARKERS 11 照抄脚本。数词向量是「一楼→三楼」与「过了三十→过了四十」（旧稿「一层→三层」是笔误）。
+- §0.5 Python 语义：空白=Unicode 空白（显式 `Char.isWhitespace() || U+00A0 || U+001C..U+001F || U+0085`），不许裸 `Regex("\\s")`；`\d` 改 `\p{Nd}`；bigram/24 字窗/±6 上下文一律**按码点**；`extract_quoted` 取捕获组；G4 同词去重照抄 python 的 `"跨场景新增因果「c」" in join(bad)` 子串语义，每窗每词只取首个 `find`，ctx 保留换行；G5 非重叠计数 + `i > 0` 防 -1 回绕；G2 空输入判红（`value=null`）、G3 空源判绿（`value=1.0`）；detail 截断 G1 前 10 / G3-G5 前 6、G1 advisory 前 12。
+- Steps：先落 `GateResult.kt` 可编译空壳 → 测试读向量跑 targeted 得 **15 failed**（红证据）→ 实现 `FaithfulGates` → 15/15 绿 → 变异（G1 恒真，至少 ③④⑤⑥⑦ 五条 G1 向量必红）→ 恢复绿 → 全量。
+- Expected：targeted 15/15 绿；全量 30 类 / 326 例（301 + Task 6 的 10 + 本任务 15，以 Task 6 实际并入数为基线）；变异后 ≥5 例红且恢复后逐字相同再绿。
 
 ### Task 8 GenerationOrchestrator（含四级失败链与记账）
 
@@ -642,6 +644,11 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D301 | T5-5：解析失败（`EMPTY_CONTENT`/`INVALID_JSON`）不新增 `Attempt`，而是把最后一条 200 的 `errorKind` 改写为该 kind；请求体额外带 `Accept: application/json`（契约未要求，无害） | 与 D290「解析失败不重试」一致：一次 HTTP 交换仍只有一条 Attempt；若 Task 8 需要「解析失败单独一行」需再约定 |
 | D302 | T5-6：`p3-llm-00-red.txt` 对应用例 1 的早期断言（enabled 请求 `messages` 1→2 修正后未重跑红） | 红阶段 8/8 失败由 stub 的 `NotImplementedError` 决定，用例 1 断言修正只放宽了 `messages` 条数（1→2），不改变「8 条全红」结论；红证据保留原样以证明先红 |
 | D303 | T5-7：Task 5 全程离线（本地 `HttpServer`），真实 `api.deepseek.com` 未访问；403/5xx/普通 `IOException` 重试、`readTimeout` 单独触发、jitter 随机性均无用例 | 契约 G-3 要求零真实调用；这些路径归 Task 8 真机联调 + Task 10 验收 PENDING |
+
+| D304 | T6-1：Task 6 §0.4 补「allowEmpty 空串语义」——`required && !allowEmpty` 的 null 与空串都抛 IAE，`allowEmpty=true` 两者都放行；用例 9→10（第 10 条 faithful 空输入不抛） | 派工书只写了 null 行为，参数形同虚设；faithful.v2:212 明确空输入是合法场景（Task 8 的 T2 边界会用到） |
+| D305 | T7-1：Task 7 向量口径修正为「11 例（9 红 + 2 绿，与 `--self-test` 一致）+ 2 条 revise 边界 + 2 条已知误报 = 15 条」，真源 `docs/evidence/plan3/faithful-gate-vectors.json`（`source_sha256=a3d84acbc2b49e33`，由 Python 直接生成后冻结）；旧稿「11 条变异 + 2 条边界」=13 与 `--self-test` 不符 | 实测 `python scripts/check-faithful.py --self-test` 共 11 例（2 绿 9 红）；旧稿数词向量「一层→三层」与脚本 :354-355 的「一楼→三楼」不符，「一下/七点」在脚本中无执行向量，现补成 G1 必红的两条锁定用例 |
+| D306 | T7-2：Task 7 API 写死 `check(input, output, mode)` + `GateReport.failed: Set<Gate>` + `contentChars`/`isConservativeOk` 的落点与签名 | 旧 Files 没有 `mode`（G2 revise 1.15 与 Task 9「G2/G3 对当前版本」都要用），也没写 `Gate`/`GateReport`/两个纯函数的落点；Task 8 的 T2 等值与违规清单注入依赖这些签名 |
+| D307 | T7-3：Task 7 端口语义与测试形态——Unicode 空白显式集合、`\p{Nd}`、码点下标、G4 子串去重、G5 回绕保护、plain JUnit + Gradle `inputs.file` 防假绿 | 实测 Java 默认 `\s` 不匹配 U+3000/U+00A0/U+001C、`\d` 不匹配全角３，`String.length` 按 UTF-16 会切开代理对；纯函数无 Android 依赖，20 个 Robolectric 类都是因为碰 Android/org.json，本测试不需要 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
