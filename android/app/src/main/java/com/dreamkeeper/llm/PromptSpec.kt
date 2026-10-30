@@ -54,7 +54,7 @@ data class PromptSpec(
 )
 
 /**
- * 三份提示词的登记表。
+ * 三份提示词的登记表（Plan 4 T5 起 novel=v2.1、novel_revise=v1.1）。
  *
  * 版本号只用于日志/评测标注，**不写库**：计划 §0.8 / D267 / D285 明确不建 prompt_versions 表，
  * 提示词漂移只记 WARN，不迁移数据库。
@@ -74,22 +74,24 @@ object PromptSpecs {
 
     val NOVEL = PromptSpec(
         promptId = "novel",
-        version = "v2",
-        assetPath = "prompts/novel.v2.md",
-        sha256_8 = "f189dad8",
+        version = "v2.1",
+        assetPath = "prompts/novel.v2.1.md",
+        sha256_8 = "cc497720",
         slots = listOf(
             SlotSpec("原始转写", required = true),
             SlotSpec("理顺稿", required = true),
             SlotSpec("标签 / 选填", required = false),
+            // Plan 4 T5：用户想法是可选槽，空想法时整对删除（不是空串）。
+            SlotSpec("用户想法 / 选填", required = false, allowEmpty = true),
         ),
         markers = emptyList(),
     )
 
     val NOVEL_REVISE = PromptSpec(
         promptId = "novel_revise",
-        version = "v1",
-        assetPath = "prompts/novel_revise.v1.md",
-        sha256_8 = "2ebba630",
+        version = "v1.1",
+        assetPath = "prompts/novel_revise.v1.1.md",
+        sha256_8 = "45a17e0a",
         slots = listOf(
             SlotSpec("原始转写", required = true),
             SlotSpec("当前小说稿", required = true),

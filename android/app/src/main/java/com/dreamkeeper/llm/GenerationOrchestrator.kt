@@ -115,6 +115,7 @@ class GenerationOrchestrator(
      */
     override suspend fun generateNovel(
         dreamId: String,
+        idea: String?,
         onProgress: ((GenerationStage, Int) -> Unit)?,
     ): GenerationResult {
         val mutex = locks.getOrPut(dreamId) { Mutex() }
@@ -123,7 +124,7 @@ class GenerationOrchestrator(
             val dream = store.dream(dreamId)
                 ?: return protocol(GenerationKind.NOVEL, "dream 不存在")
             if (!generatable(dream)) return protocol(GenerationKind.NOVEL, GATE_MESSAGE)
-            return novel(dream, Run(dreamId), onProgress)
+            return novel(dream, Run(dreamId), idea, onProgress)
         } finally {
             mutex.unlock()
         }
@@ -267,6 +268,7 @@ class GenerationOrchestrator(
     private suspend fun novel(
         dream: Dream,
         run: Run,
+        idea: String?,
         onProgress: ((GenerationStage, Int) -> Unit)?,
     ): GenerationResult {
         emit(GenerationKind.NOVEL, GenerationStage.T0, 1, onProgress)
@@ -281,6 +283,8 @@ class GenerationOrchestrator(
                 SLOT_RAW to raw,
                 SLOT_POLISHED to polished,
                 SLOT_TAGS to tags,
+                // T5：空想法传 null → 渲染器整对删槽；非空才送模型（≤200 字由调用方截断）。
+                SLOT_IDEA to idea?.trim()?.takeIf { it.isNotEmpty() },
             ),
         )
 
@@ -529,7 +533,8 @@ class GenerationOrchestrator(
         changeLogJson = null,
         origin = ORIGIN_GENERATE,
         promptId = promptId,
-        promptVersion = promptVersion.toIntOrNull() ?: 0,
+        // Plan 4 T5：版本形如 v2 / v2.1，主版本号进 Int 列（v2.1 -> 2）。
+        promptVersion = promptVersion.removePrefix("v").substringBefore('.').toIntOrNull() ?: 0,
         promptHash = promptHash,
         model = model,
         reasoningEffort = null,
@@ -657,6 +662,7 @@ class GenerationOrchestrator(
         private const val SLOT_RAW = "原始转写"
         private const val SLOT_POLISHED = "理顺稿"
         private const val SLOT_TAGS = "标签 / 选填"
+        private const val SLOT_IDEA = "用户想法 / 选填"
         private const val TAG_SEPARATOR = "、"
         private const val MIN_QUOTE = 4
         private const val MAX_QUOTE = 40

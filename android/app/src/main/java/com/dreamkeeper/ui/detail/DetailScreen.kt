@@ -175,6 +175,7 @@ fun DetailScreen(
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val generationPhase by vm.generationPhase.collectAsStateWithLifecycle()
+    val novelIdeaOpen by vm.novelIdeaPrompt.collectAsStateWithLifecycle()
     val exportState by vm.export.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var exportOpen by rememberSaveable { mutableStateOf(false) }
@@ -239,7 +240,10 @@ fun DetailScreen(
                                 revisionAck = state.revisionAck,
                                 generationPhase = generationPhase,
                                 onGenerateFaithful = vm::generateFaithful,
-                                onGenerateNovel = vm::generateNovel,
+                                onGenerateNovel = vm::requestNovel,
+                                novelIdeaOpen = novelIdeaOpen,
+                                onNovelIdeaConfirm = vm::confirmNovelIdea,
+                                onNovelIdeaDismiss = vm::dismissNovelIdea,
                                 onRetryGeneration = vm::retryGeneration,
                                 onSend = vm::revise,
                                 onSelectVersion = vm::selectVersion,
@@ -669,6 +673,9 @@ private fun NovelTab(
     generationPhase: GenerationPhase,
     onGenerateFaithful: () -> Unit,
     onGenerateNovel: () -> Unit,
+    novelIdeaOpen: Boolean,
+    onNovelIdeaConfirm: (String?) -> Unit,
+    onNovelIdeaDismiss: () -> Unit,
     onRetryGeneration: () -> Unit,
     onSend: (String) -> Unit,
     onSelectVersion: (Int) -> Unit,
@@ -686,14 +693,20 @@ private fun NovelTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // Task 9b/9c/9d：两枚按钮各自按「有没有对应稿」收起（D394/D406）；都收起了整块不出现，
         // 只留版本线与改稿输入条——有稿之后入口再出现会让人误以为会覆盖当前选中版。
-        if (!hasFaithfulVersion || !hasNovelVersion) {
-            GenerationActions(
-                phase = generationPhase,
-                showFaithful = !hasFaithfulVersion,
-                showNovel = !hasNovelVersion,
-                onFaithful = onGenerateFaithful,
-                onNovel = onGenerateNovel,
-                onRetry = onRetryGeneration,
+        // Plan 4 T5：入口区常驻——小说化必须由用户主动触发（可以带着新想法重新生成一版）；
+        // 「原样整理」仍按 D406 收起（整理两遍只会得到近似重复的版本）。
+        GenerationActions(
+            phase = generationPhase,
+            showFaithful = !hasFaithfulVersion,
+            showNovel = true,
+            onFaithful = onGenerateFaithful,
+            onNovel = onGenerateNovel,
+            onRetry = onRetryGeneration,
+        )
+        if (novelIdeaOpen) {
+            NovelIdeaDialog(
+                onConfirm = onNovelIdeaConfirm,
+                onDismiss = onNovelIdeaDismiss,
             )
         }
         // brief 0.7：N 从 tab 标题挪到内容顶部这一行；「补写 N 处」的字样仍与 D41 一致。
@@ -773,6 +786,57 @@ private fun NovelTab(
  * 有稿后整块不出现：版本线 + 改稿输入条已经能表达「继续改这一版」，再放生成按钮会让人
  * 误以为会覆盖当前选中版。
  */
+/**
+ * 小说化想法对话框（Plan 4 T5 / 用户需求 ②）。
+ *
+ * 「一定得用户主动去操作」的落点：点「小说化」先弹这张卡，用户可以写一句想法（可选），
+ * 确认后才真正发请求。想法 ≤200 字，空白按「没有想法」处理（提示词第 4 槽整对删除）。
+ */
+@Composable
+private fun NovelIdeaDialog(
+    onConfirm: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var idea by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("小说化", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column {
+                Text(
+                    "想怎么改？可以不写，直接生成。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = InkDim,
+                )
+                OutlinedTextField(
+                    value = idea,
+                    onValueChange = { if (it.length <= NOVEL_IDEA_MAX) idea = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    placeholder = { Text("比如：多写点楼道的细节，少一点心理描写") },
+                    minLines = 2,
+                    maxLines = 4,
+                    supportingText = { Text("${idea.length}/$NOVEL_IDEA_MAX", style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(idea) }) {
+                Text("生成", color = Ember)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消", color = InkDim)
+            }
+        },
+        containerColor = NightRaised,
+    )
+}
+
+private const val NOVEL_IDEA_MAX = 200
+
 @Composable
 private fun GenerationActions(
     phase: GenerationPhase,

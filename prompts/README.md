@@ -37,13 +37,15 @@ Android 侧在**构建期**由 Gradle 任务 `syncPromptAssets` 把 `prompts/*.m
 | 文件 | 用途 | 状态 |
 |---|---|---|
 | `faithful.v2.md` | 口述转写 → 理顺稿（只补标点/断句、去口癖，事实一字不动） | **现行** |
-| `novel.v2.md` | 理顺稿 → 小说化改写（含少量 few-shot 示例） | **现行** |
-| `novel_revise.v1.md` | 在既有小说稿上按用户这一条意见增量改 | **现行** |
+| `novel.v2.1.md` | 理顺稿 → 小说化改写（含少量 few-shot 示例；v2.1 加第 4 个可选槽【用户想法 / 选填】） | **现行** |
+| `novel.v2.md` | v2 原样留档（T5 起由 v2.1 取代） | 留档 |
+| `novel_revise.v1.1.md` | 在既有小说稿上按用户这一条意见增量改（v1.1 加 §0 意见/问题分流） | **现行** |
+| `novel_revise.v1.md` | v1 原样留档（T5 起由 v1.1 取代） | 留档 |
 | `faithful_cleanup.v1.md` / `faithful_cleanup.v1.1.md` | 早期「口述极乱时的断句清理」 | 历史，保留不覆盖 |
 | `novel.v1.md` / `novel.v1.1.md` / `novel.v1.2.md` | 早期小说化版本 | 历史，保留不覆盖 |
 | `CHANGELOG.md` | 版本表与每一版的改动理由 | 维护中 |
 
-现行三份的 `sha256_8` 分别是 `5b9702ee` / `f189dad8` / `2ebba630`，由 `PromptSpec` 钉死；
+现行三份的 `sha256_8` 分别是 `5b9702ee` / `cc497720` / `45a17e0a`（Plan 4 T5 起 novel=v2.1、novel_revise=v1.1），由 `PromptSpec` 钉死；
 动文件就必须同步改钉死值，否则校验会在渲染时直接抛。
 
 ## 评测

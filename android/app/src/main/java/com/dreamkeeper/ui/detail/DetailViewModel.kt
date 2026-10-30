@@ -198,6 +198,15 @@ class DetailViewModel(
     val generationPhase: StateFlow<GenerationPhase> = _generationPhase.asStateFlow()
 
     /**
+     * 小说化想法对话框是否打开（Plan 4 T5）。
+     *
+     * 为什么不直接生成：用户要的是「先说说自己的想法，再点生成」——对话框是这一步的唯一入口，
+     * 关掉就等于放弃了「显式触发」的语义（不许随整理稿自动生成，见 D344/D395）。
+     */
+    private val _novelIdeaPrompt = MutableStateFlow(false)
+    val novelIdeaPrompt: StateFlow<Boolean> = _novelIdeaPrompt.asStateFlow()
+
+    /**
      * 追加录音后的自动重理顺（Plan 4 §0.4）：等尾段转写落库（status OK 且水位追平）后才跑，
      * 且只跑一次。防重入交给 [generate] 的 Running 判断；这里不清空用户输入。
      */
@@ -243,6 +252,26 @@ class DetailViewModel(
 
     fun generateNovel() = generate(GenerationKind.NOVEL)
 
+    /** 点「小说化」：先开想法对话框，确认后才真正调模型（Plan 4 T5 / 用户需求 ②）。 */
+    fun requestNovel() {
+        if (_generationPhase.value is GenerationPhase.Running) return
+        _novelIdeaPrompt.value = true
+    }
+
+    fun dismissNovelIdea() {
+        _novelIdeaPrompt.value = false
+    }
+
+    /**
+     * 对话框确认：想法可选。空白 → `null`（提示词第 4 槽整对删除）；
+     * ≤200 字（超出截断，避免把对话框变成小作文）。
+     */
+    fun confirmNovelIdea(idea: String?) {
+        _novelIdeaPrompt.value = false
+        val trimmed = idea?.trim()?.take(NOVEL_IDEA_MAX)?.takeIf { it.isNotEmpty() }
+        generate(GenerationKind.NOVEL, idea = trimmed)
+    }
+
     /**
      * 失败后「重试」：仍走失败时的同一个入口，不换方法、不新建一份状态。
      * 只看得到 [GenerationPhase.Failed]——运行中/空闲时点它没有意义。
@@ -259,7 +288,7 @@ class DetailViewModel(
      * 请求；`GenerationOrchestrator` 的 `generatable` 是第二道闸，不替代这一层。
      * 成功不自己拼结果，只重读版本线（与 Task 9 的改稿走同一条 `refreshConversation`）。
      */
-    private fun generate(kind: GenerationKind) {
+    private fun generate(kind: GenerationKind, idea: String? = null) {
         if (_generationPhase.value is GenerationPhase.Running) return
         val dream = state.value.dream ?: return
         if (dream.transcriptStatus != TranscriptStatus.OK) {
@@ -285,7 +314,7 @@ class DetailViewModel(
                 GenerationKind.FAITHFUL -> runner.generateFaithful(id) { _, attempt ->
                     onGenerationProgress(kind, attempt)
                 }
-                GenerationKind.NOVEL -> runner.generateNovel(id) { _, attempt ->
+                GenerationKind.NOVEL -> runner.generateNovel(id, idea) { _, attempt ->
                     onGenerationProgress(kind, attempt)
                 }
             }
@@ -405,6 +434,11 @@ class DetailViewModel(
         playback?.release()
         super.onCleared()
     }
+
+    private companion object {
+        /** 想法长度上限（与 novel.v2.1 的槽说明一致）。 */
+        const val NOVEL_IDEA_MAX = 200
+    }
 }
 
 /**
@@ -438,4 +472,5 @@ internal fun hasNovelVersion(dream: Dream?, versions: List<NovelVersionEntity>):
 internal fun hasFaithfulVersion(dream: Dream?, versions: List<NovelVersionEntity>): Boolean {
     if (versions.any { it.promptId == "faithful" }) return true
     return dream?.faithfulText != null
+
 }

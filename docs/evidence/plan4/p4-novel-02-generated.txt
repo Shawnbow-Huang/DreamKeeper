@@ -1,0 +1,23 @@
+APK_SHA256=709efcac098093fa (同一安装包；生成前未重装)
+DEVICE_TIME=Sat Oct 31 03:51:23 CST 2026（生成完成、重开详情后；生成请求发出于 03:50:11）
+REPLAY=空想法点「生成」→ 等待 30s → force-stop 三件齐拉数据库 → 重开 App→全部→「教室」→小说化 tab → screencap
+
+## 生成结果（设备库，merge 后）
+- 拉取：`run-as ls -l databases/` → db 135,168 B / wal 65,952 B / shm 32,768 B；
+  三件整目录拉取后主机 `sha256sum` 与设备 `run-as sha256sum` 逐字相同：
+  db=`c2b75d4942bb8cb5…`、wal=`936337f695f701db…`。
+- 合并：主机侧按原文件名放同目录后 `PRAGMA wal_checkpoint(TRUNCATE)`（user_version=3），合并库 143,360 B sha 前16 `6c4f14671a522dbf…`。
+- `novel_versions` 新增行（`SELECT version,promptId,promptVersion,origin,length(promptHash)`）：
+  `(8, 'novel', 2, 'GENERATE', 64)`；`promptHash` 为 64 hex（完整 sha256），`promptVersion=2` 证明 v2.1 的主版本号解析生效（旧代码这里恒 0）。
+- `dreams`（seed-dream-2）：`novelVersion=7`、`novelSelectedVersion=4`、`length(novelText)=223`、`generationStage='T0'`。
+  → 生成成功不改选中版（选中仍 v4）；`dreams.novelVersion` 未随新版本推进（仍 7，而最大版本是 8）——登记 D444，导出/版本线都按 `resolveFinalNovel`/版本表取数，不依赖该列。
+
+## UI 证据
+- 截图 `docs/evidence/plan4/p4-novel-02-generated.png`，329,498 B，sha256 前16 `296d6b91067aac13`；nearWhite=0 / 40,898 点 / 0.0000%。
+- 文本节点：`补写 3 处 · 查看` 横幅；版本条出现 `v8 · 无说明`；`当前 v4 · 已选中` 不变；正文为新生成的小说稿（含「粉笔灰的味道」等 3 处补写）。
+- 注：`v8 · 无说明` 因为 GENERATE 版本没有 assistant 摘要（versionLabel 只认摘要，丢弃了 changeLog 计数）——并入 T6a 的版本条修正，登记 D444。
+
+## 读法
+- 需求 B 后半成立：生成只在用户点「小说化」+「生成」时发生；空想法也能生成。
+- 「想法」非空路径没有设备截图（模拟器无中文输入法，`adb input text` 只能打 ASCII）——由 `NovelIdeaTest` 的 200 字截断与第 4 槽渲染断言覆盖；D445 记录该限制。
+- 本证据不含 Key 任何片段（生成前后 `adb logcat -d | grep -E "sk-[A-Za-z0-9]{16,}"` 命中 0）。

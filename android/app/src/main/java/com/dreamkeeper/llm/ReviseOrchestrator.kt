@@ -45,9 +45,10 @@ class ReviseOrchestrator(
 
     suspend fun generateNovel(
         dreamId: String,
+        idea: String? = null,
         onProgress: ((GenerationStage, Int) -> Unit)? = null,
     ): GenerationResult = requireNotNull(generation) { "未装配生成编排器" }
-        .generateNovel(dreamId, onProgress)
+        .generateNovel(dreamId, idea, onProgress)
 
     /**
      * 用户发一句话：模型先判 ASK / REVISE（§0.2）。
@@ -205,7 +206,8 @@ class ReviseOrchestrator(
             origin = ORIGIN_REVISE,
             promptId = rendered.promptId,
             // PromptSpec 的 version 是 "v1" 形态（Task 8 的 promptVersion 列是 Int）。
-            promptVersion = rendered.promptVersion.removePrefix("v").removePrefix("V").toIntOrNull() ?: 0,
+            promptVersion = rendered.promptVersion.removePrefix("v").removePrefix("V")
+                .substringBefore('.').toIntOrNull() ?: 0,
             promptHash = rendered.promptSha256,
             model = model,
             reasoningEffort = null,

@@ -458,6 +458,10 @@ suspend fun commitSuccess(
 | D441 | 2026-10-31 | T4 | 两张设备截图 `nearWhite≈0.13%`，非 0 | 白色像素来自状态栏（时钟/信号），正文区为 Night 底；判据改为「正文区无白底」，并记录像素数与坐标来源说明 |
 | D442 | 2026-10-31 | T4 | 模拟器无中文离线包，追加段转写仍失败，行停在 PENDING | 这正是需求要覆盖的降级路径（T2 的 reconcile 会在下次启动补跑）；本任务不宣称设备转写成功，`transcriptMs==rawAudioMs` 与 faithful 新版本留 T7 真机/真实 STT 验收 |
 | D443 | 2026-10-31 | T4 | 计划里 T4 的「旧 faithful 版切换」并入原样 tab 的「看原始转写/看整理稿」切换，未单开用例 | 用户要的是「能看原文」；旧版本行的选择已经由 T5/T6 的版本线承担，重复做会两套口径 |
+| D444 | 2026-10-31 | T5 | 生成成功后 `dreams.novelVersion` 不推进（实测仍 7、版本表最大 8）；GENERATE 版本条显示「vN · 无说明」，丢改动数 | 导出/版本线都走 `resolveFinalNovel`/版本表，不依赖该列；「无说明」是 versionLabel 只认 assistant 摘要所致 → T6a 用 changeLog 计数兜底 |
+| D445 | 2026-10-31 | T5 | 「想法非空」与 D408「纯提问→ASK」只有 JVM/提示词层证据，设备侧验证缺失 | 模拟器无中文输入法（`adb input text` 仅 ASCII），无法输入中文想法/提问；`NovelIdeaTest` 已覆盖 200 字截断与槽渲染，提示词 v1.1 §0 已写分流规则 → 设备验证归 T7，能打字时补 |
+| D446 | 2026-10-31 | T5 | `GenerationActions` 改为常驻（`showNovel` 恒 true），与 D406「有小说稿即收起」不同 | 需求 B 要求「主动再小说化」：已有小说稿时仍允许带新想法重新生成；重入由 `Running` 防重入兜住 → T6a 复核视觉与误触 |
+| D447 | 2026-10-31 | T5 | `p4-novel-01/02` 首三行用真实设备时间（非 host-only） | 这两份含设备操作（安装/点击/截图/拉库），按 G-2 用 `adb shell date` 抓取；纯 JVM 的 `p4-novel-00` 仍是 host-only |
 
 ## 10. 自审记录
 
@@ -539,3 +543,13 @@ suspend fun commitSuccess(
 
 每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。
+
+### Task 5 验收（Lead，2026-10-31）
+
+- **交付**：提交随 T5 一并入库——`prompts/novel.v2.1.md`（`cc497720`）、`prompts/novel_revise.v1.1.md`（`45a17e0a`）、`PromptSpec`/`GenerationRunner`/`GenerationOrchestrator`/`ReviseOrchestrator`/`DetailViewModel`/`DetailScreen`（`NovelIdeaDialog`）、`PromptRepositoryTest`（+1 例）、`NovelIdeaTest`（3 例）、FakeRunner 签名同步、`prompts/README.md` 与 `CHANGELOG.md` 增量。
+- **Lead 独立复跑**：targeted `PromptRepositoryTest`(11) + `NovelIdeaTest`(3) = **14/0**（47s）；全量 `--rerun-tasks` → **46 类 / 409 例 / 0 失败 / 0 错误 / 0 跳过**（54s）。
+- **契约核对**：第 4 槽 required=false/allowEmpty=true 且空值整对删除（`PromptRepositoryTest` 新例）；v2.1 四槽顺序与提示行替换；想法 trim+截断 200、空白→null（`NovelIdeaTest`）；忠实链不产生小说调用（`NovelIdeaTest` 第 3 例）；`promptVersion` 由 `v2.1` 解析为 2（设备 v8 行实测 `promptVersion=2`、`promptHash` 64 hex）。
+- **变异**：第 4 槽改 `required=true` → 仅 `novelV2_1HasFourSlotsAndIdeaSlotIsOptionalButAllowsEmpty` 红（`14 tests completed, 1 failed`），恢复后 `PromptSpec.kt` sha 前16 `b325e78b126602d3` 复绿。
+- **证据**：`p4-novel-00-tests.txt`（host-only）、`p4-novel-01-dialog.{png,txt}`（弹框，nearWhite=0）、`p4-novel-02-generated.{png,txt}`（生成后 v8 行、DB 双侧 sha、合并 sha、nearWhite=0、Key 命中 0）。
+- **PENDING**：真实梦质量评测（D417，无样本）；想法非空/D408 路由的设备验证（D445）；版本条与 `dreams.novelVersion` 修正（D444，转 T6a）；真机转写（T7）。
+- **结论**：通过。下一步 T6a（版本线/列表/重试入口收口），再 T6b（app-scope/成本行）→ T7。

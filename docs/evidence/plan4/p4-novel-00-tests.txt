@@ -1,0 +1,37 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T19:44:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.llm.PromptRepositoryTest" --tests "com.dreamkeeper.ui.detail.NovelIdeaTest" --rerun-tasks --console=plain
+RED_BASELINE=T5 属纯新增（提示词 v2.1/v1.1 + 想法槽/弹框），按 D427 先例以「变异反证」代替先红基线。
+SOURCE=host-only（时间口径见 D424：主机时区为 UTC；本文件写于 2026-10-31 03:44 CST）
+
+## 为什么改
+1) 需求 B：小说化必须由用户主动触发，且可以带「我想怎么写」的想法。旧提示词没有承接想法的位置。
+2) D408：纯提问被判成 REVISE 建版（Plan 3 E2E 已复现 3 次 v5/v6/v7），需要提示词层分流规则。
+
+## 改了什么（提示词资产，逐字节可核）
+- `prompts/novel.v2.1.md` sha256_8=`cc497720`（30795 B LF）：v2 三槽后加第 4 可选槽 `【用户想法 / 选填】`
+  （required=false, allowEmpty=true；空时槽与提示行整对删除），补规则 4–6 与自检第 47 条；角色/事实契约/风格契约 A1–A21/JSON/quote/温度与 v2 逐字相同。
+- `prompts/novel_revise.v1.1.md` sha256_8=`45a17e0a`（24516 B LF）：在 `## 输入` 前补 §0「先分流：意见还是问题」
+  （明确改动指令→REVISE；纯提问→ASK；拿不准→ASK）与自检第 40 条。
+- 旧版 `novel.v2.md`(29344 B)/`novel_revise.v1.md`(23142 B) 原样留档；APK 内两份/四份都可见（见 p4-novel-01）。
+
+## 代码
+- `PromptSpec`：NOVEL=v2.1/`cc497720`/4 槽；NOVEL_REVISE=v1.1/`45a17e0a`。
+- `GenerationRunner.generateNovel(dreamId, idea: String? = null, onProgress)`；orchestrator 第 4 槽值 = `idea?.trim()?.takeIf { it.isNotEmpty() }`。
+- promptVersion 解析改 `removePrefix("v").substringBefore('.').toIntOrNull() ?: 0`（v2.1→2，修 D-已知恒 0 缺陷）。
+- `DetailViewModel.requestNovel()/confirmNovelIdea(idea)`：trim、截断 200 字、空白→null；`generateFaithful()` 不会带想法、也不会触发小说化。
+- `DetailScreen.NovelIdeaDialog`（Material3 AlertDialog，200 字计数，空想法可直接生成）；`GenerationActions` 常驻（见 D444）。
+
+## 测试（真实输出）
+- targeted：`PromptRepositoryTest` 11 例 + `NovelIdeaTest` 3 例 = **14 tests, 0 failed**（BUILD SUCCESSFUL 47s）。
+- 变异：把第 4 槽改成 `required = true`（`PromptSpec.kt`）→
+  `PromptRepositoryTest > novelV2_1HasFourSlotsAndIdeaSlotIsOptionalButAllowsEmpty FAILED`
+  `14 tests completed, 1 failed` / `BUILD FAILED in 47s`
+  恢复后 `PromptSpec.kt` sha 前 16 `b325e78b126602d3`，targeted 复绿。
+- 全量：`:app:testDebugUnitTest --rerun-tasks` → BUILD SUCCESSFUL 54s，XML
+  **classes=46 tests=409 failures=0 errors=0 skipped=0**（45 类/405 例 + 提示词 +1 + 想法 +3）。
+
+## 读法与边界
+- 这里证明的是「槽可渲染、必填性可被变异打红、想法会进第 4 槽、空想法等价 v2、忠实链不会自动小说化」；
+  **不证明** v2.1 比 v2「写得更好」——真实梦样本仍为 0（D417），质量评测未做。
+- D408 的分流规则只写进了提示词；设备侧「纯提问→ASK 不建版」的验证见 p4-novel-02 的说明与 D445。

@@ -1,0 +1,18 @@
+APK_SHA256=709efcac098093fa (app-debug.apk sha256 前16，整包 13,732,805 B；adb install -r Success)
+DEVICE_TIME=Sat Oct 31 03:50:11 CST 2026（设备 `adb shell date`；本文件写于 03:52 CST）
+REPLAY=adb shell am start -n com.dreamkeeper/.MainActivity; adb shell input tap 810 2266（全部）; tap 400 770（10月8日「教室」）; tap 415 240（小说化 tab）; tap 160 410（小说化按钮）; adb shell screencap -p /sdcard/p4-novel-01-dialog.png
+
+## 证据链
+- 截图：`docs/evidence/plan4/p4-novel-01-dialog.png`，220,318 B，sha256 前16 `c99da500b29b137f`。
+- 近白检查：nearWhite=0，采样 40,898 点，ratio=0.0000%（全屏遍历，步长 7px，去掉上下 200px 状态/导航栏）。
+- 包内提示词：`assets/prompts/` 含 `novel.v2.1.md`(30,795 B)、`novel_revise.v1.1.md`(24,516 B)，旧 `novel.v2.md`(29,344 B)、`novel_revise.v1.md`(23,142 B) 同时存在（可回滚）。
+
+## 页面事实（uiautomator 文本节点）
+- 弹框标题「小说化」；副标题「想怎么改？可以不写，直接生成。」；
+  placeholder「比如：多写点楼道的细节，少一点心理描写」；计数「0/200」；按钮「取消」「生成」。
+- 背景页：小说化 tab 有「小说化」「导出」两个常驻入口，版本条 `v8 · 无说明` / `v7 · 这一版没改，保留原样 · 改动 0 处`，
+  选中态「当前 v4 · 已选中」。
+
+## 读法
+- 说明「小说化」不再随忠实稿自动发生，必须显式点按钮 → 弹想法框（需求 B 前半）。
+- 空想法可直接点「生成」，走 v2.1 的「第 4 槽为空＝等同 v2」路径（本图是空想法入口状态）。

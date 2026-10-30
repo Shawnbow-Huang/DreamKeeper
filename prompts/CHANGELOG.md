@@ -193,3 +193,13 @@
 - 未改：`prompts/novel.v1.md`、`prompts/faithful_cleanup.v1.md`、`prompts/README.md`、`docs/`、`scripts/`、`android/`。
 - **未跑评测**：`docs/eval/dreams.md` 真实样本仍为 0，`results.md` 无记录（D54）。v1.1 的效果必须靠第一批 10 条真实梦验证；现在只能说「与脚本规则同号」，不能说「更好」。
 - **未改脚本**：`scripts/check-ai-flavor.py` 的编号与阈值是基准，提示词跟脚本走，不反向改脚本。改规则要同时改脚本、文档与 `docs/eval/fixtures/`。
+
+## 2026-10-31 · Plan 4 T5：小说化想法槽与改稿分流（纯增量）
+
+- **`novel.v2.1.md`（现行）**：在 v2 三槽后新增第 4 个可选槽 `【用户想法 / 选填】`
+  （required=false, allowEmpty=true；空时整对删除），补规则 4–6 与自检第 47 条。
+  角色、事实契约、风格契约 A1–A21、JSON 结构、quote 规则、temperature 全部与 v2 逐字相同，未放宽任何一条。
+- **`novel_revise.v1.1.md`（现行）**：在「## 输入」前补 §0「先分流：意见还是问题」三条判据
+  （明确改动指令→REVISE；纯提问→ASK；拿不准→ASK），并补自检第 40 条。
+- **旧版留档**：`novel.v2.md`、`novel_revise.v1.md` 原样保留，可回滚、可对比；构建期仍会把它们打进 APK。
+- **未跑评测**：真实梦样本仍为 0（D417），v2.1 相对 v2 的效果未评；这里只证明「槽与规则可渲染、路由判据已写进提示词」。

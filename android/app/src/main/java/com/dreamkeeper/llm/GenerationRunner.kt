@@ -9,7 +9,7 @@ package com.dreamkeeper.llm
  * 生产实现仍是 [GenerationOrchestrator]，逻辑零改动。
  *
  * 两个方法的签名与 [GenerationOrchestrator.generateFaithful] /
- * [GenerationOrchestrator.generateNovel] **逐字一致**（含默认参数）：Kotlin 的默认参数
+ * [GenerationOrchestrator.generateNovel] **逐字一致**（含默认参数；T5 起 novel 多一个 `idea`）：Kotlin 的默认参数
  * 不参与 override 签名，少一个参数编译不过。
  */
 interface GenerationRunner {
@@ -20,6 +20,7 @@ interface GenerationRunner {
 
     suspend fun generateNovel(
         dreamId: String,
+        idea: String? = null,
         onProgress: ((GenerationStage, Int) -> Unit)? = null,
     ): GenerationResult
 }

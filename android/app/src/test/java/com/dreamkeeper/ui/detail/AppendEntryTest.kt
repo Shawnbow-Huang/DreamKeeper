@@ -241,6 +241,7 @@ class AppendEntryTest {
 
         override suspend fun generateNovel(
             dreamId: String,
+            idea: String?,
             onProgress: ((GenerationStage, Int) -> Unit)?,
         ): GenerationResult = respond(GenerationKind.NOVEL)
 

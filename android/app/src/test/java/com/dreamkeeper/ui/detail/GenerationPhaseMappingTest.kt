@@ -311,6 +311,7 @@ class GenerationPhaseMappingTest {
 
         override suspend fun generateNovel(
             dreamId: String,
+            idea: String?,
             onProgress: ((GenerationStage, Int) -> Unit)?,
         ): GenerationResult {
             calls += Call("novel", dreamId)

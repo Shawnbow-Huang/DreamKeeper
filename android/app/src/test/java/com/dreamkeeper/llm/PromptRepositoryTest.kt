@@ -29,8 +29,8 @@ class PromptRepositoryTest {
     // 计划 §0.1 钉死的 sha256 前 8 位；prompts/*.md 由 .gitattributes 钉成 LF（D284）。
     private val expectedSha256_8 = mapOf(
         "faithful" to "5b9702ee",
-        "novel" to "f189dad8",
-        "novel_revise" to "2ebba630",
+        "novel" to "cc497720",
+        "novel_revise" to "45a17e0a",
     )
 
     // 计划 §0.7：每个槽下面那行 `<…>` 提示语只用于给模型看，替换槽时必须连它一起替换。
@@ -38,6 +38,7 @@ class PromptRepositoryTest {
         "<rawTranscript",
         "<faithfulText",
         "<mood 候选",
+        "<用户写的剧情",
         "<当前这版的",
         "<用户原话",
         "<user / assistant",
@@ -53,6 +54,7 @@ class PromptRepositoryTest {
         "原始转写" to transcript,
         "理顺稿" to "我站在站台上等末班车。",
         "标签 / 选填" to "发紧、怀旧",
+        "用户想法 / 选填" to "多写点楼道的细节",
     )
 
     private val reviseSlots: Map<String, String?> = mapOf(
@@ -282,5 +284,34 @@ class PromptRepositoryTest {
             assertFalse("${spec.promptId} 残留 HTML 注释尾", text.contains("-->"))
             assertFalse("${spec.promptId} 残留 promptId 字段", text.contains("promptId:"))
         }
+    }
+
+    /**
+     * Plan 4 T5：novel.v2.1 在 v2 三槽之后加第 4 个**可选**槽【用户想法 / 选填】。
+     *
+     * 为什么必须 allowEmpty=true 且 null 要整对删除：对话框允许「不写想法直接生成」，
+     * 此时槽整对消失，模型看到的行为必须与 v2 完全一致；留一个空 `【用户想法 / 选填】`
+     * 反而会让模型以为「用户说了空话」。
+     */
+    @Test
+    fun novelV2_1HasFourSlotsAndIdeaSlotIsOptionalButAllowsEmpty() {
+        val spec = PromptSpecs.byId("novel")
+        assertEquals("v2.1", spec.version)
+        assertEquals(
+            listOf("原始转写", "理顺稿", "标签 / 选填", "用户想法 / 选填"),
+            spec.slots.map { it.name },
+        )
+        val idea = spec.slots.last()
+        assertFalse("想法槽不能是必填", idea.required)
+        assertTrue("想法槽必须允许显式空串", idea.allowEmpty)
+
+        val withIdea = repo.render(spec, novelSlots).text
+        assertTrue("写了想法就要送进模型", withIdea.contains("多写点楼道的细节"))
+        assertFalse("槽提示行必须随槽一起被替换", withIdea.contains("<用户写的剧情"))
+
+        val without = novelSlots.toMutableMap().apply { put("用户想法 / 选填", null) }
+        val noIdea = repo.render(spec, without).text
+        assertFalse("空想法要把整对槽删掉", noIdea.contains("【用户想法 / 选填】"))
+        assertFalse("空想法不许留提示行", noIdea.contains("<用户写的剧情"))
     }
 }
