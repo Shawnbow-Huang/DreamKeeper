@@ -649,6 +649,46 @@ class TranscriptWriter(private val repository: DreamRepository) {
 
 ## Task 8：详情页播放（播前 repair）
 
+### 0. 派工前修订（Lead 依 Mobile App Builder + Evidence Collector 预审裁定，覆盖下文任何冲突）
+
+0.1 **可测性缝**：`class AudioPlayback(private val scope: CoroutineScope, private val store: WavStore, private val clock: () -> Long = SystemClock::elapsedRealtime, private val playerFactory: () -> MediaPlayer = { MediaPlayer() })`。
+推进逻辑（`positionMs` 单调、结束态回落）抽成可控的纯逻辑，便于 JVM 单测；`store` 必须注入，brief 原签名缺它就无法「播前 repair」。
+
+0.2 **不许给正在写的文件 repair**：`store.isOpen(file)` 为 true 时直接 `Error("正在录音")`；`repair` 只对已收尾的文件调用，且整个 `prepare` 包 `runCatching`（`WavStore` 对 <44 字节抛 `IllegalStateException`、缺文件抛 `NoSuchFileException`），异常一律转 `Error`，不许崩、不许留死按钮。
+
+0.3 `repair` 与 `MediaPlayer.setDataSource/prepare()` 都是阻塞磁盘 IO → 全部在 `withContext(Dispatchers.IO)`。
+
+0.4 无音频时可用性：`audioPath == null` → 播放条压暗、`enabled = false`、文案「这条梦没有录音」；`Error` → 显示「打不开」并允许重试。
+
+0.5 `Paused` 没有 `durationMs` → 进度比一律用入参 `durationMs`（不许从 `Paused` 反推）；新增纯函数 `barLabel(state: PlaybackState, durationMs: Long): String` 并单测（`mm:ss` 分不出 4.0 与 4.3 秒，UI 必须另行显示一位小数的秒，或至少在证据里给出毫秒数）。
+
+0.6 波形进度：40 根柱不许逐个 `Box` 变色（每帧 40 次重组）→ 单个 `Canvas` + 在 draw 阶段读进度（`drawWithCache`/`drawBehind`），进度变化不触发重组。
+
+0.7 `playback.state` 只在 `PlaybackBar` 内部 `collectAsStateWithLifecycle`，不许在 `DetailScreen` 根部收集（200 ms 一次会整屏重组，正文 `verticalScroll` + 标签 `FlowRow` 全跟着）。
+
+0.8 `remember { AudioPlayback(...) }` 必须提到 `when`/`state.dream` 判空**之前**：现在 `PlaybackBar` 在 `else` 分支里，`state.dream` 瞬时为 null 就离开 composition → `onDispose` 释放、进度清零。
+
+0.9 生命周期与音频焦点：`DisposableEffect` 监听 `ON_STOP` → `pause()`；`AudioManager.requestAudioFocus(USAGE_MEDIA, CONTENT_TYPE_SPEECH)`，`AUDIOFOCUS_LOSS` 与 `LOSS_TRANSIENT` → `pause()`，释放时 `abandonAudioFocus`；加 `setOnCompletionListener` → `Paused(durationMs)`；结束态 `toggle()` 先 `seekTo(0)` 再 `start()`；`release()` 与 IO 中的 `prepare` 竞争需 `released` 旗标 + `finally { release() }`。
+
+0.10 旋转/重建：`AudioPlayback` 放进 `DetailViewModel`（`viewModelScope` + `onCleared { release() }`），位置存 `rememberSaveable`；不许只靠 `remember`。
+
+0.11 `positionMs` 的「单调不减」只在**一次播放 run** 内成立；重播/`seekTo` 允许一次回落（`getCurrentPosition` 本身也会抖）。
+
+0.12 **时长以字节为准**：`repair` 后用 `(fileBytes - 44) / 32` 作为播放条时长；若与库里的 `rawAudioMs` 相差 > 100 ms，用字节值并记一条偏差（实测有 2900 vs 4300 的脏数据），同步调 `repository.fixAudioMs(id, ms)`。
+
+0.13 **证据四件（缺一不成立）**：
+① **正出现行**：`positionMs` 两次采样的差 ≈ 实际经过时间（3 s → 2500–3500 ms，判据不是「非零」），加 `dumpsys media.audio_flinger` 里出现 `Client(... <pid>/<uid>)` + `SRate 16000` + active，且线程 `Frames written` 增量 ≈ `48000 × Δt`；
+② **负控制**：`run-as com.dreamkeeper chmod 000 files/audio/<id>.wav` 后点播放 → 必须 `Error("打不开")`、`dumpsys audio` 无本包 started、`audio_flinger` 无本包 track；
+③ **repair 时序**：用 `run-as` 把目标文件头改回 `ffffffff`（stale header，比占位头更合适），点击播放前后各取一次 `od -A d -t x1 -N 44` 与 payload sha，证明「头在点击瞬间由脏变正、载荷 sha 不变」；
+④ **禁用态**：`rawAudioPath == null` 的梦显示「这条梦没有录音」。
+禁止把 `p2-scan-02-repaired.wav` 当「App 播前修好的」证据；禁止用 `ffprobe` 判头（实测脏头也报合法时长且零警告，验头只认 offset 4..8 / 40..44）；静音输入下禁止写「播放正常」，只能写「播放通路成立、信号来源=静音」。
+
+0.14 与 Task 7 的写冲突：Task 7 只读 WAV（按段复制到管道）时不冲突；若 Task 7 落地时改为改写/重写 WAV，播前 `repair` 需重新复核并登记偏差。
+
+0.15 挑给 Task 9（不在本任务做）：十列 `## 3b 音频证据表`、`pm clear` 干净链路、三路权限、崩溃恢复、3 次冷启动 + `capture-logcat -Runs 3` + 近白闸门、全库 `rawAudioMs == (bytes-44)/32` 审计（可复用 `p2-scan-db.py`）。
+
+
+
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/ui/detail/AudioPlayback.kt`
 - Modify `android/app/src/main/java/com/dreamkeeper/ui/detail/DetailScreen.kt`
