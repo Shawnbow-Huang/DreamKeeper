@@ -51,11 +51,11 @@
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
 
 
-## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 0/10（Task 1 派工中）
+## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 1/10
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| 1 接线：权限、依赖、设置页骨架 | 🔄 派工中 | `INTERNET` + debug 明文放行、OkHttp、`Settings` 路由、`AppContainer` 三个 lazy |
+| 1 接线：权限、依赖、设置页骨架 | ✅ 251 用例；debug NSC 1 / release 0 | `INTERNET` + debug 明文放行、OkHttp、`Settings` 路由、`AppContainer` 三个 lazy |
 | 2 Key 加密存储 | ⬜ | AES/GCM + Keystore，只存 base64 密文，日志零明文 |
 | 3 价卡与成本计算 | ⬜ | 资产 price card、峰谷判定、整数微元、`check-cost.py` 复算 |
 | 4 数据库 v2 迁移 | ⬜ | 四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest |

@@ -286,6 +286,10 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D230 | T1-8：release 负向必须先 `assembleRelease` 成功并留 APK sha256，否则是「真空通过」 |
 | D231 | T1-9：截图设备写「emulator-5554（1080x2400@420dpi）」；48dp = 126px；截图统一 `-TopOffset 100 -MaxRatio 0`（D82） |
 | D232 | T1-10：先落 `docs/evidence/plan3/README.md`（照 plan2 那份模板），再开始拍图 |
+| D233 | T1-11：`network_security_config.xml` 的 `base-config` 用空元素 `<base-config />`，不显式写 `cleartextTrafficPermitted="false"` | **Lead 裁定**：以 dispatch 的「base-config 0 行」为准。targetSdk 37 下空 base-config 的默认就是禁止明文，行为等价；显式写反而让验收脚本的口径变成「允许出现一次」 |
+| D234 | T1-12：实现基线是 `34b13d2`，不是派工书写的 `0706f31` | `34b13d2` 只在 `0706f31` 之上改了 `docs/PROGRESS.md`（+2/−2），无代码差异 |
+| D235 | T1-13：截图没有同名 `.txt` 侧车 | 本任务白名单只列了 png。**Lead 补**：`p3-settings-01-idle.txt` 已按 README 要求补上绑定信息（PNG sha256 / APK sha256 / 设备与时间 / 复跑命令） |
+| D236 | T1-14：证据提交 `652ebba` 触及 `docs/**` | **Lead 裁定**：保留。`docs/evidence/**` 是证据的合法落点；「禁改 `docs/**`」指的是计划与设计正文 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
@@ -295,3 +299,14 @@ T3  不调用模型                                   → faithfulText = rawTran
   §5（v2 数据模型）、§14.8（对话改稿验收）。
 - **未覆盖**：真机真实 API 调用（无 Key，全部标 fixture）、PDF 中文逐字抽取（零依赖下不可自动证明）、
   §14.3/§14.4 的盲评（需用户实际使用）、跨设备同步（设计明确不做）。
+
+---
+
+### Task 1 验收（Lead，2026-10-30）
+
+- 交付：`059a821`（12 文件 +275，全部在白名单内）+ `652ebba`（证据 2 件）。
+- Lead 独立复跑：`testDebugUnitTest + assembleDebug + assembleRelease` 全绿；**23 测试类 / 251 用例 / 0 失败**（XML 统计）。
+- aapt2 复核（`build-tools/36.0.0/aapt2.exe`）：debug APK `3286734d…` → `INTERNET` 命中 1、`networkSecurityConfig` 1 行；release APK `24063848…` → `networkSecurityConfig` **0 行**、`INTERNET` 1 命中。
+- 装机（emulator-5554）：`TotalTime 2567 ms`；设置入口 `uiautomator` bounds **126×126 px**；截图 `p3-settings-01-idle.png` 近白 `nearWhite=0/69,120`；`FATAL EXCEPTION`/`ANR in com.dreamkeeper` 0 命中。
+- 变异验证：`Settings.route` 改成 `"calendar"` → `DreamRouteTest` 3 条红；改回即绿（实施者执行，Lead 认可其方法）。
+- 结论：**Task 1 验收通过**。未证事项按 D229（未发真实请求）保留，等 Task 5 假服务器。

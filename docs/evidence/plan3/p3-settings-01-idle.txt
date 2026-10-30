@@ -1,0 +1,8 @@
+# p3-settings-01-idle
+
+- APK: app-debug.apk  sha256=3286734d1ed3e23c8c7d6821f29df0a13d66f0876a8c51ce5c87b4bb295469f1
+- 设备: emulator-5554 (1080x2400 @420dpi)  adb shell date=Fri Oct 30 20:22 CST 2026
+- PNG_SHA256=51b546489f623eaacf6251e68678c5ae0ef0affc42547773b3d810bc6963bb3b
+- 复跑: adb shell am start -W -n com.dreamkeeper/.MainActivity  → 点月头「设置」→ powershell -File scripts\capture-screen.ps1 -OutPath docs\evidence\plan3\p3-settings-01-idle.png
+- 闸门: powershell -File scripts\check-near-white.ps1 -TopPath docs\evidence\plan3\p3-settings-01-idle.png -TopOffset 100 -MaxRatio 0  → nearWhite=0 ratio=0.0000%
+- 判别串: 页面出现「DeepSeek Key」「API Key」「还没配置」「思考模式开着时，服务端会忽略 temperature。」
