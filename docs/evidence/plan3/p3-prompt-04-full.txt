@@ -1,0 +1,116 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T14:36:50Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --rerun-tasks --console=plain
+
+# ==== 全量回归：Task 6 的 9 条新用例与既有用例一起跑，一条不落（G-2/G-6）====
+$ cd /d/DreamKeeper/android && ./gradlew :app:testDebugUnitTest --rerun-tasks --console=plain
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugRFile
+> Task :app:javaPreCompileDebug
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:145:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:146:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :app:testDebugUnitTest
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 22s
+35 actionable tasks: 35 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+
+# ==== 从 Test 任务产出的 JUnit XML 逐类聚合（不是从被测代码反推）====
+$ python -c '扫 app/build/test-results/testDebugUnitTest/TEST-*.xml，累加 tests/failures/errors/skipped'
+com.dreamkeeper.audio.AudioScanTest                            tests=18  failures=0 errors=0 skipped=0
+com.dreamkeeper.audio.RecorderCoreTest                         tests=20  failures=0 errors=0 skipped=0
+com.dreamkeeper.audio.WavMathTest                              tests=14  failures=0 errors=0 skipped=0
+com.dreamkeeper.audio.WavStoreTest                             tests=30  failures=0 errors=0 skipped=0
+com.dreamkeeper.data.DreamDaoTest                              tests=17  failures=0 errors=0 skipped=0
+com.dreamkeeper.data.DreamRepositoryNovelSelectedTest          tests=2   failures=0 errors=0 skipped=0
+com.dreamkeeper.data.DreamRepositoryTest                       tests=22  failures=0 errors=0 skipped=0
+com.dreamkeeper.data.db.DbBackupTest                           tests=4   failures=0 errors=0 skipped=0
+com.dreamkeeper.data.db.MigrationTest                          tests=3   failures=0 errors=0 skipped=0
+com.dreamkeeper.data.security.ApiKeyStoreTest                  tests=11  failures=0 errors=0 skipped=0
+com.dreamkeeper.domain.DreamCalendarTest                       tests=23  failures=0 errors=0 skipped=0
+com.dreamkeeper.llm.CostCalculatorTest                         tests=11  failures=0 errors=0 skipped=0
+com.dreamkeeper.llm.DeepSeekClientTest                         tests=8   failures=0 errors=0 skipped=0
+com.dreamkeeper.llm.PricingTest                                tests=11  failures=0 errors=0 skipped=0
+com.dreamkeeper.llm.PromptRepositoryTest                       tests=9   failures=0 errors=0 skipped=0
+com.dreamkeeper.service.RecordingCommandTest                   tests=8   failures=0 errors=0 skipped=0
+com.dreamkeeper.stt.SystemSttEngineSupportTest                 tests=6   failures=0 errors=0 skipped=0
+com.dreamkeeper.stt.TranscriptWriterTest                       tests=11  failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.calendar.CalendarViewModelTest              tests=4   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.common.DreamCardTextTest                    tests=8   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.day.DayViewModelTest                        tests=3   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.detail.AudioPlaybackStateTest               tests=10  failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.detail.DetailViewModelTest                  tests=3   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.followup.FollowUpViewModelTest              tests=12  failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.library.LibraryViewModelTest                tests=6   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.nav.DreamRouteTest                          tests=3   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.record.RecordViewModelTakeRecoveryTest      tests=2   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.record.RecordViewModelTest                  tests=14  failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.search.SearchViewModelTest                  tests=5   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.tags.TagsViewModelTest                      tests=7   failures=0 errors=0 skipped=0
+com.dreamkeeper.ui.theme.ThemeContrastTest                     tests=5   failures=0 errors=0 skipped=0
+----------------------------------------------------------------------------------------------------
+TOTAL classes=31 tests=310 failures=0 errors=0 skipped=0
+
+结论：
+- 全量 31 个测试类 / 310 条用例，0 失败 0 错误 0 跳过；Task 6 之前基线是 30 类 / 301 例，
+  本次新增 1 个类（com.dreamkeeper.llm.PromptRepositoryTest）与 9 条用例，301 + 9 = 310。
+- 派工书 Step 6 写的期望是"30 类 / 310 例"：例数对得上，类数应为 30 + 1 = 31（新增一个测试类必然多一类），
+  属派工书的笔误，不是少/多跑了类；上面逐类清单可直接核对，没有任何既有类消失或减少。
+- 该次全量跑包含 syncPromptAssets → mergeDebugAssets，即 Robolectric 的合并 assets 里确实有生成目录的
+  三份提示词，所以 9 条用例是"读到真资产"的绿，不是跳过/兜底。

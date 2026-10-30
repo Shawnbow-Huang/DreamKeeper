@@ -42,6 +42,27 @@ android {
     testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
+// Task 6（计划 §5 / §0.0 / D220）：提示词的真源是仓库根的 `prompts/*.md`，不在 android/ 里。
+// 构建期用 Sync 把它们拷进一个**生成**资产目录（落点 assets/prompts/*.md），再挂成 assets 源目录：
+//   · 直接 assets.srcDir("../../prompts") 会把 md 平铺到 assets 根，且把仓库根整个目录当资产；
+//   · Sync 只清自己的目的目录，手写的 src/main/assets/pricing/deepseek.json 一个字节都不碰（§0.0）。
+val promptAssetsDir = layout.buildDirectory.dir("generated/promptAssets")
+val syncPromptAssets = tasks.register<Sync>("syncPromptAssets") {
+    from(rootProject.file("../prompts")) {
+        include("*.md")
+        into("prompts")
+    }
+    destinationDir = promptAssetsDir.get().asFile
+}
+android {
+    // AGP 9.5 不允许 sourceSet 里塞 Provider（它分不清生成/静态目录），这里显式取 File；
+    // 先后顺序由下面的 preBuild 依赖负责。
+    sourceSets.getByName("main").assets.srcDir(promptAssetsDir.get().asFile)
+}
+// 生成目录不是 Gradle 认得的 task 输出，必须显式排先后：否则 mergeAssets 可能先跑（空目录）再拷。
+// 任何构建/测试路径都会经过 preBuild（compile 依赖它），单测的合并资产因此拿到三份提示词。
+tasks.named("preBuild") { dependsOn(syncPromptAssets) }
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

@@ -1,0 +1,162 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T14:31:36Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.PromptRepositoryTest" --rerun-tasks --console=plain
+
+# ==== Step 0：动手前核对真源（计划 §0.1 / §0.2 / §0.4 / §0.6；工作基线 1dde12c）====
+$ python -c 'hashlib.sha256(open(p,"rb").read()).hexdigest()[:8]'  # 另算字节数与行尾
+sha256_8  bytes  LF   CRLF  path
+5b9702ee  22272  291  0     prompts/faithful.v2.md
+f189dad8  29344  332  0     prompts/novel.v2.md
+2ebba630  23142  314  0     prompts/novel_revise.v1.md
+
+$ grep -n 槽（9 个槽位，【原始转写】在 novel/revise 各出现一次）
+prompts/faithful.v2.md:25:【待理顺转写】
+prompts/novel.v2.md:24:【原始转写】
+prompts/novel.v2.md:27:【理顺稿】
+prompts/novel.v2.md:30:【标签 / 选填】
+prompts/novel_revise.v1.md:24:【原始转写】
+prompts/novel_revise.v1.md:27:【当前小说稿】
+prompts/novel_revise.v1.md:30:【当前改动清单】
+prompts/novel_revise.v1.md:33:【用户这一条意见】
+prompts/novel_revise.v1.md:36:【最近三轮对话】（可选，可能为空）
+
+$ grep -n 非槽【…】（§0.3 说全库只有 4 处）
+prompts/faithful.v2.md:217:- **保守档**（提示词里带 `【只做标点】` 标记时）：**只插入标点、空白、换行**；一个字不删、不改、不移——连语气词、重复、垃圾字符都原样留着。此档唯一的验收是「去掉标点后与输入逐字一致」。
+prompts/faithful.v2.md:220:### 5.3 若本轮附带【上一版违规清单】
+prompts/faithful.v2.md:288:5. **新增 §5.2 两个运行档**：正常档与 `【只做标点】` 保守档，把 §6.1 三级失败链的第 3 级做成提示词可切换的一档，而不是让 App 另写一份提示词。
+prompts/novel_revise.v1.md:240:- 如果本轮附带【上一版违规清单】：逐条读，这一版一条都不许再出现；但**不许**为了躲违规把改动处换成第三种写法，正确动作是**回退到更小的改动**（少改、或退回原字）。
+
+$ grep -n '^## .*变更记录'（§0.6 的剥尾锚点）
+prompts/faithful.v2.md:279:## 七、变更记录
+prompts/novel.v2.md:319:## 六、变更记录
+prompts/novel_revise.v1.md:301:## 八、变更记录
+
+$ grep -n '^## 输入'（§0.5 的剥头锚点）
+prompts/faithful.v2.md:22:## 输入（运行时追加）
+prompts/novel.v2.md:21:## 输入（运行时追加）
+prompts/novel_revise.v1.md:21:## 输入（运行时追加）
+
+$ grep -n '只有输入为空时'（§0.4 唯一 allowEmpty 槽的出处）
+prompts/faithful.v2.md:212:- 只有输入为空时，才允许输出为空。
+
+结论（逐条对上派工书/计划）：
+- 三份 sha256_8 = 5b9702ee / f189dad8 / 2ebba630，CRLF=0（.gitattributes 钉 LF，D284）；字节一个没改。
+- 9 槽 = faithful 1 + novel 3 + revise 5；optional 只有【标签 / 选填】【最近三轮对话】，其余 7 个 required（§0.4）。
+- 非槽【…】恰好 4 处：faithful:217【只做标点】（纯开关）、faithful:220 与 novel_revise.v1:240【上一版违规清单】（必须带载荷）、
+  faithful:288（在尾部变更记录内，剥尾后自然消失）（§0.3）。
+- 尾部变更记录：faithful:279 / novel:319 / novel_revise.v1:301 → 剥到 EOF（§0.6）。
+- 剥头锚点 `## 输入`：faithful:22 / novel:21 / revise:21（§0.5）。
+- 构建期资产：app/build.gradle.kts 新增 syncPromptAssets（Sync 仓库根 prompts/*.md → build/generated/promptAssets/prompts/）
+  再挂 assets.srcDir；实测合并资产里 pricing/deepseek.json 与 prompts/*.md 同时存在，未覆盖 pricing（§0.0）。
+
+# ==== 红阶段：契约 + 9 条用例已写，实现故意留 TODO ====
+# 9 条全失败于 kotlin.NotImplementedError（不是编译错误，也不是从实现反推的假红）。
+# 这一步之后才写 PromptRepository 的实现。
+$ cd /d/DreamKeeper/android && ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.PromptRepositoryTest" --rerun-tasks --console=plain
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:javaPreCompileDebug
+> Task :app:generateDebugRFile
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:mergeDebugResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:145:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:146:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+> Task :app:testDebugUnitTest
+
+PromptRepositoryTest > 三个渲染结果都不含 HTML 注释与 promptId FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:253
+
+PromptRepositoryTest > 三份送出串都不含尾部「变更记录」 FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:123
+
+PromptRepositoryTest > 三份提示词资产的 sha256_8 与钉死值一致且无 CRLF FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:94
+
+PromptRepositoryTest > 可选槽为 null 不抛且不残留占位符 FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:177
+
+PromptRepositoryTest > 只做标点开关生效并落在输入块之后 FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:199
+
+PromptRepositoryTest > 九个槽全部替换且不残留占位符与槽提示行 FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:134
+
+PromptRepositoryTest > 缺失必填槽抛 IllegalArgumentException FAILED
+    java.lang.AssertionError at PromptRepositoryTest.kt:158
+        Caused by: kotlin.NotImplementedError at PromptRepositoryTest.kt:159
+
+PromptRepositoryTest > 三份送出串都从「## 输入」起且已剥掉头部元数据 FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:109
+
+PromptRepositoryTest > 上一版违规清单带载荷追加在输入块之后 FAILED
+    kotlin.NotImplementedError at PromptRepositoryTest.kt:227
+
+9 tests completed, 9 failed
+
+> Task :app:testDebugUnitTest FAILED
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testDebugUnitTest'.
+> There were failing tests. See the report at: file:///D:/DreamKeeper/android/app/build/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 16s
+35 actionable tasks: 35 executed

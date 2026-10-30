@@ -1,0 +1,104 @@
+APK_SHA256=3e7e1e7f08fa69297fefffa58dcf18049b89f4a63a1ca7e501225d7b48242929
+DEVICE_TIME=host-only 2026-10-30T14:35:30Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:mergeDebugAssets :app:assembleDebug --rerun-tasks --console=plain && unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E "assets/(prompts|pricing)/" && sha256sum app/build/outputs/apk/debug/app-debug.apk
+
+# ==== 资产落包：构建期 Sync 拷 prompts/*.md，手写 pricing 未被覆盖（§0.0）====
+# 说明：派工书写的是 `processDebugAssets`，AGP 9.5 里没有这个任务（:app:processDebugAssets → not found）。
+#       真实的资产管线任务是 mergeDebugAssets → packageDebug；下面用前者 + assembleDebug 验证，属命令名对齐，
+#       构建产物与判定标准不变。
+$ cd /d/DreamKeeper/android && ./gradlew :app:mergeDebugAssets :app:assembleDebug --rerun-tasks --console=plain
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:generateDebugRFile
+> Task :app:javaPreCompileDebug
+> Task :app:compressDebugAssets
+> Task :app:generateDebugGlobalSynthetics
+> Task :app:desugarDebugFileDependencies
+> Task :app:mapDebugSourceSetPaths
+> Task :app:checkDebugAarMetadata
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugDuplicateClasses
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:mergeLibDexDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugNativeLibs
+> Task :app:mergeDebugResources
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:processDebugManifestForPackage
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
+
+> Task :app:processDebugResources
+> Task :app:kspDebugKotlin
+> Task :app:mergeExtDexDebug
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:145:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:146:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:mergeDebugJavaResource
+> Task :app:dexBuilderDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 11s
+40 actionable tasks: 40 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+
+$ cd app/build/outputs/apk/debug && sha256sum app-debug.apk
+$ unzip -l app-debug.apk | grep -E "assets/(prompts|pricing)/"
+$ python -c 'zipfile + hashlib，直接从包内解出字节复算'
+3e7e1e7f08fa69297fefffa58dcf18049b89f4a63a1ca7e501225d7b48242929 *app-debug.apk
+      678  1981-01-01 01:01   assets/pricing/deepseek.json
+    21105  1981-01-01 01:01   assets/prompts/CHANGELOG.md
+     1409  1981-01-01 01:01   assets/prompts/README.md
+    22272  1981-01-01 01:01   assets/prompts/faithful.v2.md
+    14793  1981-01-01 01:01   assets/prompts/faithful_cleanup.v1.1.md
+     4082  1981-01-01 01:01   assets/prompts/faithful_cleanup.v1.md
+    19663  1981-01-01 01:01   assets/prompts/novel.v1.1.md
+    21058  1981-01-01 01:01   assets/prompts/novel.v1.2.md
+     6371  1981-01-01 01:01   assets/prompts/novel.v1.md
+    29344  1981-01-01 01:01   assets/prompts/novel.v2.md
+    23142  1981-01-01 01:01   assets/prompts/novel_revise.v1.md
+5b9702ee5b78af11caa378f236eab63980c9c97d613f07d95be180dd6f042f57 22272 assets/prompts/faithful.v2.md
+f189dad80796a1dc165022b96e57b89fbbc4abc32e33a1dc77c925ecdb9a84e2 29344 assets/prompts/novel.v2.md
+2ebba6303a83e28603096e5e57ad8947e82dd6404f92a954408a5af1f5049a13 23142 assets/prompts/novel_revise.v1.md
+becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d 678 assets/pricing/deepseek.json
+结论：
+- APK 内同时有 assets/pricing/deepseek.json 与 assets/prompts/*.md：Sync 只清自己的目的目录，
+  没把手写的 pricing 覆盖掉（§0.0 的硬要求）。
+- 包内三份提示词的 sha256 与仓库真源逐字节一致（前 8 位 5b9702ee / f189dad8 / 2ebba630）；
+  不是"拷了个同名文件"，是同字节。
+- 包内 pricing/deepseek.json 的 sha256 仍为 becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d（Task 3 钉死值）。
+- 包内 assets/prompts/ 共 10 个 md（CHANGELOG/README/v1 系列 + 三件）：这是计划 §5 原文 `../../prompts/*.md` 的结果，
+  不筛文件；若只想带三件，改 Sync 的 include 即可（留作后续优化，不影响本任务验收）。
+- 资产条目在 APK 里是 deflate 压缩的（1981-01-01 是 zip 的固定时间戳），所以运行时必须 assets.open，不能 openFd。
