@@ -123,6 +123,27 @@ class TranscriptWriter(
      * 3. 在飞期间又收到一次收尾 → 记 [pendingRerun]，当前轮结束后重读行补跑；
      *    同一段最多拼一次（后缀 CAS 保证幂等）。
      */
+    suspend fun onAppendRecordingFinished(dreamId: String, file: File, totalMs: Long) {
+        // ① 先落库再排队（Voice AI 复核 ②）：beginAppend 可能因为行还没被 VM 落库而 0 行，
+        // 此时最多等 5s 让 RecordViewModel 把行写出来；等不到就交给启动 reconcile 兜底。
+        val rows = runCatching { repository.beginAppend(dreamId, totalMs) }.getOrDefault(0)
+        var ready = rows > 0
+        var tries = 0
+        while (!ready && tries < 50) {
+            val row = runCatching { repository.findById(dreamId) }.getOrNull()
+            ready = row != null && row.rawAudioMs == totalMs && !audioStore.isOpen(file)
+            if (!ready) {
+                delay(100)
+                tries++
+            }
+        }
+        if (!ready) {
+            Log.w(TAG, "追加收尾等不到匹配的行（rawAudioMs=$totalMs），交给启动补跑：$dreamId")
+            return
+        }
+        onAppendFinished(dreamId, file)
+    }
+
     suspend fun onAppendFinished(dreamId: String, file: File) {
         if (!inFlight.add(dreamId)) {
             pendingRerun.add(dreamId)

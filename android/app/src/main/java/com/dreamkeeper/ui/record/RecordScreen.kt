@@ -109,6 +109,9 @@ fun RecordScreen(
     onRequestPermission: () -> Unit,
     onBackHome: () -> Unit,
     onNavigateFollowUp: (String) -> Unit,
+    /** Plan 4 §0.4：非 null 表示追加录音（复用首段 WAV，不新建梦）。 */
+    appendDreamId: String? = null,
+    onAppendSaved: (() -> Unit)? = null,
     debugError: String? = null,
 ) {
     val vm: RecordViewModel = viewModel {
@@ -117,6 +120,7 @@ fun RecordScreen(
             session = session,
             audioStore = audioStore,
             starter = starter,
+            appendDreamId = appendDreamId,
             hasPermission = hasPermission,
             clock = System::currentTimeMillis,
             hasAskedOnce = hasAskedOnce,
@@ -170,8 +174,9 @@ fun RecordScreen(
     LaunchedEffect(state.savedDreamId, interrupted, savePresentation) {
         val id = state.savedDreamId ?: return@LaunchedEffect
         if (interrupted || savePresentation) return@LaunchedEffect
-        Log.d(TAG, "navigate followup dreamId=$id")
-        onNavigateFollowUp(id)
+        Log.d(TAG, "saved dreamId=$id append=${appendDreamId != null}")
+        // 追加模式回详情（并触发一次自动重新理顺）；首录仍旧去追问页。
+        if (appendDreamId != null) onAppendSaved?.invoke() else onNavigateFollowUp(id)
         vm.consumeSavedDream()
     }
 

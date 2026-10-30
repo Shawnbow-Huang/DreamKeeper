@@ -160,6 +160,8 @@ fun DetailScreen(
     audioStore: WavStore,
     onBack: () -> Unit,
     orchestrator: ReviseOrchestrator? = null,
+    /** Plan 4 §0.4：去追加录音（路由由宿主提供）。 */
+    onAppend: (String) -> Unit = {},
 ) {
     val vm: DetailViewModel = viewModel {
         DetailViewModel(
@@ -211,8 +213,13 @@ fun DetailScreen(
                         when (selectedTab) {
                             0 -> TranscriptTab(
                                 dream = state.dream,
+                                generationPhase = generationPhase,
                                 onSave = { text -> vm.saveManualTranscript(text) },
                                 onMessage = { message -> scope.launch { snackbarHost.showSnackbar(message) } },
+                                onAppend = { state.dream?.let { onAppend(it.id) } },
+                                onRepolish = vm::generateFaithful,
+                                onRetryTranscription = vm::retryTranscription,
+                                onSkipTranscription = vm::skipTranscription,
                             )
 
                             1 -> NovelTab(
@@ -412,16 +419,73 @@ private fun DetailTabs(selected: Int, onSelect: (Int) -> Unit) {
 @Composable
 private fun TranscriptTab(
     dream: Dream?,
+    generationPhase: GenerationPhase,
     onSave: suspend (String) -> Int,
     onMessage: (String) -> Unit,
+    onAppend: () -> Unit,
+    onRepolish: () -> Unit,
+    onRetryTranscription: () -> Unit,
+    onSkipTranscription: () -> Unit,
 ) {
     if (dream == null) return
     var dialogOpen by rememberSaveable { mutableStateOf(false) }
+    var showRaw by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val text = dream.rawTranscript
+    val faithful = dream.faithfulText?.takeIf { it.isNotBlank() }
+    val raw = dream.rawTranscript
+    val text = if (showRaw || faithful == null) raw else faithful
     val status = dream.transcriptStatus
+    val totalMs = dream.rawAudioMs ?: 0L
+    val uncoveredMs = (totalMs - dream.transcriptMs).coerceAtLeast(0L)
+    val polishing = generationPhase is GenerationPhase.Running &&
+        generationPhase.kind == GenerationKind.FAITHFUL
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // 标题行：现在显示的是整理稿还是原始转写；有整理稿时给「看原始转写」（Plan 4 §0.6）。
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = when {
+                    polishing -> "正在理顺…"
+                    faithful != null && !showRaw -> "整理稿"
+                    else -> "原始转写"
+                },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (polishing) Ember else InkDim,
+            )
+            if (faithful != null && raw.isNotBlank()) {
+                TextButton(onClick = { showRaw = !showRaw }) {
+                    Text(
+                        text = if (showRaw) "看整理稿" else "看原始转写",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Paper,
+                    )
+                }
+            }
+        }
+        // 有没转成文字的尾部（rawAudioMs > transcriptMs）：给重试/跳过的显式出口（D421 之后）。
+        if (uncoveredMs > 0L && status != TranscriptStatus.PENDING) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "还有 ${(uncoveredMs / 1000).coerceAtLeast(0)} 秒没转成文字",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkDim,
+                )
+                TextButton(onClick = onRetryTranscription) {
+                    Text("重试转写", style = MaterialTheme.typography.labelSmall, color = Ember)
+                }
+                TextButton(onClick = onSkipTranscription) {
+                    Text("这段不用转写", style = MaterialTheme.typography.labelSmall, color = InkDim)
+                }
+            }
+        }
         if (text.isBlank() && status != TranscriptStatus.OK) {
             Box(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -482,6 +546,20 @@ private fun TranscriptTab(
                 }
 
                 else -> Unit
+            }
+        }
+        // Plan 4 §0.4：追加录音入口常驻（不依赖有没有转写成功）；有整理稿时给「重新理顺」。
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onAppend) {
+                Text("补一段", color = Ember)
+            }
+            if (faithful != null) {
+                TextButton(onClick = onRepolish, enabled = !polishing && uncoveredMs == 0L) {
+                    Text("重新理顺", color = if (polishing || uncoveredMs > 0L) InkDim else Paper)
+                }
             }
         }
     }

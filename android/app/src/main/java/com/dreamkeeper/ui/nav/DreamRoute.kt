@@ -23,5 +23,8 @@ sealed interface DreamRoute {
     data object Settings : DreamRoute { override val route = "settings" }
     data class Detail(val dreamId: String) : DreamRoute { override val route = "detail/$dreamId" }
     data class Record(val entry: RecordEntry) : DreamRoute { override val route = "record/${entry.name}" }
+
+    /** 追加录音（Plan 4 §0.4）：复用录音页往既有 WAV 尾部追加，不新建梦。 */
+    data class Append(val dreamId: String) : DreamRoute { override val route = "append/$dreamId" }
     data class FollowUp(val dreamId: String) : DreamRoute { override val route = "followup/$dreamId" }
 }

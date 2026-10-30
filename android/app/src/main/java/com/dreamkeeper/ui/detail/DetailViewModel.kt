@@ -197,6 +197,48 @@ class DetailViewModel(
     /** 当前生成进度。成功后回到 [GenerationPhase.Idle]——正文已经由 `state` 的 Flow 刷新。 */
     val generationPhase: StateFlow<GenerationPhase> = _generationPhase.asStateFlow()
 
+    /**
+     * 追加录音后的自动重理顺（Plan 4 §0.4）：等尾段转写落库（status OK 且水位追平）后才跑，
+     * 且只跑一次。防重入交给 [generate] 的 Running 判断；这里不清空用户输入。
+     */
+    private val appendPending = MutableStateFlow(false)
+
+    init {
+        viewModelScope.launch {
+            state.collect { state ->
+                if (!appendPending.value) return@collect
+                val dream = state.dream ?: return@collect
+                val total = dream.rawAudioMs ?: return@collect
+                if (total <= 0L) return@collect
+                if (dream.transcriptStatus == TranscriptStatus.OK && dream.transcriptMs >= total) {
+                    appendPending.value = false
+                    generateFaithful()
+                }
+            }
+        }
+    }
+
+    /** 录音页追加保存后的回调：等转写追平再自动重新理顺（幂等，不重复触发）。 */
+    fun onAppendRecorded() {
+        appendPending.value = true
+    }
+
+    /** 生成/改稿在飞时不放行追加录音（§0.4 互斥）。 */
+    fun canAppendNow(): Boolean =
+        _generationPhase.value !is GenerationPhase.Running && !state.value.revising
+
+    /** 尾部没转成文字：把 FAILED 拨回 PENDING，交给收尾/启动路径补跑。 */
+    fun retryTranscription() {
+        val total = state.value.dream?.rawAudioMs ?: return
+        viewModelScope.launch { runCatching { repo.markTranscriptionRetry(dreamId, total) } }
+    }
+
+    /** 用户决定「这段不用转写」：把水位追平，生成闸门放行。 */
+    fun skipTranscription() {
+        val total = state.value.dream?.rawAudioMs ?: return
+        viewModelScope.launch { runCatching { repo.skipUncoveredAudio(dreamId, total) } }
+    }
+
     fun generateFaithful() = generate(GenerationKind.FAITHFUL)
 
     fun generateNovel() = generate(GenerationKind.NOVEL)

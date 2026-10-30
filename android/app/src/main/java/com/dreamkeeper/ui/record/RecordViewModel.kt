@@ -38,6 +38,8 @@ class RecordViewModel(
     private val session: RecordingSession,
     private val audioStore: WavStore,
     private val starter: RecordingStarter,
+    /** Plan 4 §0.4：非 null 时是「往这条梦的既有 WAV 追加」，开始录音复用同一 id。 */
+    private val appendDreamId: String? = null,
     private val hasPermission: () -> Boolean = { false },
     private val clock: () -> Long = System::currentTimeMillis,
     private val hasAskedOnce: () -> Boolean = { false },
@@ -123,7 +125,7 @@ class RecordViewModel(
                 permissionState = PermissionState.GRANTED,
             )
         }
-        starter.start(UUID.randomUUID().toString())
+        starter.start(appendDreamId ?: UUID.randomUUID().toString())
     }
 
     // ---- 4.3 松手 ----
@@ -235,6 +237,24 @@ class RecordViewModel(
      * 后者若发生在本 VM 录音期间，说明扫描抢先插了行——本 VM 仍要照常跳到 FollowUp。
      */
     private fun persistTake(snapshot: RecordingSnapshot, existing: Boolean) {
+        // Plan 4 §0.4：追加录音不建新梦、不改路径，只推进 rawAudioMs 并置 PENDING。
+        if (appendDreamId != null) {
+            val dreamId = snapshot.dreamId ?: return
+            viewModelScope.launch {
+                runCatching { repository.beginAppend(dreamId, snapshot.elapsedMs) }
+                    .onSuccess {
+                        if (!overlay.value.ignoreSaved) {
+                            overlay.update { it.copy(savedDreamId = dreamId) }
+                        }
+                    }
+                    .onFailure { error ->
+                        overlay.update {
+                            it.copy(localError = "录音保存失败：${error.message ?: "未知错误"}")
+                        }
+                    }
+            }
+            return
+        }
         if (!existing) {
             saveDraft(snapshot)
             return

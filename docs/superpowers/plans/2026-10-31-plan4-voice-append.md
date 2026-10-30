@@ -344,9 +344,12 @@ suspend fun commitSuccess(
 ## Task 4：「补一段」入口与原样 tab
 
 **Files**
-- 改：`ui/record/RecordScreen.kt`（append 模式复用）、`ui/DreamKeeperRoot.kt`（`append/{dreamId}` 路由）、
-  `ui/detail/DetailScreen.kt`（原样 tab 重写：忠实稿正文 + 看原始转写 + 补一段 + 重新理顺 + 三态）、
-  `ui/detail/DetailViewModel.kt`（`appendState`、`onRecordingFinished`、互斥）
+- 改：`ui/record/RecordScreen.kt`（append 模式复用）、`ui/record/RecordViewModel.kt`（`appendDreamId`）、
+  `ui/DreamKeeperRoot.kt`（`append/{dreamId}` 路由）、`ui/nav/DreamRoute.kt`（`Append`）、
+  `service/RecordingService.kt`（按 `createdThisTake` 分流追加收尾）、
+  `stt/TranscriptWriter.kt`（`onAppendRecordingFinished`：先 beginAppend 再排队）、
+  `ui/detail/DetailScreen.kt`（原样 tab 重写：整理稿正文 + 看原始转写 + 补一段 + 重新理顺 + 三态）、
+  `ui/detail/DetailViewModel.kt`（`onAppendRecorded`、`canAppendNow`、重试/跳过、自动重理顺）
 - 新测试：`ui/detail/AppendEntryTest.kt`（ViewModel 层，6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）
 - 设备证据：`p4-append-05-ui.png`、`p4-append-06-append.png` + sidecar
 
@@ -446,6 +449,15 @@ suspend fun commitSuccess(
 | D433 | 忠实链 T3（保守档也失败）不建版本、不写 `dreams.faithfulText` | 返回 `text=input` 由调用方重跑；避免「失败也落库」，语义等价（raw 即正文） |
 | D434 | `filterChangeLog` 由单基准改双基准（理顺稿+原始转写） | quote 命中任一即保留；只在忠实稿里的引文不再被误丢（新增 2 例锁定） |
 | D422 | 2026-10-31 | T1 | `scripts/check-migrate.py` 的 `diff_2_3` 比较前需去 `i:`/`s:` 前缀 | 实测踩到：dump 值是 canon 字符串，`transcriptStatus == "OK"` 恒假 → 回填期望永远算成 0，真实数据必 RED。已加 `decanon()`；修后 fixture GREEN、负向 RED、v1→v2 回归逐字不变 |
+| D435 | 2026-10-31 | T4 | T4 由 Lead 直接实施（无独立实施者），无严格「先红」 | 与 D418/D427 同口径：以变异反证代替红——关掉自动重理顺 → 2 例红（`6 tests completed, 2 failed`），恢复后 6/6 绿；证据 `p4-append-04-tests.txt` |
+| D436 | 2026-10-31 | T4 | 追加录音复用 `RecordScreen` 并通过 `appendDreamId`/`onAppendSaved` 区分去向 | 新开一套录音 UI 会复制手势/权限/中断三条路径（Plan 2 的 6 个坑）；复用只加两个分支：`starter.start(既有 id)` 与保存后 `nav.popBackStack()` |
+| D437 | 2026-10-31 | T4 | Service 用 `createdThisTake` 判定追加并走新入口 `enqueueAppend` | 追加时文件是 `markOpen` 复用，不能删、不能建新梦；分流点必须在 `onRecordingFinished` 的 afterRelease，否则整段重转会重复旧文字 |
+| D438 | 2026-10-31 | T4 | `onAppendRecordingFinished` 先 `beginAppend` 再排队，0 行时等最多 5s | Voice AI 复核 ②：service 收尾早于 RecordViewModel 落库时，Writer 的 `awaitRow` 会 0 行静默丢段；等不到就交给启动 reconcile（T2）兜底 |
+| D439 | 2026-10-31 | T4 | 自动重理顺只在「status==OK 且 transcriptMs≥rawAudioMs」时触发一次 | 用户要「随时可语音续写」；若转写没追平就重跑，整理稿会漏掉新段。`appendPending` 消费后清零，避免状态再发射时重复跑 |
+| D440 | 2026-10-31 | T4 | 设备追加 demo 落在真实录音那条梦（`4f3b44fd…`）而非 seed-dream-4 | 该条是当前唯一有 WAV 的梦（rawAudioMs=2400）；实测追加后 140844B=44+4400×32、rawAudioMs=4400、status 回 PENDING |
+| D441 | 2026-10-31 | T4 | 两张设备截图 `nearWhite≈0.13%`，非 0 | 白色像素来自状态栏（时钟/信号），正文区为 Night 底；判据改为「正文区无白底」，并记录像素数与坐标来源说明 |
+| D442 | 2026-10-31 | T4 | 模拟器无中文离线包，追加段转写仍失败，行停在 PENDING | 这正是需求要覆盖的降级路径（T2 的 reconcile 会在下次启动补跑）；本任务不宣称设备转写成功，`transcriptMs==rawAudioMs` 与 faithful 新版本留 T7 真机/真实 STT 验收 |
+| D443 | 2026-10-31 | T4 | 计划里 T4 的「旧 faithful 版切换」并入原样 tab 的「看原始转写/看整理稿」切换，未单开用例 | 用户要的是「能看原文」；旧版本行的选择已经由 T5/T6 的版本线承担，重复做会两套口径 |
 
 ## 10. 自审记录
 
@@ -505,6 +517,25 @@ suspend fun commitSuccess(
 - **证据**：`p4-faithful-00-base.txt`（host-only 头；为什么/改法/4 例/绿跑/两处变异原文/恢复 sha/全量/未覆盖）。
 - **PENDING**：设备侧「重跑忠实链后原样 tab 显示新稿」（T4 一起验）；真实 LLM 下 faithful 与 raw 的差异质量（T7）。
 - **结论**：通过。偏差 D431–D434 已登记；下一步 T4（「补一段」入口与原样 tab）。
+
+### Task 4 验收（Lead，2026-10-31）
+
+- **交付**：本提交——`DreamRoute.Append`、`RecordViewModel.appendDreamId`、`RecordScreen` append 模式、
+  `RecordingService.enqueueAppend`、`TranscriptWriter.onAppendRecordingFinished`、
+  `DetailViewModel.onAppendRecorded/canAppendNow/retryTranscription/skipTranscription`、
+  `DetailScreen` 原样 tab 重写；新测试 `AppendEntryTest`（6 例）。
+- **Lead 独立复跑**：targeted `--rerun-tasks` → `6 tests completed, 0 failed`（15s，XML tests=6/failures=0）；
+  全量 `--rerun-tasks` → **45 类 / 405 例 / 0 / 0 / 0**（55s）。
+- **契约核对**：追加模式用既有 dreamId 起录音（用例 1）；转写追平后只自动跑一次忠实链（用例 2）；
+  未追平不跑、追平后补跑（用例 3）；生成在飞时 `canAppendNow()==false`（用例 4）；
+  重试把 FAILED→PENDING 且水位不动（用例 5）；跳过把 `transcriptMs` 追平（用例 6）。
+- **变异**：关掉自动重理顺 → 用例 2/3 红（`6 tests completed, 2 failed`，BUILD FAILED 24s），
+  恢复后 `DetailViewModel.kt` sha256（全文件）`cd1a00c5…7325`，targeted 6/6 绿。
+- **证据**：`p4-append-04-tests.txt`（host-only）、`p4-append-05-ui.png/.txt`（入口+三态，设备 03:36）、
+  `p4-append-06-append.png/.txt`（追加后 WAV 140844B、rawAudioMs=4400、PENDING、DB 三件 sha）。
+- **PENDING**：模拟器无中文离线包 → 追加段转写成功与「整理稿出现新版本」留 T7 真机/真实 STT；
+  「补一段」权限收回/来电中断沿用录音页既有路径，未新增用例。
+- **结论**：通过。偏差 D435–D443 已登记；下一步 T5（小说化显式触发与想法）。
 
 每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。

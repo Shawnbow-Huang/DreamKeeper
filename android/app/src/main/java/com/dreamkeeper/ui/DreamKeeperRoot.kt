@@ -212,6 +212,26 @@ fun DreamKeeperRoot(
                     audioStore = audioStore,
                     onBack = { nav.popBackStack() },
                     orchestrator = orchestrator,
+                    onAppend = { target -> nav.navigate(DreamRoute.Append(target).route) },
+                )
+            }
+            composable("append/{dreamId}") { backStackEntry ->
+                val dreamId = backStackEntry.arguments?.getString("dreamId").orEmpty()
+                RecordScreen(
+                    entry = RecordEntry.HOME_BUTTON,
+                    repository = repo,
+                    session = session,
+                    audioStore = audioStore,
+                    starter = starter,
+                    hasPermission = hasPermission,
+                    hasAskedOnce = hasAskedOnce,
+                    permissionEpoch = permissionEpoch,
+                    onRequestPermission = onRequestPermission,
+                    onBackHome = { nav.popBackStack() },
+                    onNavigateFollowUp = { nav.popBackStack() },
+                    appendDreamId = dreamId,
+                    onAppendSaved = { nav.popBackStack() },
+                    debugError = debugRecordError,
                 )
             }
             composable("record/{entry}") { backStackEntry ->

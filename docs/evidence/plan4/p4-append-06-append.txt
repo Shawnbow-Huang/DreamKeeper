@@ -1,0 +1,24 @@
+APK_SHA256=c55f69e07b0cff8f OLD_APK_SHA256=n/a
+DEVICE_TIME=Sat Oct 31 03:36:50 CST 2026
+REPLAY=原样 tab 点「补一段」→ 进入 record 页（同 dreamId）→ adb shell input swipe 540 1550 540 1550 2200（按住 2.2s）
+TASK=Plan 4 T4 设备证据：追加录音真的写回同一条梦（WAV 变长 + rawAudioMs 推进 + 状态回 PENDING）
+PNG=docs/evidence/plan4/p4-append-06-append.png
+PNG_BYTES=82431
+PNG_SHA256=fcb5a32632ddad5e（前 16 位）
+NEAR_WHITE=3436/2592000 = 0.1326%（状态栏白色像素；正文非白底）
+
+DEVICE_FACTS（force-stop 后三件齐拉，主机合并 WAL，user_version=3）：
+- WAV：files/audio/4f3b44fd-4299-4f0f-84c2-994b50989713.wav = 140844 B
+  = 44 + 4400×32 → rawAudioMs 由 2400 推进到 4400（+2000ms，与按住时长一致）。
+- dreams 行：id=4f3b44fd…，transcriptStatus=PENDING，rawAudioMs=4400，transcriptMs=0，
+  rawTranscript 仍为空（没转出文字，长度 0）。
+- 播放条：0:00.0 / 0:04.4（追加前是 0:02.4）。
+- 数据库三件：设备 sha256（db）=c2b75d4942bb8cb5…；拉回后主机 sha256 与设备逐字相同；
+  合并 WAL 后（checkpoint TRUNCATE）sha256=8bb6313f0ed1d07c…，user_version=3。
+- 截图时刻页面：已回到详情、原样 tab，正文区「正在转写…」（PENDING 由 beginAppend 写入）。
+
+读法：
+1) 追加没有新建第二条梦、没有新建 WAV（还是同一个 id、同一个文件）——需求 A 的核心。
+2) 追加后状态回到 PENDING 而不是假装 OK：模拟器没有中文离线包，转写失败也会保留原文
+   （本任务不宣称转写成功；重试/跳过入口见 05 图）。
+3) 重启后 reconcile（T2）会扫 rawAudioMs>transcriptMs 的行补跑，这条行会再次进入转写。

@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-31 03:40（**Plan 4 开工 4/8**：T1 数据库 v3、T2 尾段转写/启动补跑、T3 忠实稿基座与两槽分离已验收，全量 **44 类 399 例**绿；D415–D434 已登记。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
+> 最后更新：2026-10-31 03:45（**Plan 4 开工 5/8**：T1 数据库 v3、T2 尾段转写/启动补跑、T3 忠实稿基座与两槽分离、T4 补一段入口与原样 tab 已验收，全量 **45 类 405 例**绿；D415–D443 已登记。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
 
 ## 一、当前在做
 
@@ -67,7 +67,7 @@
 | 9 对话改稿 + 多版本 | ✅ 完成 | `c1c8d75`：`ReviseOrchestrator`（ASK 只落两条消息不建版 / REVISE 必建版 + 闸门重试载荷）、`VersionStrip`、`ReviseSheet` 六快捷 chips、`resolveFinalNovel = selected ?: maxVersion`、`selectVersion` 只窄更新；10 例（8+2）先红后绿 + 两处变异（2 红/1 红）；全量 35 类/344 例绿（`p3-revise-0*`）；偏差 D380–D391 |
 | 10 导出与验收证据 | ✅ 完成 | `7a7e5d4`+`97d841e`+`57eee1e`+`af88286`：导出 txt/docx/pdf（零依赖）、`check-export.py`、设备 E2E 0–13 步、A1–A24、FINAL-REVIEW；D406 修入口可见性（`a774ebe`），全量 39 类/365 例绿 |
 
-任务书：[plans/2026-10-30-generation-and-cost.md](superpowers/plans/2026-10-30-generation-and-cost.md) · Plan 4 任务书待建 · 分支 `plan3-generation`（从 `plan2-done` 的 `bb11fe2` 切出）
+任务书：[plans/2026-10-31-plan4-voice-append.md](superpowers/plans/2026-10-31-plan4-voice-append.md) · 分支 `plan4-voice-append`（从 `plan3-generation` 的 `00a9cf2` 切出）
 
 **Plan 3 的目标**：用用户自己的 DeepSeek Key，「理顺」得到忠于原梦的原样稿（四级失败链 + 五闸门），
 「小说化」得到能读的小说稿（改动清单可查），不满意能对着稿子说人话让它改（ASK 先问 / REVISE 必留版），
@@ -76,7 +76,7 @@
 **先修的前提**（专家实测）：仓库没有 OkHttp 也没有 kotlinx.serialization；manifest 没有 INTERNET；
 `check-near-white.ps1` 其实**有** `-MaxRatio`（Plan 2 的登记是错的）。
 
-## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 4/8
+## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 5/8
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -84,7 +84,7 @@
 | T1 数据库 v3 + 追加 CAS | ✅ 完成 | `dreams.transcriptMs` 水位 + `MIGRATION_2_3`（回填带 `rawAudioMs IS NOT NULL`）+ 四条 CAS（beginAppend/append/retry/skip）+ 3.json；变异两处必红、恢复逐字节同；全量 **41 类 380 例**；证据 `p4-mig-00..02`、`p4-append-00..01`、`p4-full`；D418–D422 |
 | T2 追加写回与重转写兜底 | ✅ 完成 | `stt/TailWav` 只切尾段 + writer 在飞排队/启动 reconcile（`PENDING && A>T`）+ 失败只置 FAILED；变异删排队必红、恢复逐字节同；全量 **44 类 395 例**；证据 `p4-append-03`；D427–D430 |
 | T3 忠实稿基座与整段重跑 | ✅ 完成 | 忠实链同事务写 `dreams.faithfulText`（`commitSuccess` 第 5 参）+ `novel()` 两槽分离 + changeLog 双基准；两处变异必红、恢复逐字节同；全量 **44 类 399 例**；证据 `p4-faithful-00`；D431–D434 |
-| T4「补一段」入口与原样 tab | ⬜ | append 路由复用录音页；原样 tab 显示忠实稿 + 看原始转写 + 重新理顺；设备 `p4-append-05..07` |
+| T4「补一段」入口与原样 tab | ✅ 完成 | `append/{dreamId}` 复用录音页（`createdThisTake` 分流追加收尾）+ 原样 tab 显示整理稿/原始转写切换 +「还有 N 秒没转成文字」重试/跳过 +「补一段」「重新理顺」+ 回详情自动重理顺一次（防重入）；变异关掉自动重跑 2 例红；全量 **45 类 405 例**；设备追加实测 WAV 140844B=44+4400×32、`rawAudioMs 2400→4400`、PENDING 交启动补跑；证据 `p4-append-04..06`；D435–D443 |
 | T5 小说化显式触发与想法 | ⬜ | 常驻入口 + `NovelIdeaDialog` + `novel.v2.1` 四槽 + promptVersion 解析 + 路由 v1.1 |
 | T6 可见性与体验缺陷 | ⬜ | 版本线过滤 faithful、列表用选中版、成本行、生成提到应用级作用域 |
 | T7 发布就绪与终验 | ⬜ | release/API26–28/真机清单 + FINAL-REVIEW + ACCEPTANCE `## 3e` + 看板 8/8 |

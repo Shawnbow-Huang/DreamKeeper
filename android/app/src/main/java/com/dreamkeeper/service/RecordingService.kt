@@ -286,8 +286,11 @@ class RecordingService : Service() {
                 // 直接拿字节数去匹配 rawAudioMs 会永远对不上（CAS 返回 0，状态停在 PENDING）。
                 session.finish(finishBytes)
                 val expectedMs = finishBytes / WavMath.BYTES_PER_MS
-                afterRelease = {
-                    enqueueTranscription(recording.dreamId, recording.file, expectedMs)
+                afterRelease = if (recording.createdThisTake) {
+                    { enqueueTranscription(recording.dreamId, recording.file, expectedMs) }
+                } else {
+                    // Plan 4 §0.4：追加 take 只转写尾段；Writer 先 beginAppend 落库再排队。
+                    { enqueueAppend(recording.dreamId, recording.file, expectedMs) }
                 }
             }
         } finally {
@@ -308,6 +311,15 @@ class RecordingService : Service() {
         Log.i(TAG, "转写入队 dreamId=$dreamId elapsedMs=$elapsedMs")
         container.transcriptionScope.launch {
             container.transcriptWriter.onRecordingFinished(dreamId, file, elapsedMs)
+        }
+    }
+
+    /** 追加收尾：与 [enqueueTranscription] 同一作用域，失败只记日志（录音已落盘）。 */
+    private fun enqueueAppend(dreamId: String, file: File, totalMs: Long) {
+        val container = (application as DreamKeeperApp).container
+        Log.i(TAG, "追加转写入队 dreamId=$dreamId totalMs=$totalMs")
+        container.transcriptionScope.launch {
+            container.transcriptWriter.onAppendRecordingFinished(dreamId, file, totalMs)
         }
     }
 

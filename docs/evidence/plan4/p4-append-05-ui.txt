@@ -1,0 +1,13 @@
+APK_SHA256=c55f69e07b0cff8f OLD_APK_SHA256=n/a
+DEVICE_TIME=Sat Oct 31 03:36:50 CST 2026
+REPLAY=adb install -r android/app/build/outputs/apk/debug/app-debug.apk; 全部 → 10月30日那条（真实录音 4f3b44fd…）→ 原样 tab
+TASK=Plan 4 T4 设备证据：原样 tab 的「补一段」入口与三态
+PNG=docs/evidence/plan4/p4-append-05-ui.png
+PNG_BYTES=120901
+PNG_SHA256=546a78828a107adb（前 16 位）
+NEAR_WHITE=3432/2592000 = 0.1324%（状态栏时钟/信号为白色像素；正文非白底）
+DEVICE_FACTS:
+- 页面：原样 tab 顶部「原始转写」；下方「还有 2 秒没转成文字」+「重试转写」「这段不用转写」；
+  正文区「没有转写成功 / 可能是本机没有中文离线包…」+「手动补字」；底部「补一段」；播放条 0:00.0 / 0:02.4。
+- 该条梦：id=4f3b44fd-4299-4f0f-84c2-994b50989713，rawAudioMs=2400，transcriptMs=0，transcriptStatus=FAILED。
+读法：这张图证明「追加入口常驻」「未覆盖音频的显式出口存在」「有整理稿时会出现看原始转写（本例无整理稿，故未出现）」。

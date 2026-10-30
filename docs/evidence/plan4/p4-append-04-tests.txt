@@ -1,0 +1,67 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T19:35:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon --console=plain :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.AppendEntryTest" --rerun-tasks
+TASK=Plan 4 T4（追加入口：原样 tab 重写 + 追加录音路由 + 追加后自动重理顺）
+BASE_HEAD=e0a3a71（T3 验收提交）
+
+== 为什么 ==
+需求 A（用户随时语音续写）：点「补一段」录音 → 复用首段 WAV 尾部追加 → 只转写尾段 →
+转写追平后自动重新理顺一次。T4 同时补上 T3 遗留的展示缺口：原样 tab 此前只显示
+rawTranscript，有整理稿的梦看不到整理稿，也没有「看原始转写」的入口。
+
+== 改法 ==
+1. ui/nav/DreamRoute.kt：新增 `Append(dreamId)`（route = append/{dreamId}）。
+2. ui/record/RecordViewModel.kt：新增 `appendDreamId`（非 null = 追加模式，starter.start 用既有 id，
+   DONE 后只 `repository.beginAppend(dreamId, elapsedMs)`，不新建梦、不改路径）。
+3. ui/record/RecordScreen.kt：新增 `appendDreamId` / `onAppendSaved`，保存成功后回详情而不是去追问页。
+4. service/RecordingService.kt：收尾按 `createdThisTake` 分流——新建 take 走整段转写，
+   追加 take 走 `enqueueAppend`（先 beginAppend 落库再排队，Voice AI 复核 ②）。
+5. stt/TranscriptWriter.kt：新增 `onAppendRecordingFinished(dreamId, file, totalMs)`，
+   beginAppend 0 行时最多等 5s 让 RecordViewModel 落库，再走既有 `onAppendFinished`（尾段切片）。
+6. ui/detail/DetailViewModel.kt：`onAppendRecorded()`（幂等置位）、`canAppendNow()`（生成/改稿在飞时禁用）、
+   `retryTranscription()`、`skipTranscription()`；state 收集里等 `status==OK && transcriptMs>=rawAudioMs`
+   后自动 `generateFaithful()` 一次。
+7. ui/detail/DetailScreen.kt：原样 tab 重写——整理稿正文（无整理稿时原文）、「看原始转写/看整理稿」切换、
+   「还有 N 秒没转成文字」+「重试转写 / 这段不用转写」、「补一段」、「重新理顺」、整理中三态。
+8. ui/DreamKeeperRoot.kt：`append/{dreamId}` 路由；DetailScreen 传 onAppend。
+
+== 测试（AppendEntryTest，6 例，Robolectric sdk34 + 真 Room） ==
+1. append mode starts recording for the existing dream id
+2. append recorded polishes once when watermark already caught up
+3. no polish while uncovered audio remains
+4. append is blocked while generation is running
+5. retry transcription flips failed to pending
+6. skip transcription catches the watermark up
+
+绿跑（首次）：BUILD SUCCESSFUL in 15s；XML tests=6 failures=0 errors=0。
+```
+cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon --console=plain \
+  :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.AppendEntryTest" --rerun-tasks
+BUILD SUCCESSFUL in 15s
+testDebugUnitTest/TEST-com.dreamkeeper.ui.detail.AppendEntryTest.xml  tests=6 failures=0 errors=0
+```
+
+== 变异（替代红：T4 由 Lead 直接实施，见 D435） ==
+变异：把 DetailViewModel 自动重理顺的 `generateFaithful()` 改成空实现（置位后不真跑）。
+```
+AppendEntryTest > no polish while uncovered audio remains FAILED
+AppendEntryTest > append recorded polishes once when watermark already caught up FAILED
+6 tests completed, 2 failed
+> Task :app:testDebugUnitTest FAILED
+BUILD FAILED in 24s
+```
+恢复：`cp .scratch/DetailViewModel.kt.bak`，sha256（全文件）
+`cd1a00c5a4fb1999b1b7dd00325db90b68ab848fd09a01214d88eac79fb07325`，恢复后全量复跑见下。
+
+== 全量 ==
+```
+cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon --console=plain :app:testDebugUnitTest --rerun-tasks
+BUILD SUCCESSFUL in 55s
+XML: classes=45 tests=405 failures=0 errors=0 skipped=0
+```
+（T3 基线 44/399 + 本任务 6 例 = 45/405，与计划一致。）
+
+== 未覆盖 ==
+- 生成成功后「重新理顺」入口的即时刷新仍走 D406 逻辑，本任务未重测设备细节。
+- 真机 STT 正路径（D196–D203）不在本任务；设备侧用模拟器录音追加+DB/WAV 证据，见 p4-append-06-append.txt。
+- 「补一段」权限拒绝/中途来电等系统级分支沿用录音页既有路径，未新增用例。
