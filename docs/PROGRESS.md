@@ -42,7 +42,6 @@
 | 4 录音页 + RecordEntry | ✅ 完成 | `c3777cd`：按住说梦、权限三态、入口接线；14 条新用例（总 176）；真机同一次 take `stat` 48044→160044→220844（= 44+6900×32），松手后冻结；按下→RECORDING 163ms、松手→FINISHING 491ms、FINISHING→DONE 14ms；Lead 复核代码与全绿（D141–D149） |
 | 5 30 秒追问窗口 | ✅ 完成 | `e99b0d0`+`eb099a5`+`9e6ed4a`：追加走 `markOpen`+`openWriter`（`create` 会截断，D150）、失败路径只在 `createdThisTake` 时删（D151）、窄更新只写时长与状态（D154）；实测 `92844→153644` 差 60800B = **1900ms**，第一段 PCM md5 两边一致；真机抓到两个真 bug（闭包捕获 `recording` 导致松手不发 STOP、`decorationBox fillMaxSize` 把麦克风顶出屏）；D163–D172 |
 | 6 启动扫描与头修复 | ✅ 完成 | `cf31244` + `3b71511` + `9f63a6f`：四主态 + 第 5 态逐文件兜底、`isOpen` 跳过正在录的文件；真机五态实测（占位头 137644B → 重启后 riff/data 回填、validator exit 1→0、设备/宿主 sha256 一致；无行恢复草稿 PENDING；删文件清指针 + FAILED；干净不动；0 字节删文件）、M1/M2 变异各 2/3 红；Lead 复跑 219 用例、schema 零 diff（D189–D195） |
-| 6 启动扫描与头修复 | ⏳ 派工中 | 孤儿恢复 / 反向孤儿 / 补回填；派工前先让专家审 brief |
 | 7 SttEngine 与写回 | ⬜ | 三态探测 + API 33+ 文件转写 + 窄更新写回 |
 | 8 详情页播放 | ⬜ | 播前 repair；时长取 `rawAudioMs` |
 | 9 端到端验收与证据 | ⬜ | W1/W2/W3 三层 + `ACCEPTANCE.md` 追加 `## 3b 音频证据表` |
