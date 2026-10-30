@@ -264,6 +264,7 @@ class RecordingService : Service() {
 - [ ] 3.3 实现命令解析（抽成 `RecordingCommand` 纯函数，Service 只做副作用）→ 绿。
 - [ ] 3.4 实现 Service：`onStartCommand` 里 **先** `ServiceCompat.startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)`，**再**建 `AudioRecord` 并 `startRecording()`（顺序反了在 12+ 上直接抛 `ForegroundServiceDidNotStartInTimeException`）；权限不足 → `snapshot.fail("没有录音权限")` 并 `stopSelf()`；返回 `START_NOT_STICKY`。
 - [ ] 3.4b `AudioRecord` 参数**钉死**：`MediaRecorder.AudioSource.VOICE_RECOGNITION`、`16_000`、`AudioFormat.CHANNEL_IN_MONO`、`AudioFormat.ENCODING_PCM_16BIT`；buffer 取 `max(AudioRecord.getMinBufferSize(...), 3200)`；读循环放**专用线程**并先 `Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)`；写文件**不套 `BufferedOutputStream`**（多一次拷贝、崩溃时丢缓冲）；每约 1 秒 `fd.sync()` 一次。
+- [ ] 3.4c `RecordingService` 把 `RecorderCore.run` 的 `onChunk(bytes, amplitudeDb)` 转成状态：`session.update(elapsedMs = bytes / 32, amplitude = (amplitudeDb + 60) / 60f)`（`silenceFloorDb = -60`，见 Task 2 的振幅契约；**不许**另起定时器或随机数算振幅，也不许在这里再算一次 RMS）。
 - [ ] 3.5 实现通知：常驻、低优先级、`ContentIntent` 回详情、`ACTION_STOP` 按钮；channel 在 `RecordingNotifications` 里建（`IMPORTANCE_LOW`，锁屏可见性 `VISIBILITY_PRIVATE`）。
 - [ ] 3.6 `AppContainer` 加 `audioStore`（`WavStore(filesDir/audio)`）与 `recordingSession`。
 - [ ] 3.7 构建 + 安装，**从可见页面起服务**（首页点「说梦」→ 按住 3 秒 → 松手）：通知出现、`dumpsys activity services com.dreamkeeper` 有该服务（`started=true`）、logcat 无 FATAL。**不要**用 `adb shell am start-foreground-service …` 去验 microphone 型 FGS——Android 14+ 禁止后台启动，必然抛 `ForegroundServiceStartNotAllowedException`，只会白烧一轮排障。
