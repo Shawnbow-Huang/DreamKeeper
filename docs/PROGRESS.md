@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 23:33（Task 8 验收通过：编排器 8 例、两处变异、全量 33 类 334 例绿；下一步 Task 9 改稿）
+> 最后更新：2026-10-30 23:58（Task 9 验收通过：改稿 10 例、两处变异、全量 35 类 344 例绿；下一步 Task 9b 生成入口接线）
 
 ## 一、当前在做
 
@@ -51,7 +51,7 @@
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
 
 
-## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 8/10
+## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 9/10
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -63,7 +63,7 @@
 | 6 提示词资产与 PromptRepository | ✅ 完成 | `92ec146`：`syncPromptAssets` 构建期把 `prompts/*.md` 拷进 `assets/prompts/`（pricing 未被覆盖，sha 不变）、`PromptSpec` 9 槽（7 必填 + 2 选填）+ 2 标记（违规清单必带载荷）、`PromptRepository` 剥头 `## 输入`/剥尾变更记录/槽行连提示行整体替换/标记块插输入块后；9 例先红后绿 + 两处变异；Lead 补第 10 例（空串/纯空白，D308）后 10/10、全量 31 类/311 例绿（`p3-prompt-0*`） |
 | 7 五闸门 Kotlin 移植 | ✅ 完成 | `b4242b4`：`GateResult`/`FaithfulGates`（G1–G5 全算不短路、按码点复刻 `check-faithful.py`：25 码点空白、`\p{Nd}`、bigram/24 窗/±6 ctx、G4 跨场景、G5 防回绕）+ 15 条冻结向量 15/15 （plain JUnit + 手写 MiniJson）；变异 G1 恒空 → 7 红；全量 32 类/326 例绿（`p3-gates-0*`） |
 | 8 GenerationOrchestrator | ✅ 完成 | `cd297d8`：T0–T3 失败链（T2 只认 `isConservativeOk`）、NOVEL 单次 JSON、单飞 `tryLock`、每次 HTTP 交换一行 `llm_calls`（失败行 cost=0/usageJson=null）、成功一个事务写 `novel_versions` + `dreams` 窄更新；8 例先红后绿 + 两处变异（2 红 / 1 红）；全量 33 类/334 例绿（`p3-gen-0*`）；UI 接线归 Task 9（D351/D352） |
-| 9 对话改稿 + 多版本 | ⬜ | ASK 不建版 / REVISE 必建版、版本线、选最终稿 |
+| 9 对话改稿 + 多版本 | ✅ 完成 | `c1c8d75`：`ReviseOrchestrator`（ASK 只落两条消息不建版 / REVISE 必建版 + 闸门重试载荷）、`VersionStrip`、`ReviseSheet` 六快捷 chips、`resolveFinalNovel = selected ?: maxVersion`、`selectVersion` 只窄更新；10 例（8+2）先红后绿 + 两处变异（2 红/1 红）；全量 35 类/344 例绿（`p3-revise-0*`）；偏差 D380–D391 |
 | 10 导出与验收证据 | ⬜ | txt/docx/pdf、check-export、ACCEPTANCE §3d、终审 |
 
 任务书：[plans/2026-10-30-generation-and-cost.md](superpowers/plans/2026-10-30-generation-and-cost.md) · 分支 `plan3-generation`（从 `plan2-done` 的 `bb11fe2` 切出）
@@ -97,6 +97,9 @@
 - ⚠️ 另有**一份 subagent 报告整体作废**：声称提交 `9d3ce1c`/`9c4f523` 并写了提示词 v2 与语料，磁盘上全不存在。教训写进 §6。
 
 ## 四、刚完成
+
+- ✅ **Task 9 对话改稿**（`c1c8d75`）：模型 JSON `action` 分流 ASK/REVISE；REVISE 首轮 0.3 → 闸门不过则 0.0 + 上一版违规清单重试一次 → 再不过旧稿不动；版本号取「版本表 MAX」与 `dreams.novelVersion` 的较大者 +1（种子 v3 → 改稿 v4）；改稿一个事务写消息/版本/窄更新。Lead 独立复跑 targeted 10/10、全量 35 类 344 例；变异 `selectVersion` 撤窄 UPDATE 杀 2 例、ASK 改走建版杀 1 例。
+- ⏭ 下一步 **Task 9b**：生成入口 UI（「原样整理/小说化」按钮 + 三态 + 失败重试 + `GenerationRunner` 接口），派工书已就绪。
 
 - ✅ **设计 v1.4**（`93029a2`）：模式一从「零 LLM」改为「必调 LLM 的理顺」+ 三级失败链（重试温度 0.0 并附违规清单 → 保守版 → 原始转写）；新增 §6.3 对话改稿（最小改动 ≤115% / 歧义先问不改 / 多版本 + 挑选最终稿）；§5 增 `novel_versions` / `novel_messages` / `llm_calls`；§9 收敛 DeepSeek 单厂商 + flash 默认 + 思考档位表 + 「思考开着时温度被忽略」；§14 增对话改稿验收。
 - ✅ **五闸门脚本**（`dddf702`）：`scripts/check-faithful.py`，G1 数量/颜色/方位/专名、G2 长度比、G3 2-gram 覆盖率、G4 跨场景因果、G5 不确定词；9 条变异自测全绿；用真实梦境「只清理 `[em]` 残留」验证判绿（清理格式不算违规）。

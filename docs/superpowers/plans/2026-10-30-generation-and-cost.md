@@ -1004,6 +1004,18 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D377 | T10-27：`.gitattributes` 补 `docs/evidence/plan3/*.txt text eol=lf` 与 `docs/evidence/plan3/*.db binary`；Task 10 Files 白名单加 `.gitattributes`；`EXPORT_SHA256` 按入库 LF 字节计 | 实测 `core.autocrlf=true` 下 fresh clone 把 `p3-mig-00-red.txt` 转 CRLF、sha256 由 `f6992210…` 漂到 `f604be2c…`；导出 txt 入库后第三方 clone 必在上 `\r` 计数 0 / 逐字节比对 / `EXPORT_SHA256` 上 RED，A21 失效（本机自测会假绿） |
 | D378 | T10-28：导出原件平铺进 `docs/evidence/plan3/`，豁免 §1 命名与 §2 头三行；`EXPORT_SHA256=` 逐文件写在 `p3-e2e-06-export.txt` 里 | 导出原件是交付物、文件名是产品行为的一部分（`-v<n>`/`-raw`），按证据命名规则改名就没法证明导出文件名正确；sha 落点不写死，第三方不知道去哪对 |
 | D379 | T10-29：导出下限定为 **API 29**（`MediaStore.Downloads`）；minSdk 26 的 26–28 不导出，按钮禁用 + 提示，FINAL-REVIEW 记 PENDING | `android/app/build.gradle.kts:13 minSdk = 26`，而 `MediaStore.Downloads` 是 API 29+；首版证据只在 API 37 模拟器，API 26–28 测不到；补 SAF fallback 会改 `adb pull /sdcard/Download/...` 证据形态，成本高于收益 |
+| D380 | T9-1：`GenerationStore` 的 5 个新方法带默认实现（`versions`/`messages` 返 `emptyList`，`commitRevision`/`commitAsk`/`selectVersion` 抛 `UnsupportedOperationException`） | 白名单外的 Task 8 `FakeStore` 与既有实现类加抽象方法会编译失败；默认实现让旧 fake 保持可编译，Room 实现全部 override。风险：将来新 Store 漏 override 会运行期抛，FINAL-REVIEW 记 PENDING |
+| D381 | T9-2：`commitRevision` 不用 Task 8 的 `insertWithNextVersion`，版本号取 `max(版本表 MAX(version), dreams.novelVersion) + 1` | 种子数据只有 `dreams.novelVersion=3`、`novel_versions` 为空（`SeedData.kt:112-117`），只用版本表 MAX+1 会从 v1 重数；两线并集取大保证 3→4（§0.9 用例 2），且仍在同一事务 |
+| D382 | T9-3：`dreams` 的两条窄更新在事务内用 `db.openHelper.writableDatabase.execSQL`（一条只碰 novelText/novelChangeLog/novelVersion，一条只碰 novelSelectedVersion） | `DreamDao`/`DreamDatabase` 不在 Task 9 白名单，Task 8 的 `updateNovelAfterGeneration` 不写 `novelVersion`/`novelSelectedVersion`。风险：列名漂移不会编译期报错，PENDING 到 Task 10 收尾迁回 DAO |
+| D383 | T9-4：`AppContainer.orchestrator` 用扩展属性 + `WeakHashMap` + `synchronized` 装配，`MainActivity` 只加一行 `container.orchestrator` | `AppContainer` 不在 Task 9 白名单；`ReviseOrchestrator` 需要 `llmClient/promptRepository/generationStore/generationOrchestrator/apiKey` 五件套。`getOrPut` 在锁内，单例容器下不会重复创建。PENDING：Task 10 或 9b 迁回普通属性 |
+| D384 | T9-5：`【上一版违规清单】` 不走 `PromptRenderer.markers`，直接把标题+内容拼在渲染后的用户消息末尾 | `PromptSpecs.NOVEL_REVISE.markers` 为空、`PromptRepository` 拒绝未声明标记；改 PromptSpec 不在白名单。效果与「追加输入块」一致，但提示词升级时两处要同步 → PENDING 归 Task 10 提示词收口 |
+| D385 | T9-6：变异 1（`selectVersion` 只校验不落库）实际杀 2 例（用例 6「选择版本落库」+ 用例 7「撤回改选上一版」），计划预估 1 例 | 两例都断言 `dreams.novelSelectedVersion`；没有为凑计划预期改测试，按实际记录（8 例仍覆盖全部契约） |
+| D386 | T9-7：`versionLabel(n, summary: String?, changeCount)` 的 summary 改为可空（计划写 `String`） | 历史/种子版本没有 assistant 消息（`SeedData.kt:112-117`），D355 规定回退「vN · 无说明」且不带改动数；`summaryFor` 返回 `String?` |
+| D387 | T9-8：改稿（ASK/REVISE）不写 `llm_calls`/`generation_jobs` 记账行 | 计划 Task 9 的 8 例未要求、设计 §6.3 未规定改稿计费；`GenerationStore` 现有记账方法只服务生成链。Task 10 只断言生成链 `failed=N`；改稿计费若要做需新任务 |
+| D388 | T9-9：`ReviseOrchestrator` 没有 per-dream 互斥锁 | ViewModel 层 `if (revising) return` 防同页连点；跨页/双入口并发不在本任务契约（Task 8 单飞只包生成链）。FINAL-REVIEW 记「并发改稿未验证」PENDING |
+| D389 | T9-10：ASK 的 assistant `content` 是 `summary\nquestion` 两段拼成一条（D354 原定 `content = question ?: summary`） | 仍是**一条** content、不建版、`versionId=null`，与「不双写」初衷不冲突；摘要给上文、问题给用户回话。用例 1 断言包含 question 且恰好两条消息 |
+| D390 | T9-11：【最近三轮对话】槽值里手工前置 `【最近三轮对话】\n` | `PromptRepository.replaceSlot` 整行替换槽占位行（含标签），不补标签渲染后就没有这行小标题；改渲染器不在白名单。语义不变，渲染文本与模板标签一致 |
+| D391 | T9-12：NovelTab 正文区由 `BodyScroll` 改为内联段落渲染（按空行切段），以便同一滚动列里穿插 ASK 气泡 | 计划要求气泡在正文下方、输入条上方且同屏可滚；`BodyScroll` 是单一 Text，无法插入气泡。字号/颜色沿用 `bodyLarge`+`Paper`，与原样 tab 一致 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
@@ -1151,3 +1163,28 @@ T3  不调用模型                                   → faithfulText = rawTran
 - PENDING（承接）：UI 接线（生成入口当前无触发点，归 Task 9，D351/D352）；真实 DeepSeek 网络/401/429/退避未跑；`check-cost.py` 失败行口径归 Task 10（D316/D337）；
   单飞仅覆盖同进程；价卡峰谷边界分钟未测；`novelChangeCount` 坏 JSON 分支无用例。
 - 结论：**通过**（含上述 PENDING，均已在后续任务范围或计划偏差中登记）。
+
+### Task 9 验收（Lead，2026-10-30）
+
+- 交付：`c1c8d75`（17 文件 +2094/−8，父 `5363df5`）：`llm/ReviseOrchestrator.kt`(403 行)、`llm/RevisionResult.kt`(29)、
+  `data/GenerationStore.kt`(+96)、`data/DreamRepository.kt`(+46，含 `FinalNovel`/`resolveFinalNovel`/`selectVersion`)、
+  `domain/Dream.kt`(+2)、`ui/detail/DetailScreen.kt`(+113/−8)、`ui/detail/DetailViewModel.kt`(+90)、`ui/detail/ReviseSheet.kt`(138)、
+  `ui/detail/VersionStrip.kt`(124)、`ui/DreamKeeperRoot.kt`(+4)、`MainActivity.kt`(+3)、`test/.../ReviseOrchestratorTest.kt`(390/8 例)、
+  `test/.../VersionStripTest.kt`(26/2 例)、证据四件。报告 `.superpowers/sdd/2026-10-30-generation-and-cost/task-9-report.md`（124 行，gitignore 不入库）。
+- Lead 独立复跑：`--tests ReviseOrchestratorTest --tests VersionStripTest --rerun-tasks` BUILD SUCCESSFUL 21s，XML `classes=2 tests=10 failures=0`；
+  全量 `--rerun-tasks` BUILD SUCCESSFUL 30s → XML **35 类 / 344 例 / 0 失败 / 0 错误 / 0 跳过**（与 Task 8 的 33/334 差 2 类 10 例，符合预期）。
+- 契约核对（逐行读码）：ASK/REVISE 由模型 JSON `action` 分流，ASK 只落两条消息不建版；REVISE 首轮 temp 0.3 → 闸门不过则 temp 0.0 +
+  `【上一版违规清单】`（G1 截 10 / G4G5 截 6 / G2G3 详情+advisory 截 12）重试一次 → 再不过返回 `GenerationFailure.Gate` 且旧稿不动；
+  `commitRevision` 一个 `db.withTransaction`（user 消息 → 新版本 → 窄更新 dreams → assistant 消息指回版本 id）；`selectVersion` 只窄更新
+  `novelSelectedVersion`；`resolveFinalNovel = selected ?: maxVersion`；`filterChangeLog` 以 baseText 为准、`codePointCount` 判 4–40、全丢写 `[]`；
+  历史上限 6 条。测试全用真 Room（in-memory）+ 生产 `PromptRepository`，只 fake `LlmClient`。
+- 变异：①`selectVersion` 撤掉窄 UPDATE → 2 red（用例 6/7），恢复 10/10 绿；②ASK 分支改走建版 → 1 red（用例 1），恢复复绿。原文在
+  `p3-revise-02-mutation.txt`。
+- 证据：`p3-revise-00-red.txt`（可编译空壳 10/10 failed）、`01-green.txt`（XML 10/0）、`02-mutation.txt`（两段变异+恢复原文）、`03-full.txt`
+  （35/344/0 + 逐类统计），首三行均 host-only 例外头，REPLAY 为真实命令。
+- 偏差：D380–D391（12 条，见 §9；均为「批准」级，无返工项）。
+- PENDING（承接）：设备端渲染与交互（chips 横滚、AskBubble、输入条与 PlaybackBar 同屏、选版/失败态）归 Task 10 截图；
+  生成入口 UI（「原样整理/小说化」按钮 + 三态 + 重试）归 Task 9b（D363）；真实 DeepSeek 的 ASK/闸门重试未跑（全 fake Llm）；
+  并发改稿未验证（D388）；UI 层选版失败路径无用例；改稿不记账（D387）。
+- 结论：**通过**（含上述 PENDING，均已在后续任务范围或计划偏差中登记）。
+
