@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-31 01:45（**Plan 3 完成 10/10**：Lead 终审通过；D406 入口可见性修复后全量 39 类 365 例绿；偏差 D275–D414 已全部登记）
+> 最后更新：2026-10-31 02:20（**Plan 4 开工 1/8**：计划与契约冻结 `724d13e`；T1 数据库 v3 + 追加 CAS 已派工。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
 
 ## 一、当前在做
 
@@ -75,6 +75,23 @@
 
 **先修的前提**（专家实测）：仓库没有 OkHttp 也没有 kotlinx.serialization；manifest 没有 INTERNET；
 `check-near-white.ps1` 其实**有** `-MaxRatio`（Plan 2 的登记是错的）。
+
+## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 1/8
+
+| 任务 | 状态 | 说明 |
+|---|---|---|
+| T0 契约冻结 | ✅ 完成 | `724d13e`：计划 404 行，DB v2→v3 只加 `dreams.transcriptMs` 水位；三条追加 CAS；`stt/TailWav` 尾段转写；`faithfulText` 基座修正；`novel.v2.1` 第四可选槽；`novel_revise.v1.1` 分流（D408）；版本线/列表/成本栏/生成作用域 |
+| T1 数据库 v3 + 追加 CAS | 🔄 进行中 | 派工书 `task-1-dispatch.md`；`MigrationV2ToV3Test` + `AppendTranscriptTest` 先红后绿；期望 41 类/375 例；3.json 入库 |
+| T2 追加写回与重转写兜底 | ⬜ | `stt/TailWav` + writer 排队/启动 reconcile；期望 43 类/386 例 |
+| T3 忠实稿基座与整段重跑 | ⬜ | `faithfulText` 同事务写 + `novel()` 两槽分离 + quote dual 基准 |
+| T4「补一段」入口与原样 tab | ⬜ | append 路由复用录音页；原样 tab 显示忠实稿 + 看原始转写 + 重新理顺；设备 `p4-append-05..07` |
+| T5 小说化显式触发与想法 | ⬜ | 常驻入口 + `NovelIdeaDialog` + `novel.v2.1` 四槽 + promptVersion 解析 + 路由 v1.1 |
+| T6 可见性与体验缺陷 | ⬜ | 版本线过滤 faithful、列表用选中版、成本行、生成提到应用级作用域 |
+| T7 发布就绪与终验 | ⬜ | release/API26–28/真机清单 + FINAL-REVIEW + ACCEPTANCE `## 3e` + 看板 8/8 |
+
+任务书：[plans/2026-10-31-plan4-voice-append.md](superpowers/plans/2026-10-31-plan4-voice-append.md) · 分支 `plan4-voice-append`（从 `plan3-generation` 的 `00a9cf2` 切出）
+
+**Plan 4 的目标**：用户随时能用语音在原样稿尾部补描述，系统只转写新增尾段、拼回正文、整段重新理顺并留下可回退的新版本；小说化只能由用户点「小说化」并写下想法后生成，绝不自动触发；顺带收口 Plan 3 的可见性/路由/成本栏缺口并做到可发布。
 
 ## 三、你提的需求（已收下，落点如下）
 
