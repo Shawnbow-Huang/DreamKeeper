@@ -18,10 +18,10 @@
 
 | 任务 | 状态 | 验收证据 |
 |---|---|---|
-| 1 工程可构建可安装 | ✅ | [task1.md](evidence/plan1/task1.md) |
-| 2 梦匣色板与主题 | ✅ | [task2.md](evidence/plan1/task2.md) |
-| 3 日历日期逻辑 | ✅ | [task3.md](evidence/plan1/task3.md) |
-| 4 Room 数据层 | ✅ | [task4.md](evidence/plan1/task4.md) |
+| 1 工程可构建可安装 | ✅ 完成 | [task1.md](evidence/plan1/task1.md) |
+| 2 梦匣色板与主题 | ✅ 完成 | [task2.md](evidence/plan1/task2.md) |
+| 3 日历日期逻辑 | ✅ 完成 | [task3.md](evidence/plan1/task3.md) |
+| 4 Room 数据层 | 🔄 进行中 | [task4.md](evidence/plan1/task4.md) |
 | 5 仓库层 + 5b save() 修复 | ✅ | [task5.md](evidence/plan1/task5.md) |
 | 6 日历首屏 + 当日页 | ✅ | [task6.md](evidence/plan1/task6.md) |
 | 7 全部列表 + 布局记忆 | ✅ | [task7.md](evidence/plan1/task7.md) |
@@ -39,7 +39,7 @@
 | 1 WavStore 与 WAV 数学 | ✅ 完成 | `ea1d8a2`：`WavMath`/`WavStore` 单一写句柄、整 44 字节黄金断言、fixture 已回填头（D88–D96）；132 用例全绿，两份 WAV sha256 一致，ffprobe 无告警 |
 | 2 RecorderCore 读循环与补零 | ✅ 完成 | `397fbf3` + `e177cf0`：假钟假源、先补零再写新数据、`rebase`、四种收尾原因；Lead 变异验证 sync/finish 兜底（D115–D117） |
 | 3 前台录音服务 | ✅ 完成 | `b083021` + `584aed8`：microphone 型 FGS、通知、START/STOP/CANCEL；四连判据实测通过（`isForeground=true`/`foregroundId=42`/`types=0x80`、通知 id=42、写入 31,611 B/s、崩溃 0）；Lead 修失败路径孤儿文件（D127）、通知栏近白判红原因定位并豁免（D128） |
-| 4 录音页 + RecordEntry | ✅ 完成 | `c3777cd`：按住说梦、权限三态、入口接线；176 用例；真机同一次 take `stat` 48044→160044→220844（= 44+6900×32），松手后冻结；按下→RECORDING 163 ms（D141–D149） |
+| 4 录音页 + RecordEntry | 🔄 进行中 | `c3777cd`：按住说梦、权限三态、入口接线；176 用例；真机同一次 take `stat` 48044→160044→220844（= 44+6900×32），松手后冻结；按下→RECORDING 163 ms（D141–D149） |
 | 5 30 秒追问窗口 | ✅ 完成 | `e99b0d0`+`eb099a5`+`9e6ed4a`：追加走 `markOpen`+`openWriter`（`create` 会截断）、失败路径只在 `createdThisTake` 时删、窄更新只写时长与状态；实测差 60800 B = **1900 ms**、第一段 PCM md5 两边一致；真机抓到两个真 bug 并修掉（D163–D172） |
 | 6 启动扫描与头修复 | ✅ 完成 | `cf31244`+`3b71511`+`9f63a6f`：四主态 + 第 5 态逐文件兜底、`isOpen` 跳过正在录的文件；五态真机实测 + M1/M2 变异；Lead 复跑 219 用例、schema 零 diff（D189–D195） |
 | 7 SttEngine 与写回 | ✅ 完成（有未验证项） | `fe6e94f`+`5d1493c`：三态探测 + `mapSupport` + CAS 窄更新 + 详情页三分支与手动补字；真机四张语言表全空 → `Unavailable` → 写回 `FAILED`，手动补字后 `OK` 且 `updatedAt` 未变；**33+ 正路径设备未验证**、负对照 NOT_EXECUTED。Lead 修 `FollowUpViewModel` 把 FAILED 盖回 PENDING（D198，含变异）（D196–D203） |
@@ -55,10 +55,10 @@
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| 1 接线：权限、依赖、设置页骨架 | ✅ 251 用例；debug NSC 1 / release 0 | `INTERNET` + debug 明文放行、OkHttp、`Settings` 路由、`AppContainer` 三个 lazy |
-| 2 Key 加密存储 | ⬜ | AES/GCM + Keystore，只存 base64 密文，日志零明文 |
-| 3 价卡与成本计算 | ⬜ | 资产 price card、峰谷判定、整数微元、`check-cost.py` 复算 |
-| 4 数据库 v2 迁移 | ⬜ | 四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest |
+| 1 接线：权限、依赖、设置页骨架 | ✅ 完成 | `INTERNET` + debug 明文放行、OkHttp、`Settings` 路由、`AppContainer` 三个 lazy |
+| 2 Key 加密存储 | ✅ 完成 | AES/GCM + Keystore，只存 base64 密文，日志零明文 |
+| 3 价卡与成本计算 | ✅ 完成 | 资产 price card、峰谷判定、整数微元、`check-cost.py` 复算 |
+| 4 数据库 v2 迁移 | 🔄 进行中 | 四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest |
 | 5 LlmClient（OkHttp + org.json） | ⬜ | 顶层 thinking/effort、空 content 判失败、429 退避、取消 |
 | 6 提示词资产与 PromptRepository | ⬜ | Sync 到 build/gen、剥头、槽位、sha256_8 断言 |
 | 7 五闸门 Kotlin 移植 | ⬜ | 断言失败闸门集合、2-gram/PUNCT 照搬、T2 等值校验 |
@@ -79,10 +79,10 @@
 
 | # | 需求 | 落点 | 状态 |
 |---|---|---|---|
-| 1 | 只接 DeepSeek 官方 API；模型 + 思考强度按钮 | Plan 3 | ⬜ |
-| 2 | 两种模式都调 LLM（理顺 = 必调） | 设计 v1.4 §6.1 | ✅ |
-| 3 | 去 AI 味只走提示词，不依赖梦境样本 | 提示词 v2 | ⬜ |
-| 4 | token 与金额计量栏目 | Plan 3（仿 dsh-cost-meter） | ⬜ |
+| 1 | ✅ 完成 | Plan 3 | ⬜ |
+| 2 | ✅ 完成 | 设计 v1.4 §6.1 | ✅ |
+| 3 | ✅ 完成 | 提示词 v2 | ⬜ |
+| 4 | 🔄 进行中 | Plan 3（仿 dsh-cost-meter） | ⬜ |
 | 5 | 导出 .txt（+.docx/.pdf） | Plan 3 | ⬜ |
 | 6 | 美学增强（生图模型） | Plan 4 / 独立一轮 | ⬜ |
 
