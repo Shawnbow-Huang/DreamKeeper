@@ -6,12 +6,22 @@ import com.dreamkeeper.BuildConfig
 import com.dreamkeeper.audio.AudioScan
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.data.GenerationStore
+import com.dreamkeeper.data.RoomGenerationStore
 import com.dreamkeeper.data.db.DbBackup
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.AndroidKeystoreCipher
 import com.dreamkeeper.data.security.ApiKeyStore
 import com.dreamkeeper.data.security.KeystoreApiKeyStore
+import com.dreamkeeper.llm.AssetPriceCardSource
+import com.dreamkeeper.llm.AssetPromptSource
+import com.dreamkeeper.llm.DeepSeekClient
+import com.dreamkeeper.llm.GenerationOrchestrator
+import com.dreamkeeper.llm.LlmClient
+import com.dreamkeeper.llm.PriceCard
+import com.dreamkeeper.llm.PromptRepository
+import com.dreamkeeper.llm.PromptRepositoryAdapter
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.stt.SttEngine
 import com.dreamkeeper.stt.SystemSttEngine
@@ -21,6 +31,7 @@ import com.dreamkeeper.ui.library.SharedPreferencesLayoutPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import java.io.File
 
 /**
@@ -154,5 +165,38 @@ class AppContainer(
     /** 录音收尾 → 一次性本地转写 → CAS 窄更新（§0.5–§0.7 全在里面）。 */
     val transcriptWriter: TranscriptWriter by lazy {
         TranscriptWriter(repository, audioStore, sttEngine)
+    }
+
+    // ---------------------------------------------------------------- 生成链（Plan 3 / Task 8）
+
+    /** 随 APK 打包的价卡，进程内解析一次；[PriceCard.rawJson] 要原样进 `llm_calls` 快照。 */
+    val priceCard: PriceCard by lazy { AssetPriceCardSource(appContext).load() }
+
+    /** 提示词渲染器：读 `assets/prompts/` 下的提示词资产，每次渲染校验一次 sha256 前缀。 */
+    val promptRepository: PromptRepository by lazy { PromptRepository(AssetPromptSource(appContext)) }
+
+    /** DeepSeek 客户端（baseUrl/超时/RetryPolicy 都用 Task 3 的默认值）。 */
+    val llmClient: LlmClient by lazy { DeepSeekClient() }
+
+    val generationStore: GenerationStore by lazy { RoomGenerationStore(database) }
+
+    /**
+     * 生成编排器（Task 8 的唯一入口）。
+     *
+     * `apiKey` 每次调用现取：用户可能刚在设置页换过 key，缓存住旧值会让一整天都在用错 key。
+     * `tagsFor` 也现查——标签可能在两个 tab 之间被改；编排器只拿拼接好的「标签 / 选填」素材，
+     * 不把仓库漏进 llm 层。
+     */
+    val generationOrchestrator: GenerationOrchestrator by lazy {
+        GenerationOrchestrator(
+            llm = llmClient,
+            prompts = PromptRepositoryAdapter(promptRepository),
+            store = generationStore,
+            priceCard = priceCard,
+            apiKey = { apiKeyStore.load().orEmpty() },
+            tagsFor = { dreamId ->
+                repository.observeTagsForDream(dreamId).first().map { it.name }
+            },
+        )
     }
 }

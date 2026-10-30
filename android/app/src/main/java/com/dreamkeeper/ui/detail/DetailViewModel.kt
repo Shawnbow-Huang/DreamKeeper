@@ -8,8 +8,14 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.MediaAsset
 import com.dreamkeeper.domain.Tag
+import com.dreamkeeper.llm.GenerationFailure
+import com.dreamkeeper.llm.GenerationKind
+import com.dreamkeeper.llm.GenerationOrchestrator
+import com.dreamkeeper.llm.GenerationStage
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -33,6 +39,21 @@ data class DetailUiState(
 )
 
 /**
+ * 详情页的生成进度（§0.8 / D319）。
+ *
+ * 只表达「现在在干什么」与「为什么没成」，不掺结果本身——结果已经落库，UI 重读
+ * `state` 就能看到新的 `novelText` / `novelChangeLog`。
+ */
+sealed interface GenerationPhase {
+    data object Idle : GenerationPhase
+
+    /** [attempt] 是档位序号（T0=1 … T3=4），不是 HTTP 重试次数。 */
+    data class Running(val kind: GenerationKind, val attempt: Int) : GenerationPhase
+
+    data class Failed(val kind: GenerationKind, val reason: String) : GenerationPhase
+}
+
+/**
  * 详情页：把「这一条梦」和「它的标签」两条 Flow 合起来，并持有播放器。
  *
  * 标签必须走 `observeTagsForDream`（`tags INNER JOIN dream_tags`）：`Dream` 上没有
@@ -49,6 +70,12 @@ class DetailViewModel(
     dreamId: String,
     audioStore: WavStore? = null,
     playerFactory: () -> MediaPlayer = { MediaPlayer() },
+    /**
+     * 生成入口（Task 8）。默认 null 是为了不破既有单测与预览——没有容器时详情页只读不生成。
+     * 不在这里 new 一个全局单例：编排器依赖网络/价卡/数据库，只有 [com.dreamkeeper.di.AppContainer]
+     * 知道怎么装配它们。
+     */
+    private val orchestrator: GenerationOrchestrator? = null,
 ) : ViewModel() {
 
     private val dreamId: String = dreamId
@@ -106,6 +133,42 @@ class DetailViewModel(
         val dream = state.value.dream ?: return 0
         val expectedMs = dream.rawAudioMs ?: return 0
         return repo.updateManualTranscript(dream.id, expectedMs, text)
+    }
+
+    // ------------------------------------------------------------ 生成入口（Task 8）
+
+    private val _generation = MutableStateFlow<GenerationPhase>(GenerationPhase.Idle)
+
+    /** 当前生成进度。成功后回到 [GenerationPhase.Idle]——正文已经由 `state` 的 Flow 刷新。 */
+    val generation: StateFlow<GenerationPhase> = _generation.asStateFlow()
+
+    fun generateFaithful() = generate(GenerationKind.FAITHFUL)
+
+    fun generateNovel() = generate(GenerationKind.NOVEL)
+
+    /**
+     * 同一时刻只允许一条生成链（UI 防重入；真正的并发保护在编排器的 per-dream 锁里）。
+     * 失败原因直接映射成用户可读串：Llm 给错误分类，Gate 给没过闸门的具体条目。
+     */
+    private fun generate(kind: GenerationKind) {
+        val orchestrator = orchestrator ?: return
+        if (_generation.value is GenerationPhase.Running) return
+        _generation.value = GenerationPhase.Running(kind, 1)
+        viewModelScope.launch {
+            val progress: (GenerationStage, Int) -> Unit = { _, attempt ->
+                _generation.value = GenerationPhase.Running(kind, attempt)
+            }
+            val result = when (kind) {
+                GenerationKind.FAITHFUL -> orchestrator.generateFaithful(dreamId, progress)
+                GenerationKind.NOVEL -> orchestrator.generateNovel(dreamId, progress)
+            }
+            _generation.value = when (val failure = result.failure) {
+                null -> GenerationPhase.Idle
+                is GenerationFailure.Llm -> GenerationPhase.Failed(kind, failure.kind.name)
+                is GenerationFailure.Gate -> GenerationPhase.Failed(kind, failure.detail)
+                is GenerationFailure.Protocol -> GenerationPhase.Failed(kind, failure.message)
+            }
+        }
     }
 
     override fun onCleared() {

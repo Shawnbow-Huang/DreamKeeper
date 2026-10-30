@@ -99,12 +99,19 @@ fun novelTabLabel(n: Int): String = if (n == 0) "小说化" else "小说化 · �
 /**
  * 从 `novelChangeLog` 里数「补写 N 处」；数不出来就按 0（老数据 / 没生成过）。
  *
- * 中间允许空白：`补 写 3 处` 也要能抽出来（D41）。只是过渡桥——Plan 3 把该字段换成
- * JSON 数组后由 `changeLog.size` 直接取代，但 [novelTabLabel] 的格式不许动。
+ * 中间允许空白：`补 写 3 处` 也要能抽出来（D41）。
+ *
+ * Plan 3 / D318 起该字段存的是 JSON 数组文本（条目数 = 补写处数）；老数据仍是
+ * 「补写 N 处」的自由文本，所以保留旧正则做回退。两条分支都不改 [novelTabLabel] 的格式。
  */
-fun novelChangeCount(changeLog: String?): Int = changeLog
-    ?.let { Regex("补\\s*写\\s*(\\d+)\\s*处").find(it)?.groupValues?.get(1)?.toIntOrNull() }
-    ?: 0
+fun novelChangeCount(changeLog: String?): Int {
+    val raw = changeLog?.trim().orEmpty()
+    if (raw.startsWith("[")) {
+        // 坏 JSON（半截写入 / 手改坏）按 0 处理：详情页宁可少一个角标，也不能崩。
+        return runCatching { org.json.JSONArray(raw).length() }.getOrElse { 0 }
+    }
+    return Regex("补\\s*写\\s*(\\d+)\\s*处").find(raw)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+}
 
 /** 四个 tab 的固定文案：不把「补写 N 处」塞进来（brief 0.7 / D66） */
 private enum class DetailTab(val label: String) {

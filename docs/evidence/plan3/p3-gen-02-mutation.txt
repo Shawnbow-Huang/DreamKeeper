@@ -1,0 +1,43 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T15:22:02Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.GenerationOrchestratorTest" --rerun-tasks --console=plain
+
+== 变异 1：删掉 T1 的【上一版违规清单】注入 ==
+
+变异原文（GenerationOrchestrator.kt，T1 调用的参数）：
+-                markers = setOf(PromptMarker.PREVIOUS_VIOLATIONS),
+-                payloads = mapOf(PromptMarker.PREVIOUS_VIOLATIONS to payload),
++                markers = emptySet(),
++                payloads = emptyMap(),
+
+8 tests completed, 2 failed
+BUILD FAILED in 15s
+
+--- test-results XML（UTF-8 解码）---
+tests=8 failures=2
+FAILED T0 红之后把违规清单回写进 T1 请求并转绿
+java.lang.AssertionError: T1 载荷里没有 T0 的具体引文
+FAILED T1 网络错在同档重试且不降 T2
+java.lang.AssertionError
+
+恢复后（cp 原始文件，逐字相同）：
+BUILD SUCCESSFUL in 14s
+
+== 变异 2：T2 判据从「逐字等值」改成「只比长度」 ==
+
+变异原文（GenerationOrchestrator.kt）：
+-        if (FaithfulGates.isConservativeOk(input, t2.response.content)) {
++        if (FaithfulGates.contentChars(input).length == FaithfulGates.contentChars(t2.response.content).length) {
+
+8 tests completed, 1 failed
+BUILD FAILED in 16s
+
+--- test-results XML（UTF-8 解码）---
+tests=8 failures=1
+FAILED T2 不等值时整次落 T3 并回退原文
+java.lang.AssertionError: expected:<T3> but was:<T2>
+
+恢复后（cp 原始文件，逐字相同）：
+BUILD SUCCESSFUL in 14s
+
+结论：两处变异各自杀掉它应当杀的用例，恢复后 8/8 全绿。T1 注入变异额外杀掉 #3，因为 #3 同样断言「T1 同档重试仍带 T0 的具体引文」——同一条不变量，不是误杀。

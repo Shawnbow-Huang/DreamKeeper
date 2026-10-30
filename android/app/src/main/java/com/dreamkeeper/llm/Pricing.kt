@@ -23,6 +23,8 @@ data class Rates(val cacheHit: Long, val cacheMiss: Long, val output: Long)
  * `Map<String, Pair<Rates, Rates>>`，Pair 没有字段名，只能靠约定 + KDoc 固定）。
  * [cardSha256] 是资产原始字节的 sha256，由加载器算出来，不写在 JSON 里（brief §0.1）：
  * 自哈希字段是自指固定点，且 JSON 没有规范序列化。
+ * [rawJson] 是资产原文（D317）：`llm_calls.price_snapshot_json` 要按原键、原数字格式复算，
+ * 重新序列化会引入键序/数字格式差异，所以直接存字节原文。
  */
 data class PriceCard(
     val version: String,
@@ -30,6 +32,7 @@ data class PriceCard(
     val provenance: String,
     val models: Map<String, Pair<Rates, Rates>>,
     val cardSha256: String,
+    val rawJson: String = "",
 )
 
 /** 价卡来源。接口化的原因是可测性：纯 JVM 单测读不到 `assets/`（brief §0.2）。 */
@@ -118,6 +121,7 @@ private fun parsePriceCardOrThrow(rawBytes: ByteArray): PriceCard {
         provenance = provenance,
         models = models,
         cardSha256 = sha256Hex(rawBytes),
+        rawJson = String(rawBytes, Charsets.UTF_8),
     )
 }
 

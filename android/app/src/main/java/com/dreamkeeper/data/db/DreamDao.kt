@@ -200,4 +200,31 @@ interface DreamDao {
         expectedMs: Long,
         transcriptStatus: String,
     ): Int
+
+    /**
+     * 生成成功后的窄更新（Plan 3 Task 8 / D314）。
+     *
+     * 只用一条语句、只碰三列：
+     * - `novelText` / `novelChangeLog`：本次生成的最新正文与变更清单；
+     * - `generationStage`：`COALESCE(:generationStage, generationStage)` —— 传 `null` 表示
+     *   「不动这一列」。小说化提交用 `null` 保住忠实链写下的档位（D320：档位只在成功时写）。
+     *
+     * **不写 `novelVersion`**：版本号由 `novel_versions.insertWithNextVersion` 的事务自增；
+     * **不写 `novelSelectedVersion`**：选择版本归 Task 9；**不走 upsert**：整行 REPLACE 会用
+     * 内存里的旧值覆盖转写等列（D202）。`updateStage` 也复用这一条语句（先读行再把两列原值
+     * 回填），因此 DreamDao 只新增这一条，不改既有语句。
+     */
+    @Query("""
+        UPDATE dreams
+        SET novelText = :novelText,
+            novelChangeLog = :novelChangeLog,
+            generationStage = COALESCE(:generationStage, generationStage)
+        WHERE id = :id
+    """)
+    suspend fun updateNovelAfterGeneration(
+        id: String,
+        novelText: String?,
+        novelChangeLog: String?,
+        generationStage: String?,
+    ): Int
 }
