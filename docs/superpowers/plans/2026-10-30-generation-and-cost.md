@@ -803,7 +803,7 @@ T3  不调用模型                                   → faithfulText = rawTran
     行数且 >=1），每个 error 行 `cost==0 && usageJson IS NULL`，逐行 `[FAILED]` 原文入库；`failed` 的独立来源 =
     **只数生成链**：`adb logcat -d | grep "DKLLM" | grep "status=failed" | grep -E "kind=(FAITHFUL|NOVEL)" | wc -l`
     （D370/D392 的那行日志；改稿行 `kind=REVISE` 因 D387 不记账，必须排除，排除条数也写进证据），两者必须相等；
-    旧口径 `grep -c " kind="` 已作废（它连成功行与改稿行一起数，D392）。
+    旧口径 `grep -c " kind="` 已作废（它连成功行与改稿行一起数，D392）；`status` 按**最终判定**打（含空 content/非 JSON），见 D392。
 负向对照：**复制** `p3-e2e-08-db.db` 到 `.scratch/`、把一行 error 的 `costMicroYuan` 改成 1 → 必须 RED → 结束校验原证据
      sha256 未变、副本 `cmp` 原文入库（D372）。
  11. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令（含 `--mutation`，结束恢复 + `cmp` 原件）+ `scripts/check-faithful.py --input --output`
@@ -1018,7 +1018,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D389 | T9-10：ASK 的 assistant `content` 是 `summary\nquestion` 两段拼成一条（D354 原定 `content = question ?: summary`） | 仍是**一条** content、不建版、`versionId=null`，与「不双写」初衷不冲突；摘要给上文、问题给用户回话。用例 1 断言包含 question 且恰好两条消息 |
 | D390 | T9-11：【最近三轮对话】槽值里手工前置 `【最近三轮对话】\n` | `PromptRepository.replaceSlot` 整行替换槽占位行（含标签），不补标签渲染后就没有这行小标题；改渲染器不在白名单。语义不变，渲染文本与模板标签一致 |
 | D391 | T9-12：NovelTab 正文区由 `BodyScroll` 改为内联段落渲染（按空行切段），以便同一滚动列里穿插 ASK 气泡 | 计划要求气泡在正文下方、输入条上方且同屏可滚；`BodyScroll` 是单一 Text，无法插入气泡。字号/颜色沿用 `bodyLarge`+`Paper`，与原样 tab 一致 |
-| D392 | T10-30：`failed=N` 的独立对账改为「只数生成链的失败日志」——`ChatRequest` 加 `kind`（FAITHFUL/NOVEL/REVISE，不上 wire），两个 orchestrator 各传自己的 kind，logcat 按 `status=failed` + `kind=(FAITHFUL|NOVEL)` 计数；Task 10 Files 加 `ChatModels.kt`/`GenerationOrchestrator.kt`/`ReviseOrchestrator.kt` | 原 D370 的 `grep -c " kind="` 会**同时数成功行与改稿行**（它们走同一个 `DeepSeekClient`），与 `llm_calls` 的 error 行数必不相等；且 `ChatRequest` 无 kind 字段（`ChatModels.kt:40-47`），DeepSeekClient 单文件造不出 `kind=<k>`；改稿不记账（D387）使「日志有、库无」成为常态，必须能过滤 |
+| D392 | T10-30：`failed=N` 的独立对账改为「只数生成链的失败日志」——`ChatRequest` 加 `kind`（FAITHFUL/NOVEL/REVISE，不上 wire），两个 orchestrator 各传自己的 kind，logcat 按 `status=failed` + `kind=(FAITHFUL|NOVEL)` 计数；Task 10 Files 加 `ChatModels.kt`/`GenerationOrchestrator.kt`/`ReviseOrchestrator.kt` | 原 D370 的 `grep -c " kind="` 会**同时数成功行与改稿行**（它们走同一个 `DeepSeekClient`），与 `llm_calls` 的 error 行数必不相等；且 `ChatRequest` 无 kind 字段（`ChatModels.kt:40-47`），DeepSeekClient 单文件造不出 `kind=<k>`；改稿不记账（D387）使「日志有、库无」成为常态，必须能过滤；日志行在**最终判定处**打：HTTP 非 2xx、传输错误、空 content、非 JSON 都记 `status=failed`（`http=` 照抄实际码），只有 HTTP 2xx 且 content 可解析才 `status=ok`，否则「200 后解析失败」会漏计 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
