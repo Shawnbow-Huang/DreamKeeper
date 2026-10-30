@@ -62,7 +62,8 @@ ALTER TABLE `dreams` ADD COLUMN `transcriptMs` INTEGER NOT NULL DEFAULT 0
 
 ```sql
 UPDATE `dreams` SET `transcriptMs` = `rawAudioMs`
-  WHERE `rawAudioPath` IS NOT NULL AND `transcriptStatus` = 'OK' AND TRIM(`rawTranscript`) <> ''
+  WHERE `rawAudioPath` IS NOT NULL AND `rawAudioMs` IS NOT NULL
+    AND `transcriptStatus` = 'OK' AND TRIM(`rawTranscript`) <> ''
 ```
 
 其余行保持 0（可重算，不假装已转写）。
@@ -70,6 +71,11 @@ UPDATE `dreams` SET `transcriptMs` = `rawAudioMs`
 - `DreamDatabase` `version = 3`，`create()` 的 `addMigrations(MIGRATION_1_2, MIGRATION_2_3)`。
 - `DreamEntity`/`Dream`/`DreamRepository.toDomain`/`save()` 全链路带上新列；`save()` 的 read-modify-write
   不许把 `transcriptMs` 抹成 0。
+- `@ColumnInfo(defaultValue = "0")` 与 ALTER 字面量必须与 3.json 的 createSql 同口径（`DEFAULT 0`，不是 `'0'`），
+  否则打开即抛 `Migration didn't properly handle`。
+- 既有 `MigrationTest.kt` 把 `user_version` 硬编码成 2，v3 后必红 → T1 必须把它改成 3（Files 已列）。
+- 老 D202 用户若真有「已录未转」尾巴，回填会把它标成已覆盖：接受该限制，T4 的「重新整理」与
+  「重试转写/这段不用转写」入口兜底，并在 §9 记一条（D 号由 Lead 分配）。
 - 禁止 `fallbackToDestructiveMigration`。
 - **DbBackup 快照必须泛化**（T1 内修，实测缺口）：现状只对 `user_version==1` 快照、前缀写死 `dreamkeeper-v1-`，
   而 v2→v3 也是一次不可回滚迁移 → 改成「当前 `user_version < 目标版本` 就快照，文件名带版本号」，
@@ -121,7 +127,9 @@ WHERE id = :id AND rawAudioMs = :expectedMs AND transcriptMs = :fromMs
 - 不扩 `SystemSttEngine` 的公开接口（它内部已有 range 泵送；本轮不改，减少风险）。
 - `TailWav.sliceTo` 前置断言 `rawAudioMs - fromMs == (sliceBytes / 32)`（不符即失败，不许把 0 行 CAS 静默当真）；
   `fromMs` 越界或空段返回 0 → 走失败路径；临时文件 `finally` 删除，ENOSPC 走失败文案。
-- 失败文案沿用 Plan 2 的 `FAILED` 三态；PENDING 必须有重试入口（见 0.5）。
+- 失败文案沿用 Plan 2 的 `FAILED` 三态；**PENDING/FAILED 必须有用户可见的重试入口**：
+  详情页「重试转写」按钮（置 PENDING 后重跑 reconcile 单梦）与「这段不用转写」（`skipUncoveredAudio`）。
+  两条动作各补 1 条用例（T4）。
 
 ### 0.5 生成闸门（防半截原文进模型）
 
@@ -162,7 +170,8 @@ WHERE id = :id AND rawAudioMs = :expectedMs AND transcriptMs = :fromMs
 
 ### 0.9 版本线 / 列表 / 成本栏
 
-- 小说版本线只显示 `promptId != "faithful"` 的版本；faithful 版本在「原样」tab 内单独呈现。
+- 小说版本线只显示 `promptId != "faithful"` 的版本；faithful 版本在「原样」tab 内单独呈现，
+  并可在原样 tab 切换查看旧 faithful 版本（「可回退」的落点，不写 `novelSelectedVersion`）。
 - 列表页显示 `resolveFinalNovel`（D332），不再是 `faithfulText ?: rawTranscript`。
 - 详情顶部成本行：`这条花了 ≈ x 元`（数据来自 `llm_calls` 汇总，0 调用不显示）。
 - `NOVEL_EMPTY` 文案改为「还没有小说版，点上面生成」。
@@ -183,11 +192,16 @@ WHERE id = :id AND rawAudioMs = :expectedMs AND transcriptMs = :fromMs
 
 ### 0.12 范围控制与依赖
 
-- 顺序：T1 → T2 → T3 → T4 → T5 → T6 → T7；T6 可与 T5 并行（文件不重叠）。
+- 顺序：T1 → T2 → T3 → T4 → T5 → T6a → T6b → T7。T6 不能整体与 T5 并行（都会改 DetailScreen/DetailViewModel）；
+  仅 T6a（Library/VersionStrip 纯 UI）可在 T5 期间先跑，T6b（app-scope + AppContainer）必须排在 T5 后。
 - 不改 Plan 1/2/3 已有证据；`docs/evidence/plan3/*` 只读。
-- §14.1（从点亮屏幕到开始录音 ≤3 步/≤3 秒）沿用 Plan 2 结论，不在 Plan 4 重做；锁屏磁贴/通知/常亮/
-  夜间特则/回收站延后到 Plan 5。
+- §14.1（点亮屏幕到开始录音 ≤3 步/≤3 秒）：Plan 2 只证明了音频侧预算（冷启≈1.85s、按下→RECORDING 163ms），
+  **不判绿**；Plan 4 不补测，ACCEPTANCE 记「未覆盖，Plan 5」（D415）。
+- 锁屏磁贴/通知/常亮/夜间特则/完整设置页/回收站：Plan 3 计划曾列在 Plan 4 backlog，本计划明确推迟 Plan 5
+  （D416，**需用户确认**）。
 - 生图美学增强不在本计划。
+- 提示词评测：仓库无真实样本评分（dreams.md 0/20、无 Key）。T5 只做「v2 与 v2.1 渲染差异 + 槽契约」的
+  fixture 前后对比，真实质量记 PENDING（D417），不许写「评测通过」。
 
 ---
 
@@ -293,7 +307,7 @@ suspend fun reconcilePendingTranscriptions(): Int   // 启动补转写（F1）
 
 **Expected**
 - 新 2 类：`TailWavTest`（6 例，含空段/越界/长度不符）、`TranscriptAppendTest`（7 例，含空文本判失败与 skip 水位）；
-  全量 **43 类 / 388 例 / 0 失败**。
+  全量 **43 类 / 390 例 / 0 失败**。
 - 旧 `TranscriptWriterTest` 全绿；不新增依赖。
 
 ## Task 3：忠实稿基座与整段重跑
@@ -323,7 +337,7 @@ suspend fun commitSuccess(
 3. 全量 + 证据 `p4-faithful-00-red.txt` / `01-green.txt` / `02-mutation.txt`。
 
 **Expected**
-- 加 4 例（并入现有类则类数不变；若新建类则 **44 类 / 392 例**，实施者先报 Lead 再定）。
+- 加 4 例（并入现有类则类数不变；若新建类则 **44 类 / 394 例**，实施者先报 Lead 再定）。
 - `p3` 的 GenerationOrchestratorTest 全绿不退化。
 
 ## Task 4：「补一段」入口与原样 tab
@@ -332,7 +346,7 @@ suspend fun commitSuccess(
 - 改：`ui/record/RecordScreen.kt`（append 模式复用）、`ui/DreamKeeperRoot.kt`（`append/{dreamId}` 路由）、
   `ui/detail/DetailScreen.kt`（原样 tab 重写：忠实稿正文 + 看原始转写 + 补一段 + 重新理顺 + 三态）、
   `ui/detail/DetailViewModel.kt`（`appendState`、`onRecordingFinished`、互斥）
-- 新测试：`ui/detail/AppendEntryTest.kt`（ViewModel 层，3 例）
+- 新测试：`ui/detail/AppendEntryTest.kt`（ViewModel 层，6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）
 - 设备证据：`p4-append-05-ui.png`、`p4-append-06-append.png` + sidecar
 
 **Steps**
@@ -343,7 +357,7 @@ suspend fun commitSuccess(
 4. 变异：去掉防重入 → 自动重跑用例如红；恢复。
 
 **Expected**
-- 全量 **44 类 / 393 例 / 0 失败**（含 Task 3 的新类时按实际报告）。
+- 全量 **45 类 / 400 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
 - 设备：追加后 `rawTranscript` 严格追加、`transcriptMs == rawAudioMs`、faithful 新版本出现、旧版仍可选。
 
 ## Task 5：小说化显式触发与想法
@@ -366,7 +380,7 @@ suspend fun commitSuccess(
 5. D408：`novel_revise.v1.1` 分流 3 条规则 + 2 条解析用例（纯提问→ASK、明确改动→REVISE、拿不准→ASK）。
 
 **Expected**
-- 全量 **46 类 / 403 例 / 0 失败**（PromptRepositoryTest 10 槽、新增 NovelIdeaTest 3 例）。
+- 全量 **46 类 / 404 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
 - 资产进包：`unzip -l app-debug.apk | grep prompts/` 含 v2.1 与 v1.1 旧版仍在。
 
 ## Task 6：可见性与体验缺陷
@@ -386,7 +400,7 @@ suspend fun commitSuccess(
 4. 变异：版本线不过滤 → 用例如红。
 
 **Expected**
-- 全量 **48 类 / 407 例 / 0 失败**。
+- 全量 **48 类 / 408 例 / 0 失败**。
 
 ## Task 7：发布就绪与终验
 
@@ -403,7 +417,7 @@ suspend fun commitSuccess(
 5. 看板 8/8、最后更新、下一步 Plan 5。
 
 **Expected**
-- 无新增单测（全量保持 Task 6 的 **48 类 / 407 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
+- 无新增单测（全量保持 Task 6 的 **48 类 / 408 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
 
 ---
 
@@ -415,5 +429,9 @@ suspend fun commitSuccess(
 
 ## 10. 自审记录
 
-每个 Task 完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
+### T0 契约冻结（Lead，2026-10-31）
+- 交付：`724d13e`（计划 404 行）、`71cd30b`（Voice AI 复核收紧）、本文档后续修订。
+- 结论：契约冻结，T1 开工；测试计数冻结为 48 类 / 408 例（终态）。
+
+每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。
