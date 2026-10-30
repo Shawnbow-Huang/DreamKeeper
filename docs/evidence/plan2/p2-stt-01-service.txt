@@ -1,0 +1,24 @@
+apk_sha256: 01c90d82608331400b053f0d45418b337af237a3468bf3103220398f1407df4a
+installed_apk_sha256: 01c90d82608331400b053f0d45418b337af237a3468bf3103220398f1407df4a（exec-out 拉回后比对一致）
+device_date: Fri Oct 30 18:57:30 CST 2026
+replay: adb shell settings get secure voice_recognition_service; adb shell dumpsys package com.google.android.tts | grep -E "appId|INTERNET"; adb shell pm path com.google.android.tts
+device: emulator-5554, API 37
+
+recognizer_service: com.google.android.tts/com.google.android.apps.speech.tts.googletts.service.GoogleTTSRecognitionService
+recognizer_package: com.google.android.tts
+recognizer_uid: u0_a171 (appId=10171)
+recognizer_apk: /product/app/GoogleTTS/GoogleTTS.apk
+recognizer_version: googletts.google-speech-apk_20251028.02_p2.827711934
+recognizer_has_internet: android.permission.INTERNET granted=true
+
+dreamkeeper_apk_permissions (aapt2 dump permissions app-debug.apk):
+  android.permission.RECORD_AUDIO
+  android.permission.POST_NOTIFICATIONS
+  android.permission.FOREGROUND_SERVICE
+  android.permission.FOREGROUND_SERVICE_MICROPHONE
+  com.dreamkeeper.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+  -> 无 android.permission.INTERNET；dumpsys package com.dreamkeeper 中 INTERNET 计数为 0。
+
+note: 系统语音识别器是 Google TTS 自带的 GoogleTTSRecognitionService（系统分区 /product，uid 10171）。
+识别器进程自身有 INTERNET（它可以选择在线识别），但 DreamKeeper 的 APK 零 INTERNET；
+本任务的音频只经本机 ParcelFileDescriptor 管道送入识别器，app 自身没有出网能力。

@@ -1,0 +1,20 @@
+apk_sha256: 01c90d82608331400b053f0d45418b337af237a3468bf3103220398f1407df4a
+device_date: Fri Oct 30 18:57:30 CST 2026
+replay: 未执行（不可执行）
+device: emulator-5554, API 37
+
+status: NOT_EXECUTED
+
+要求: 坏文件负对照——喂一个坏 WAV，识别器日志必须为空，以证明失败不是“假转写”。
+
+为什么没执行:
+本机 recognition support 四张语言表全空（installed/supported/pending/online 均为 []），
+TranscriptWriter 在 availability 阶段就返回 Unavailable 并写 FAILED，任何 WAV（好文件或坏文件）
+都不会进入 SttEngine.transcribe。若绕过 availability 强行调用 transcribe：
+  1) 违反 §0.3「只有 Available 才转写」和 §2「绝不许把不可用报成可用」；
+  2) 会得到一条与真实设备能力无关的结论，等同于伪造验证。
+因此按派工要求标为未验证，不伪造“识别器日志为空”的证据。
+
+要真正执行需要: 一台 checkRecognitionSupport 报告 installed 含 zh-CN 的设备/模拟器（API 33+）。
+替代覆盖（JVM，不可替代设备负对照）: TranscriptWriterTest 覆盖 placeholder / isOpen / dataSize
+变化时丢弃结果并保持 PENDING。

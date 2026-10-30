@@ -1,0 +1,19 @@
+apk_sha256: 01c90d82608331400b053f0d45418b337af237a3468bf3103220398f1407df4a
+device_date: Fri Oct 30 18:57:30 CST 2026
+replay: adb logcat -c; adb shell am start -n com.dreamkeeper/.MainActivity; adb shell input tap 541 2053; adb shell input swipe 541 1542 541 1542 6000; adb logcat -d -s RecordingService:D DreamStt:D TranscriptWriter:D
+device: emulator-5554, API 37；录音 6 s，dreamId=c0f55f08-3e7c-4a64-b0e1-774472d042c4
+
+raw logcat（2026-10-30 18:56:45–46 CST）:
+10-30 18:56:45.939 20323 20323 I RecordingService: 转写入队 dreamId=c0f55f08-3e7c-4a64-b0e1-774472d042c4 elapsedMs=6021
+10-30 18:56:46.091 20323 20323 I DreamStt: support installed=[] supported=[] pending=[] online=[]
+10-30 18:56:46.093 20323 20337 I DreamStt: availability=Unavailable(reason=本机没有中文离线识别)
+10-30 18:56:46.099 20323 20337 I TranscriptWriter: 转写失败状态写回：c0f55f08-3e7c-4a64-b0e1-774472d042c4 rows=1 reason=本机没有中文离线识别
+
+四张语言表原文:
+  installed = []
+  supported = []
+  pending   = []
+  online    = []
+
+conclusion: 四张表全空。SystemSttEngine.mapSupport 按 §0.3 返回 Unavailable("本机没有中文离线识别")，
+未返回 Available，也没有退回 online。availability() 结论被 TranscriptWriter 直接采纳，未进入 transcribe。

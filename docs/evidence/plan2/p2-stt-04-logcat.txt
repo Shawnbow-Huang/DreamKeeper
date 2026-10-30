@@ -1,0 +1,15 @@
+apk_sha256: 01c90d82608331400b053f0d45418b337af237a3468bf3103220398f1407df4a
+device_date: Fri Oct 30 18:57:30 CST 2026
+replay: pid=$(adb shell pidof com.google.android.tts); adb logcat -d --pid=$pid -v time
+device: emulator-5554, API 37
+
+recognizer_process: pid=2152 uid=u0_a171 package=com.google.android.tts
+ps 快照: u0_a171 2152 499 16429968 123008 0 S com.google.android.tts
+
+时间窗: 18:56:38 `adb logcat -c` -> 18:57:0x；窗口内 app 侧关键行 18:56:45.939 入队、18:56:46.099 FAILED 写回。
+logcat_lines_for_recognizer_pid: 0
+
+结论: 同时间窗内识别器进程没有任何日志，说明没有启动识别会话，与 p2-stt-03-attempt.txt 的
+“entered_transcribe: NO / speech_recognizer_created: NO” 一致。
+注意：这里的“识别器日志为空”是负路径下的空，不构成对 33+ 文件转写正路径的验证；
+也不拿它冒充 05 的坏文件负对照。

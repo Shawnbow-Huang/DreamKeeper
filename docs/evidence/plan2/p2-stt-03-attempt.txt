@@ -1,0 +1,32 @@
+apk_sha256: 01c90d82608331400b053f0d45418b337af237a3468bf3103220398f1407df4a
+device_date: Fri Oct 30 18:57:30 CST 2026
+replay: adb logcat -c; adb shell am start -n com.dreamkeeper/.MainActivity; adb shell input tap 541 2053; adb shell input swipe 541 1542 541 1542 6000; adb logcat -d -s RecordingService:D DreamStt:D TranscriptWriter:D
+device: emulator-5554, API 37；dreamId=c0f55f08-3e7c-4a64-b0e1-774472d042c4
+
+entered_transcribe: NO
+pipe_created: NO
+bytes_written_to_pipe: 0
+speech_recognizer_created: NO
+
+时间线（同一次录音，原始日志见 p2-stt-02-availability.txt）:
+18:56:45.939  转写入队 elapsedMs=6021
+18:56:46.091  support installed=[] supported=[] pending=[] online=[]
+18:56:46.093  availability=Unavailable(reason=本机没有中文离线识别)
+18:56:46.099  转写失败状态写回 rows=1
+
+为什么没进入 transcribe:
+§0.2/§0.3 要求只有 availability()==Available 才允许做文件转写。TranscriptWriter.onRecordingFinished
+在 availability 分支直接生成 Failed(reason) 并调用 markTranscriptFailed 窄更新，未调用
+SttEngine.transcribe，因此没有 createPipe()、没有读 WAV、没有创建 SpeechRecognizer。
+
+33+ 文件转写路径: 未验证
+原因：本机 recognition support 四张语言表全空，没有任何 on-device 语言包；
+即使强行调用 transcribe，也不会得到真实识别结果。按派工要求如实交「能失败、不伪造」，
+不编造转写文本、不伪造回调。
+
+可替代的 JVM 覆盖（不能替代设备验证）:
+- SystemSttEngineSupportTest: 6 条 mapSupport（installed/supported/pending/only-online/空表/前缀命中）；
+  其中 only-online 一条做过变异验证：改成 Available 后测试变红，恢复后变绿。
+- TranscriptWriterTest: 11 条（Ok 写回并 trim、Failed 保留原文、空/纯标点 Ok→FAILED、
+  用户已打字时让位 0 行、rawAudioMs 不匹配 0 行、等行更新到新 rawAudioMs 再写回、
+  markOpen 占位丢弃、dataSize 变化丢弃、正常录音收尾写回 OK、Unavailable 不调用 transcribe）。
