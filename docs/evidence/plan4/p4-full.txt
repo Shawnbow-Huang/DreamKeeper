@@ -1,6 +1,5 @@
 APK_SHA256=n/a (host-only JVM test; no APK involved)
-DEVICE_TIME=host-only 2026-10-30T18:44:00Z
-REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "" --rerun-tasks --console=plain
+DEVICE_TIME=host-only 2026-10-30T18:23:33Z
 REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" \
        ./gradlew :app:testDebugUnitTest --rerun-tasks --console=plain
 
@@ -16,3 +15,7 @@ XML 汇总：classes=41 tests=380 failures=0 errors=0 skipped=0
 
 # 全量清单里本任务相关的四类
 AppendTranscriptTest 10/0、DbBackupTest 6/0、MigrationTest 3/0、MigrationV2ToV3Test 3/0
+
+# 时间口径
+JVM-only 任务没有设备端时刻：DEVICE_TIME 记的是本文件的写入时刻（02:23:33 CST），
+单次运行分别在本轮 02:00–02:23 CST 之间完成，无设备参与。

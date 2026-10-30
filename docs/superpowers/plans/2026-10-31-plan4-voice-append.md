@@ -261,15 +261,16 @@ suspend fun updateRawAudioMs(id: String, newRawAudioMs: Long): Int
    `DreamDatabase.create()` 打开 → 断言 `user_version=3`、`dreams` 多 `transcriptMs`、回填正确
    （OK+有文本 → =rawAudioMs；PENDING/空文本/无音频 → 0）、旧行其余 20 列不变。**此时必红**（缺迁移）。
 2. 实现迁移 + 3.json + entity/dao/domain/repo，跑绿；`check-migrate.py --diff` 对 v2/v3 dump GREEN。
-3. 写 `AppendTranscriptTest`（真 Room in-memory）：首次写带水位；`appendTranscript` 命中 1 行且文本严格追加、
+3. 写 `AppendTranscriptTest`（真 Room in-memory）与 `DreamRepositoryTranscriptWatermarkTest`（整行 save() 不回退水位）：首次写带水位；`appendTranscript` 命中 1 行且文本严格追加、
    水位更新；`fromMs` 或 `expectedMs` 不匹配 → 0 行且文本不变；手改文本后追加不覆盖；`beginAppend` 不改文本、
    置 PENDING、旧值更大时 0 行。
-4. 变异：删掉 `AND transcriptMs = :fromMs` → 重复追加用例红；恢复后 `cmp` 原文件一致。
+4. 变异：删掉 `AND transcriptMs = :fromMs` → 重复追加用例红；`save()` 改回 `dream.transcriptMs` → 水位回退用例红；恢复后 `cmp` 原文件一致。
 5. 全量 `--rerun-tasks`，写证据 `p4-mig-00-red.txt` / `01-after.txt` / `02-diff.txt`（host-only 头）。
 
 **Expected**
-- 新 2 类：`MigrationV2ToV3Test`（3 例）、`AppendTranscriptTest`（7 例）；`DbBackupTest` 4→6 例；
-  全量 **41 类 / 377 例 / 0 失败**。`DbBackup` 对 v2 库也快照、v3 库不重复快照。
+- 新 3 类：`MigrationV2ToV3Test`（3 例）、`AppendTranscriptTest`（10 例）、
+  `DreamRepositoryTranscriptWatermarkTest`（2 例，save() 不回退水位）；`DbBackupTest` 4→6 例；
+  全量 **42 类 / 382 例 / 0 失败**。`DbBackup` 对 v2 库也快照、v3 库不重复快照。
 - `3.json` 入库且与 `DreamDatabase` 版本一致；`2.json`/`1.json` 字节未变（`sha256sum` 写进证据）。
 
 ## Task 2：追加写回与重转写兜底（stt 层）
@@ -307,7 +308,7 @@ suspend fun reconcilePendingTranscriptions(): Int   // 启动补转写（F1）
 
 **Expected**
 - 新 2 类：`TailWavTest`（6 例，含空段/越界/长度不符）、`TranscriptAppendTest`（7 例，含空文本判失败与 skip 水位）；
-  全量 **43 类 / 390 例 / 0 失败**。
+  全量 **44 类 / 392 例 / 0 失败**。
 - 旧 `TranscriptWriterTest` 全绿；不新增依赖。
 
 ## Task 3：忠实稿基座与整段重跑
@@ -337,7 +338,7 @@ suspend fun commitSuccess(
 3. 全量 + 证据 `p4-faithful-00-red.txt` / `01-green.txt` / `02-mutation.txt`。
 
 **Expected**
-- 加 4 例（并入现有类则类数不变；若新建类则 **44 类 / 394 例**，实施者先报 Lead 再定）。
+- 加 4 例（并入现有类则类数不变；若新建类则 **45 类 / 396 例**，实施者先报 Lead 再定）。
 - `p3` 的 GenerationOrchestratorTest 全绿不退化。
 
 ## Task 4：「补一段」入口与原样 tab
@@ -357,7 +358,7 @@ suspend fun commitSuccess(
 4. 变异：去掉防重入 → 自动重跑用例如红；恢复。
 
 **Expected**
-- 全量 **45 类 / 400 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
+- 全量 **46 类 / 402 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
 - 设备：追加后 `rawTranscript` 严格追加、`transcriptMs == rawAudioMs`、faithful 新版本出现、旧版仍可选。
 
 ## Task 5：小说化显式触发与想法
@@ -380,7 +381,7 @@ suspend fun commitSuccess(
 5. D408：`novel_revise.v1.1` 分流 3 条规则 + 2 条解析用例（纯提问→ASK、明确改动→REVISE、拿不准→ASK）。
 
 **Expected**
-- 全量 **46 类 / 404 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
+- 全量 **47 类 / 406 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
 - 资产进包：`unzip -l app-debug.apk | grep prompts/` 含 v2.1 与 v1.1 旧版仍在。
 
 ## Task 6：可见性与体验缺陷
@@ -400,7 +401,7 @@ suspend fun commitSuccess(
 4. 变异：版本线不过滤 → 用例如红。
 
 **Expected**
-- 全量 **48 类 / 408 例 / 0 失败**。
+- 全量 **49 类 / 410 例 / 0 失败**。
 
 ## Task 7：发布就绪与终验
 
@@ -417,7 +418,7 @@ suspend fun commitSuccess(
 5. 看板 8/8、最后更新、下一步 Plan 5。
 
 **Expected**
-- 无新增单测（全量保持 Task 6 的 **48 类 / 408 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
+- 无新增单测（全量保持 Task 6 的 **49 类 / 410 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
 
 ---
 
@@ -432,13 +433,17 @@ suspend fun commitSuccess(
 | D419 | 2026-10-31 | T1 | `AppendTranscriptTest` 10 例（计划 7 例） | 多出的 3 例兜住实测风险：等长/更短 no-op（0 字节追加死锁）、手动重试只从 FAILED、跳过转写幂等 |
 | D420 | 2026-10-31 | T1 | `3.json` 由 Room 编译导出（`exportSchema=true`），MIGRATION_2_3 逐字对齐它 | 手工写 schema 是 Plan 3 已有的教训；`transcriptMs` 的 `INTEGER NOT NULL DEFAULT 0` 必须与 3.json 一致，否则 Room 自校验在老用户机上抛 Migration didn't properly handle |
 | D421 | 2026-10-31 | T1 | `DbBackup.TARGET_SCHEMA_VERSION` 改为引用 `DreamDatabase.SCHEMA_VERSION` | 两处常量各写一个 3 会漂移；Builder 复核明确建议单源 |
+| D423 | T1 审计：`save()` 写 `dream.transcriptMs` 会把水位回退 | 改 `existing?.transcriptMs ?: dream.transcriptMs`，补 `DreamRepositoryTranscriptWatermarkTest` 2 例并做变异反证（必红）；`p4-append-02-watermark.txt` |
+| D424 | T1 证据 `DEVICE_TIME` 是模板常量（超前 20 分钟）、`p4-mig-02-diff` 的 REPLAY 套了 gradlew、`p4-full` 有两条 REPLAY | 全部改写为真实写入时刻 + 可执行命令，并加「时间口径」注；JVM-only 任务不再借用设备时间 |
+| D425 | T1 证据命名偏离派工书（`-green` 而非 `-after`、`p4-full` 不在 glob） | 保留 `-green` 语义（绿跑而非 after 状态），名实一致优先于派工书笔误；glob 视为示例 |
+| D426 | 计划 T1 Expected 仍写 7 例/377，T2–T7 冻结计数因此少算 | 统一为 42 类/382 例起，T2–T7 顺延为 44/392、45/396、46/402、47/406、49/410、49/410 |
 | D422 | 2026-10-31 | T1 | `scripts/check-migrate.py` 的 `diff_2_3` 比较前需去 `i:`/`s:` 前缀 | 实测踩到：dump 值是 canon 字符串，`transcriptStatus == "OK"` 恒假 → 回填期望永远算成 0，真实数据必 RED。已加 `decanon()`；修后 fixture GREEN、负向 RED、v1→v2 回归逐字不变 |
 
 ## 10. 自审记录
 
 ### T0 契约冻结（Lead，2026-10-31）
 - 交付：`724d13e`（计划 404 行）、`71cd30b`（Voice AI 复核收紧）、本文档后续修订。
-- 结论：契约冻结，T1 开工；测试计数冻结为 48 类 / 408 例（终态）。
+- 结论：契约冻结，T1 开工；测试计数冻结为 49 类 / 410 例（终态）。
 
 ### Task 1 验收（Lead，2026-10-31）
 - **交付**：`6 个主文件 + 4 个测试文件 + 3.json + 5 份 p4-* 证据`（本提交）。主改动：`DreamEntity` 追加
@@ -446,14 +451,17 @@ suspend fun commitSuccess(
   `DreamDao` 三条新 CAS（`beginAppend`/`appendTranscript`/`markTranscriptionRetry`/`skipUncoveredAudio`）+
   `updateTranscript` 带水位、`DreamRepository` 五个包装 + save/toDomain 带新列、`DbBackup` 目标版本单源。
 - **Lead 独立复跑**：`MigrationV2ToV3Test` 3/3、`AppendTranscriptTest` 10/10、`MigrationTest` 3/3、
-  `DbBackupTest` 6/6；全量 **41 类 / 380 例 / 0 / 0 / 0**（38s，`.scratch/p4-full.log`）。
+  `DbBackupTest` 6/6、`DreamRepositoryTranscriptWatermarkTest` 2/2；全量 **42 类 / 382 例 / 0 / 0 / 0**（36s）。
 - **变异**：删 `MIGRATION_2_3` 挂载 → 3/3 红（`A migration from 2 to 3 was required but not found`）；
   `appendTranscript` 拼串改覆盖 → 3 红（幂等/追加/手改保留）；两处恢复后 sha 与变异前逐字节相同并复绿。
 - **证据**：`p4-mig-00-red.txt`、`p4-mig-01-green.txt`、`p4-mig-02-diff.txt`（含合成库 GREEN + 负向 RED +
   `diff_2_3` 去前缀修复）、`p4-append-00-red.txt`、`p4-append-01-green.txt`、`p4-full.txt`。
 - **PENDING**：设备上的真实 v2→v3 迁移（当前模拟器库仍是 v2）→ T4/T7 E2E；`rawAudioMs` 大文件下的
   TailWav 边界（T2）；release 升级（T7）。
-- **结论**：通过。偏差 D418–D422 已登记；下一步 T2（写回/reconcile/TailWav）。
+- **审计补记（D423）**：实施者复核实测「`save()` 直接写 `dream.transcriptMs`」会让旧 Dream 对象的整行保存把水位抹回 0
+  （重复追加风险）→ 改 `existing?.transcriptMs ?: dream.transcriptMs` + 2 例 + 变异必红 + `p4-append-02-watermark.txt`；
+  同时修正证据 `DEVICE_TIME` 模板值/REPLAY（D424）与命名偏离（D425）、计数口径（D426）。
+- **结论**：通过。偏差 D418–D426 已登记；下一步 T2（写回/reconcile/TailWav）。
 
 每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。

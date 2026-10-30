@@ -1,5 +1,5 @@
 APK_SHA256=n/a (host-only JVM test; no APK involved)
-DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+DEVICE_TIME=host-only 2026-10-30T18:23:33Z
 REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.AppendTranscriptTest" --rerun-tasks --console=plain
 # 结果
 BUILD SUCCESSFUL in 25s（rc=0）
@@ -19,3 +19,7 @@ XML: tests=10 failures=0 errors=0 skipped=0
 
 # 读法
 这一层只测「数据层契约」。录音 service 的入队时序、TailWav 切片、启动 reconcile 属于 T2。
+
+# 时间口径
+JVM-only 任务没有设备端时刻：DEVICE_TIME 记的是本文件的写入时刻（02:23:33 CST），
+单次运行分别在本轮 02:00–02:23 CST 之间完成，无设备参与。

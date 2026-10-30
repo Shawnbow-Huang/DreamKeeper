@@ -1,5 +1,5 @@
 APK_SHA256=n/a (host-only JVM test; no APK involved)
-DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+DEVICE_TIME=host-only 2026-10-30T18:23:33Z
 REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.MigrationV2ToV3Test" --rerun-tasks --console=plain
 # 结果
 BUILD SUCCESSFUL in 27s（rc=0）
@@ -22,3 +22,7 @@ XML: TEST-com.dreamkeeper.data.db.MigrationV2ToV3Test.xml → tests=3 failures=0
 # 旁证：v1→v3 直通仍在
 MigrationTest（手搭 v1 库 → DreamDatabase.create）3/3 绿；其断言已升级为
 「user_version 必须是 3」+「FAILED 老行 transcriptMs=0」+「无音频老行 transcriptMs=0」。
+
+# 时间口径
+JVM-only 任务没有设备端时刻：DEVICE_TIME 记的是本文件的写入时刻（02:23:33 CST），
+单次运行分别在本轮 02:00–02:23 CST 之间完成，无设备参与。

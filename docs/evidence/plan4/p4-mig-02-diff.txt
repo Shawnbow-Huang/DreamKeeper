@@ -1,6 +1,6 @@
 APK_SHA256=n/a (host-only JVM test; no APK involved)
-DEVICE_TIME=host-only 2026-10-30T18:44:00Z
-REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "python scripts/check-migrate.py --diff <before.json> <after.json>" --rerun-tasks --console=plain
+DEVICE_TIME=host-only 2026-10-30T18:23:33Z
+REPLAY=python scripts/check-migrate.py --diff <v2-dump.json> <v3-dump.json>
 # 本轮新增的 schema 文件
 android/app/schemas/com.dreamkeeper.data.db.DreamDatabase/3.json
   sha256=8991f4cc91a9fe39f560682bd6ab47683ceb2092490d5ccbe8bcfb8b49cf2ff6
@@ -19,6 +19,8 @@ UPDATE `dreams` SET `transcriptMs` = `rawAudioMs`
     AND `transcriptStatus` = 'OK' AND TRIM(`rawTranscript`) <> ''
 
 # 脚本侧口径校验（合成库；不是设备证据）
+# REPLAY 的 input：用 2.json 的 createSql 手搭 v2 库后 --dump 得 v2-dump.json，
+# 再执行 MIGRATION_2_3 的 ALTER+UPDATE 后 --dump 得 v3-dump.json；两份都不是设备产物。
 用 2.json 的 createSql 手搭 v2 库（3 行：OK+音频 / PENDING+音频 / 无音频），
 再执行与 MIGRATION_2_3 相同的 ALTER+UPDATE，两份都 `--dump` 后 `--diff`：
   pair=2->3 business_tables=8
@@ -39,3 +41,7 @@ diff_2_3 原先直接用 dump 里带 `i:`/`s:` 前缀的字符串比较 `transcr
 
 # 未覆盖
 设备上的真实 v2→v3 迁移（当前模拟器库还是 v2）留到 T4/T7 的 E2E 里做，本文件不含设备证据。
+
+# 时间口径
+JVM-only 任务没有设备端时刻：DEVICE_TIME 记的是本文件的写入时刻（02:23:33 CST），
+单次运行分别在本轮 02:00–02:23 CST 之间完成，无设备参与。

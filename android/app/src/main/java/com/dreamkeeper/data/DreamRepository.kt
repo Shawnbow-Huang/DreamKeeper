@@ -162,7 +162,8 @@ class DreamRepository(
                 // v2 新列不在 domain 上：必须从现有行原样带回，否则每次保存都抹成 null
                 novelSelectedVersion = existing?.novelSelectedVersion,
                 generationStage = existing?.generationStage,
-                transcriptMs = dream.transcriptMs,
+                // 转写水位只由追加 CAS 推进，整行 save() 不得回退（旧 Dream 对象里默认 0）。
+                transcriptMs = existing?.transcriptMs ?: dream.transcriptMs,
             )
         )
     }

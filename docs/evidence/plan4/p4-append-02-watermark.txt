@@ -1,0 +1,41 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T18:33:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.DreamRepositoryTranscriptWatermarkTest" --rerun-tasks --console=plain
+
+# 为什么补这条（T1 审计发现，D423）
+原实现 save() 写 `transcriptMs = dream.transcriptMs`；domain 里该列默认 0，
+因此任何「拿着旧 Dream 对象（或不认识新列的 caller）做整行保存」都会把水位抹回 0。
+后果：下次追加会把已转写段重新拼进正文（重复文本），且 UI 认为整段音频未转写。
+整行 save() 不是水位推进路径 —— 水位只由 appendTranscript / skipUncoveredAudio 推进。
+
+# 改法
+DreamRepository.save()：
+  transcriptMs = existing?.transcriptMs ?: dream.transcriptMs
+（有现存行时一律沿用库里的水位；只有新建行才采用调用方给的值。）
+
+# 新增用例（android/app/src/test/java/com/dreamkeeper/data/DreamRepositoryTranscriptWatermarkTest.kt）
+1) legacyDreamObjectCannotResetWatermark
+   先 save(watermark=2400, audio=2400)；读回后 copy(title="改个标题", transcriptMs=0) 再 save；
+   断言 title 已改、transcriptMs 仍为 2400。
+2) newRowKeepsExplicitWatermark
+   新建行显式给 1200，库内即 1200（新建路径不回退成 0）。
+
+# 变异反证（必红）
+把 save() 改回 `transcriptMs = dream.transcriptMs`：
+  DreamRepositoryTranscriptWatermarkTest > legacyDreamObjectCannotResetWatermark FAILED
+  java.lang.AssertionError: 水位必须保留 expected:<2400> but was:<0>
+                                    （DreamRepositoryTranscriptWatermarkTest.kt:72）
+  2 tests completed, 1 failed
+  BUILD FAILED in 24s
+恢复后：
+  DreamRepository.kt sha256=b3a97abd5524d1ef8366e9cea6461652951891158e9ac4c23001c0c204a49caa
+  与变异前备份 sha256 逐字相同（b3a97abd…49caa）
+  targeted 2/2 绿（BUILD SUCCESSFUL in 25s）
+
+# 全量
+BUILD SUCCESSFUL in 36s
+XML 汇总：classes=42 tests=382 failures=0 errors=0 skipped=0
+（T1 首提交 41 类/380 例 + 本文件 1 类 2 例）
+
+# 读法
+本文件只证明「整行保存不会回退水位」；设备上的真实 v2→v3 迁移留到 T4/T7 E2E。
