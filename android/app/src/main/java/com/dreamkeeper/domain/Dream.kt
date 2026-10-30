@@ -18,6 +18,9 @@ import java.time.LocalDate
  *
  * 注意 domain 层**不反向依赖** `data.db`，所以 [transcriptStatus] 用字符串字面量
  * （取值 `PENDING` / `OK` / `FAILED`，与 `TranscriptStatus` 常量一致）。
+ * 默认值是 `PENDING`：只有转写结果真的写回（或用户手动补字）之后才允许是 `OK`；
+ * 默认 `OK` 会把「还没转写」伪装成「已经成功」。`DreamEntity` 的默认值仍是 OK
+ * （禁改实体），所以新建行的 PENDING 必须由调用方显式给出。
  */
 data class Dream(
     val id: String,
@@ -33,7 +36,7 @@ data class Dream(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     val deletedAt: Long? = null,
-    val transcriptStatus: String = "OK",
+    val transcriptStatus: String = "PENDING",
     val rawAudioPath: String? = null,
     val rawAudioMs: Long? = null,
 )

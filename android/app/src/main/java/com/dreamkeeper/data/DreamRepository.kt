@@ -199,6 +199,42 @@ class DreamRepository(
         dreams.setAudio(id, rawAudioPath, rawAudioMs)
     }
 
+    // ---- 转写（Task 7）：拿行与窄更新；UI 不直接碰 DAO ----
+
+    /**
+     * 按 id 取一行（含回收站，与 [observe] 同口径）。
+     *
+     * 转写协程用它做「行是否已经由 RecordViewModel 落库」的有界等待；返回 `Dream` 而不是实体，
+     * 保证 Writer 不会把 `data.db` 的类型带出仓库。
+     */
+    suspend fun findById(id: String): Dream? = dreams.getById(id)?.let(::toDomain)
+
+    /**
+     * 自动转写的正文写回：CAS，返回 0 表示让位（用户先写了 / 时长已变）。
+     *
+     * 与 [updateAudio] 的分工：这里只写 `rawTranscript` + `transcriptStatus`，
+     * **不写 `updatedAt`**；SQL 的三个 `WHERE` 见 `DreamDao.updateTranscript`。
+     */
+    suspend fun applyTranscriptText(id: String, expectedMs: Long, text: String): Int =
+        dreams.updateTranscript(id, expectedMs, text, TranscriptStatus.OK)
+
+    /**
+     * 转写失败：只把状态改成 `FAILED`，已有正文原样保留。
+     *
+     * 只在行仍是 `PENDING` 时生效——迟到的失败不许覆盖用户已经手动补好的 `OK`。
+     */
+    suspend fun markTranscriptFailed(id: String, expectedMs: Long): Int =
+        dreams.updateTranscriptStatus(id, expectedMs, TranscriptStatus.FAILED)
+
+    /**
+     * 详情页「手动补字」：与自动写回同一条 CAS，成功才置 `OK`。
+     *
+     * 返回 0 时调用方按 §0.8 提示「已经写进去了，请返回刷新」——通常意味着
+     * 转写结果先到、或用户在另一个入口改了同一条梦。
+     */
+    suspend fun updateManualTranscript(id: String, expectedMs: Long, text: String): Int =
+        dreams.updateTranscript(id, expectedMs, text, TranscriptStatus.OK)
+
     /**
      * 把一枚孤儿 WAV 恢复成草稿；**行已存在就返回 false**（重跑不许重置 `createdAt`）。
      *

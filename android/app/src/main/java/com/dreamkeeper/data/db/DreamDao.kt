@@ -135,4 +135,49 @@ interface DreamDao {
         WHERE id = :id
     """)
     suspend fun setAudio(id: String, rawAudioPath: String, rawAudioMs: Long)
+
+    // ---- 转写写回（Task 7）：两列窄更新，绝不整行 upsert ----
+
+    /**
+     * 自动/手动转写落正文的 CAS（§0.7）。
+     *
+     * 三个 `WHERE` 缺一不可：`rawAudioMs` 保证结果属于**当前这一次**录音；`TRIM(rawTranscript)=''`
+     * 保证不会盖掉用户已经手打或编辑过的原文；`COALESCE` 让 `null` 表示「只改状态」。
+     * **不写 `updatedAt`**：转写不是一次用户编辑，写它会把列表排序打乱。
+     *
+     * 返回受影响行数：0 行 = 让位（用户先写了 / 又补录了），不是错误。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawTranscript = COALESCE(:rawTranscript, rawTranscript),
+            transcriptStatus = :transcriptStatus
+        WHERE id = :id
+          AND rawAudioMs = :expectedMs
+          AND TRIM(rawTranscript) = ''
+    """)
+    suspend fun updateTranscript(
+        id: String,
+        expectedMs: Long,
+        rawTranscript: String?,
+        transcriptStatus: String,
+    ): Int
+
+    /**
+     * 失败/不可用时只改状态，**保留**已有正文（§0.7 的补充，见 task-7-report 偏差）。
+     *
+     * 只允许从 `PENDING` 出发：用户已经手动补过字的行（`OK`）不能被迟到的失败覆盖。
+     * 同样不写 `updatedAt`。
+     */
+    @Query("""
+        UPDATE dreams
+        SET transcriptStatus = :transcriptStatus
+        WHERE id = :id
+          AND rawAudioMs = :expectedMs
+          AND transcriptStatus = 'PENDING'
+    """)
+    suspend fun updateTranscriptStatus(
+        id: String,
+        expectedMs: Long,
+        transcriptStatus: String,
+    ): Int
 }

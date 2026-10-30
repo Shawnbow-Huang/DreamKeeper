@@ -36,7 +36,7 @@ data class DetailUiState(
  * `tags` 字段，也不该有——详情页不碰 DAO，只认仓库翻译好的 `Tag`。
  */
 class DetailViewModel(
-    repo: DreamRepository,
+    private val repo: DreamRepository,
     dreamId: String,
 ) : ViewModel() {
 
@@ -56,4 +56,16 @@ class DetailViewModel(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = DetailUiState(),
     )
+
+    /**
+     * 详情页「手动补字」：与自动写回走同一条 CAS（§0.8）。
+     *
+     * 返回 0 表示让位：通常是对面已经写进去了（转写结果先到），或者 `rawAudioMs` 已变。
+     * 调用方据此提示「已经写进去了，请返回刷新」，而不是假装保存成功。
+     */
+    suspend fun saveManualTranscript(text: String): Int {
+        val dream = state.value.dream ?: return 0
+        val expectedMs = dream.rawAudioMs ?: return 0
+        return repo.updateManualTranscript(dream.id, expectedMs, text)
+    }
 }

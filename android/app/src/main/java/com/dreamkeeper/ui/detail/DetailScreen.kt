@@ -22,13 +22,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -50,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.data.db.TranscriptStatus
+import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.Tag
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.theme.Ember
@@ -138,9 +143,10 @@ fun DetailScreen(
 
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         when (selectedTab) {
-                            0 -> BodyScroll(
-                                text = state.dream?.rawTranscript.orEmpty(),
-                                color = Paper,
+                            0 -> TranscriptTab(
+                                dream = state.dream,
+                                onSave = { text -> vm.saveManualTranscript(text) },
+                                onMessage = { message -> scope.launch { snackbarHost.showSnackbar(message) } },
                             )
 
                             1 -> NovelTab(
@@ -285,6 +291,142 @@ private fun DetailTabs(selected: Int, onSelect: (Int) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * 「原样」tab 的三种状态（§0.8）：已转写 / 转写中 / 转写失败。
+ *
+ * PENDING 也可能带着正文——追问窗口收尾会把状态改回 PENDING 但保留旧文本，
+ * 所以这里不是「空则提示」，而是「有字就先显示字」。任何分支都不清空已有原文。
+ */
+@Composable
+private fun TranscriptTab(
+    dream: Dream?,
+    onSave: suspend (String) -> Int,
+    onMessage: (String) -> Unit,
+) {
+    if (dream == null) return
+    var dialogOpen by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val text = dream.rawTranscript
+    val status = dream.transcriptStatus
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (text.isBlank() && status != TranscriptStatus.OK) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = if (status == TranscriptStatus.PENDING) "正在转写…" else "没有转写成功",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Paper,
+                    )
+                    Text(
+                        text = if (status == TranscriptStatus.PENDING) {
+                            "录音已经存好了。本机转写完成后，原文会出现在这里。"
+                        } else {
+                            "可能是本机没有中文离线包，或识别服务不可用。先把听到的话补进来也行。"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = InkDim,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (status == TranscriptStatus.FAILED) {
+                        TextButton(onClick = { dialogOpen = true }) {
+                            Text("手动补字", color = Ember)
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                BodyScroll(text = text, color = Paper)
+            }
+            when (status) {
+                TranscriptStatus.PENDING -> Text(
+                    text = "正在转写…",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkFaint,
+                )
+
+                TranscriptStatus.FAILED -> Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "没能自动转写这段录音",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = InkDim,
+                    )
+                    TextButton(onClick = { dialogOpen = true }) {
+                        Text("手动补字", color = Ember)
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+    }
+
+    if (dialogOpen) {
+        ManualTranscriptDialog(
+            initial = text,
+            onDismiss = { dialogOpen = false },
+            onSave = { draft ->
+                scope.launch {
+                    val rows = onSave(draft)
+                    dialogOpen = false
+                    // §0.8：0 行不是失败，是「已经写进去了」；让用户回去刷新，而不是假保存。
+                    onMessage(if (rows == 0) "已经写进去了，请返回刷新" else "已保存")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ManualTranscriptDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var draft by rememberSaveable(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = NightRaised,
+        titleContentColor = Paper,
+        textContentColor = Paper,
+        title = { Text("手动补字") },
+        text = {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("把记得的那几句写下来…", color = InkFaint) },
+                minLines = 6,
+                maxLines = 12,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(draft) },
+                enabled = draft.isNotBlank(),
+            ) {
+                Text("保存", color = Ember)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = InkDim) }
+        },
+    )
 }
 
 /**

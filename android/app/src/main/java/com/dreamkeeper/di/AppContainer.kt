@@ -8,8 +8,14 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.service.RecordingSession
+import com.dreamkeeper.stt.SttEngine
+import com.dreamkeeper.stt.SystemSttEngine
+import com.dreamkeeper.stt.TranscriptWriter
 import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.library.SharedPreferencesLayoutPrefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.io.File
 
 /**
@@ -22,7 +28,15 @@ import java.io.File
  * 用 `context.applicationContext` 而不是传进来的 Activity/Application：数据库与仓库的生命周期
  * 跟进程走，持有 Activity 引用就是内存泄漏的标准姿势。
  */
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    /**
+     * 转写协程的作用域（§0.10）：由 [com.dreamkeeper.DreamKeeperApp] 传入进程级 appScope，
+     * 不挂在 RecordingService 上——服务收尾就 stopSelf，转写会被一起取消。
+     * 默认值只给单测/工具兜底，生产路径永远显式传。
+     */
+    val transcriptionScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+) {
 
     private val appContext: Context = context.applicationContext
 
@@ -78,4 +92,15 @@ class AppContainer(context: Context) {
      * 状态必须活过其中任何一个的销毁重建。
      */
     val recordingSession: RecordingSession by lazy { RecordingSession() }
+
+    /**
+     * 系统 on-device 识别器。构造本身不碰系统服务；真正的探测发生在第一次
+     * `availability()`（结果进程内缓存），所以 Application 启动不会因此变慢。
+     */
+    val sttEngine: SttEngine by lazy { SystemSttEngine(appContext) }
+
+    /** 录音收尾 → 一次性本地转写 → CAS 窄更新（§0.5–§0.7 全在里面）。 */
+    val transcriptWriter: TranscriptWriter by lazy {
+        TranscriptWriter(repository, audioStore, sttEngine)
+    }
 }

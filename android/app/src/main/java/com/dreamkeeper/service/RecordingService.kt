@@ -25,6 +25,7 @@ import com.dreamkeeper.audio.WavMath
 import com.dreamkeeper.audio.WavSink
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.audio.WavWriter
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -264,6 +265,8 @@ class RecordingService : Service() {
     private fun onRecordingFinished(recording: ActiveRecording, stop: RecorderStop) {
         if (active !== recording) return
         active = null
+        // 成功收尾后才转写；且在 recording.release() 之后才投（Writer 用 isOpen 判「还在写」）。
+        var afterRelease: (() -> Unit)? = null
         try {
             if (recording.cancelRequested) {
                 // 取消只丢弃**本次**录进来的那一段；追问补录是在用户已有录音上追加的，
@@ -278,11 +281,33 @@ class RecordingService : Service() {
             } else {
                 // 以文件真实数据段为准（含补零帧）：DONE 的时长就是播放器会看到的长。
                 val dataSize = runCatching { audioStore.state(recording.file).dataSize }.getOrNull()
-                session.finish(dataSize ?: (stop.bytes + stop.zeroFillBytes))
+                val finishBytes = dataSize ?: (stop.bytes + stop.zeroFillBytes)
+                // session.finish 收的是**字节数**，内部才除以 32 得到 elapsedMs；转写写回要用后者，
+                // 直接拿字节数去匹配 rawAudioMs 会永远对不上（CAS 返回 0，状态停在 PENDING）。
+                session.finish(finishBytes)
+                val expectedMs = finishBytes / WavMath.BYTES_PER_MS
+                afterRelease = {
+                    enqueueTranscription(recording.dreamId, recording.file, expectedMs)
+                }
             }
         } finally {
             recording.release()
             stopForegroundAndSelf()
+            afterRelease?.invoke()
+        }
+    }
+
+    /**
+     * 把这次 take 交给进程级转写作用域（§0.10）。
+     *
+     * 不在服务里 `launch`：`stopForegroundAndSelf()` 一执行服务就可能被销毁，服务自己的
+     * 协程会连转写一起取消。失败只记日志——录音已经落盘，转写不该影响录音这件事。
+     */
+    private fun enqueueTranscription(dreamId: String, file: File, elapsedMs: Long) {
+        val container = (application as DreamKeeperApp).container
+        Log.i(TAG, "转写入队 dreamId=$dreamId elapsedMs=$elapsedMs")
+        container.transcriptionScope.launch {
+            container.transcriptWriter.onRecordingFinished(dreamId, file, elapsedMs)
         }
     }
 
