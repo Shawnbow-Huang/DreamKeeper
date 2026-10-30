@@ -10,6 +10,15 @@ package com.dreamkeeper.llm
  * 2. 全程 `Math.multiplyExact` / `Math.addExact`，溢出抛 [ArithmeticException]，由 [price] 归为
  *    `Priced.Overflow`，不许静默回绕；
  * 3. 只有最后加半格 `+500_000` 后除一次——先除再加会引入两次截断，`4.65 → 4` 就是漏半格。
+ *
+ * 单位说明：`R` 是「微元 / 1M tokens」，token 数乘以它得到「微元 × 1e6」的整数量，
+ * 所以最后除以 `1_000_000` 才是微元。中间任何一步都不除，避免截断漂移。
  */
-fun costMicroYuan(rates: Rates, hit: Long, miss: Long, out: Long): Long =
-    TODO("Task 3 实现待写：Math.multiplyExact/addExact + 单次 +500_000 取整")
+fun costMicroYuan(rates: Rates, hit: Long, miss: Long, out: Long): Long {
+    val hitUnits = Math.multiplyExact(hit, rates.cacheHit)
+    val missUnits = Math.multiplyExact(miss, rates.cacheMiss)
+    val outUnits = Math.multiplyExact(out, rates.output)
+    val sum = Math.addExact(Math.addExact(hitUnits, missUnits), outUnits)
+    // 半格四舍五入：+500_000 后整除 1_000_000；这是整个函数里唯一的取整点
+    return Math.addExact(sum, 500_000L) / 1_000_000L
+}

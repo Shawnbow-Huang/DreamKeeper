@@ -1,0 +1,12 @@
+{"version":"2026-10-30","effectiveFrom":"2026-10-30",
+ "provenance":"project-convention",
+ "provenanceNote":"峰谷时间窗取自 dsh-cost-meter 的工程约定；DeepSeek 官方定价页没有定义峰谷窗口",
+ "sourceUrl":"https://api-docs.deepseek.com/quick_start/pricing",
+ "currency":"CNY","unit":"microYuanPerMillionTokens",
+ "models":{
+   "deepseek-flash":{
+     "peak":{"cacheHit":20000,"cacheMiss":1000000,"output":4000000},
+     "offPeak":{"cacheHit":10000,"cacheMiss":500000,"output":2000000}},
+   "deepseek-v4-pro":{
+     "peak":{"cacheHit":150000,"cacheMiss":4500000,"output":13500000},
+     "offPeak":{"cacheHit":75000,"cacheMiss":2250000,"output":6750000}}}}
