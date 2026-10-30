@@ -752,15 +752,15 @@ T3  不调用模型                                   → faithfulText = rawTran
   这是 E2E 断言的锚。
 
 - §0.5 `scripts/check-export.py`（纯标准库，D357）：
-  - 前置（两个子命令共用）：`--db` 的 sha256 必须等于 `p3-e2e-08-db-sidecar.txt` 里记的设备 sha；`PRAGMA integrity_check`
-    == ok、`user_version` == 2、表数 == 9、`novel_versions` 与 `llm_calls` 均非空（D357 的真正锚，防「DB 与导出一起错」）。
+  - 前置（两个子命令共用）：`--db` 的 sha256 必须等于 `p3-e2e-08-db-sidecar.txt` 里记的 **`MERGED_SHA256=`**（合并后主库，D371）；
+    `DEVICE_DB_SHA256=`（合并前设备主库）只作溯源、不参与断言；`PRAGMA integrity_check` == ok、`user_version` == 2、表数 == 9、`novel_versions` 与 `llm_calls` 均非空（D357 的真正锚，防「DB 与导出一起错」）。
   - `--txt <f> --file-name <name> --from-db <db> --dream-id <id>`：脚本按 `resolveFinalNovel(selected ?: maxVersion)` 取正文、
-    按 §0.1 推导期望串（含 `-v<n>`/`-raw` 文件名），与文件逐字节比对，并断言实际文件名 == 推导名；
+    按 §0.1 推导期望串 = 头部四行 + 正文 + `\n共 N 字`（含 `-v<n>`/`-raw` 文件名），与文件逐字节比对，并断言实际文件名 == 推导名；
     另断言无 BOM、`\r` 计数 0、footer 的 N 与按正文算出的 N 相等。`--expect-sha` 保留作辅助（只证明「没变」）。
   - `--docx <f> --from-db <db> --dream-id <id>`：zip 三件齐全、`word/document.xml` 可 `xml.etree` 解析；
-    按 document 顺序把 `w:p` 归一为 `\n`、拼接 `w:t`（尊重 `xml:space="preserve"`），与 DB 推导串逐字相等；
-    首段 == `dream.title` 且首段 run 含 `<w:rPr><w:b/></w:rPr>`（唯一格式锚，必须断言）；段数 == 3（或 2）+ 正文行数
-    （正文空行也生成空 `w:p`，头部第 4 行空行不单独成段，D374）；无非法控制字符、`_rels` 关系完整。
+    按 document 顺序把 `w:p` 归一为 `\n`、拼接 `w:t`（尊重 `xml:space="preserve"`）；docx 期望串 = 头部第 1–3 行（标题/日期/标签，
+    标签行空则省）+ `\n` + 正文——**不含** §0.1 的头部空行（D374：空行不单独成段，故不入期望串）；
+    首段 == `dream.title` 且首段 run 含 `<w:rPr><w:b/></w:rPr>`（唯一格式锚，必须断言）；段数 == 3（或 2）+ 正文行数；无非法控制字符、`_rels` 关系完整。
   - `--pdf <f>`：`%PDF-` 在 byte 0、尾 200 字节内 `%%EOF`、`/Type /Pages` 存在且 `/Count` == `/Type /Page` 对象数、
     每页 `/Contents` 非空、每页有 MediaBox、全文至少一处 `/BaseFont`（证明文本绘制真的发生，`/Contents` 非空会被页脚恒真满足，
     D374）、字节数 > 2KB、无 `/Encrypt`。**不做文本抽取断言**（流被压缩），也不做像素判定。
@@ -782,8 +782,8 @@ T3  不调用模型                                   → faithfulText = rawTran
   5. 选中 v2 → 截选中态与「当前 v2 · 已选中」（`p3-e2e-05-selected.png`）。
   6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ 等 MediaStore `IS_PENDING` 清（`ls -l` 见 3 文件且 size>0、
      间隔 2s 两次 `sha256sum` 稳定）→ 设备 `ls -l` + `sha256sum` → `adb pull /sdcard/Download/DreamKeeper/` 三件 →
-     主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；同时贴 `SELECT novelSelectedVersion FROM dreams`
-     与 `SELECT version FROM novel_versions WHERE dreamId=…` 原始行，证明文件名里的 `-v<n>` 就是选中版（D373）。
+    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件原样存入 `docs/evidence/plan3/`（保留原文件名，另记 `EXPORT_SHA256=`，第三方只凭仓库即可复跑 check-export）。
+    同时贴 `SELECT novelSelectedVersion FROM dreams` 与 `SELECT version FROM novel_versions WHERE dreamId=…` 原始行，证明文件名里的 `-v<n>` 就是选中版（D373）。
   7. 系统「文件」打开 txt/docx 截图；pdf 打开态记 PENDING（AOSP 无 viewer），`p3-e2e-07-pdf-open.png` 若拍到则单独说明、
      **排除**在 nearWhite=0 之外（D359）。
   8. 制造一次失败并验证重试：开飞行模式 → 点「小说化」→ 失败态截图（`p3-e2e-09-failed.png`）→ 点「重试」→ 仍失败
@@ -792,9 +792,9 @@ T3  不调用模型                                   → faithfulText = rawTran
      该步结束时从 DB 现状确认 `novel_versions` 行数没增加（失败不建版），并在 step 9 拉库后复核。
   9. `adb shell am force-stop com.dreamkeeper` → `run-as ls -l databases/`（db/wal/shm 三个大小 + 设备 `sha256sum` 原文）→
      `cmd /c "... exec-out run-as com.dreamkeeper cat ..."` **三件齐拉**到 `.scratch/e2e-db/` → 主机 sha256 == 设备 sha256；
-     然后主机 `python3`（内置 sqlite3）以 **rw** 打开复制出的三件、`PRAGMA wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是
-     `p3-e2e-08-db.db` 证据**，三件的合并前 bytes+sha 写 `p3-e2e-08-db-sidecar.txt`（D371）；所有 check-cost / check-export /
-     负向对照都只在合并后的副本上跑（D279 的「wal/shm 不入库」仍成立，入的是合并产物与侧车哈希）。
+    然后主机 `python3`（内置 sqlite3）以 **rw** 打开复制出的三件、`PRAGMA wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是
+     `p3-e2e-08-db.db` 证据**；`p3-e2e-08-db-sidecar.txt` 记：三件合并前 bytes+sha（溯源）、`DEVICE_DB_SHA256=`（合并前 .db）、
+     `MERGED_SHA256=`（合并后 .db，check-export 断言这个）+ 合并前后 bytes（D371）；所有 check-cost / check-export / 负向对照都只跑在合并后的副本上（D279「wal/shm 不入库」仍成立）。
  10. `check-cost.py --db-copy p3-e2e-08-db.db --require-rows` → 断言 `mismatches=0`、`failed=N`（N == `error IS NOT NULL`
      行数且 >=1），每个 error 行 `cost==0 && usageJson IS NULL`，逐行 `[FAILED]` 原文入库；`failed` 的独立来源 =
      `adb logcat -d | grep DKLLM | grep -c " kind="`（D370 的那行日志），两者必须相等；
