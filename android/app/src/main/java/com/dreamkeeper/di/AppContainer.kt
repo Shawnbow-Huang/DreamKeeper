@@ -2,6 +2,7 @@ package com.dreamkeeper.di
 
 import android.content.Context
 import android.os.Build
+import com.dreamkeeper.BuildConfig
 import com.dreamkeeper.audio.AudioScan
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
@@ -121,6 +122,20 @@ class AppContainer(
      */
     val audioScanOnStart: Boolean
         get() = Build.FINGERPRINT != "robolectric" && Build.MODEL != "robolectric"
+
+    /**
+     * 是否在 `Application.onCreate` 里灌演示种子数据（`BuildConfig.SEED_DEMO_DATA`）。
+     *
+     * Robolectric 下必须关：单测会反复删除/重建 `databases/dreamkeeper.db`
+     * （`DbBackupTest` / `MigrationTest`），而后台 seed 协程可能正打开一个半成品库，
+     * 抛出的 schema 校验失败会被 coroutines-test 记成「下一个用例开始前已有未捕获异常」，
+     * 让全量单测随机红（实测 3 次全量里 1 次：`TranscriptWriterTest` 报
+     * `UncaughtExceptionsBeforeTest`，栈顶 `DreamKeeperApp$onCreate$1.invokeSuspend(DreamKeeperApp.kt:35)`，
+     * 原因 `Pre-packaged database has an invalid schema: dreams`）。生产 debug 照常灌。
+     */
+    val seedDemoOnStart: Boolean
+        get() = BuildConfig.SEED_DEMO_DATA &&
+            Build.FINGERPRINT != "robolectric" && Build.MODEL != "robolectric"
 
     /**
      * 录音状态的唯一真相：前台服务写、录音页（Task 4）只读。

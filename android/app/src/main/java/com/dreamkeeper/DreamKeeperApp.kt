@@ -31,7 +31,7 @@ class DreamKeeperApp : Application() {
         // 转写协程必须活过 RecordingService（服务收尾即销毁），所以共用进程级 appScope。
         container = AppContainer(this, appScope)
         appScope.launch {
-            if (BuildConfig.SEED_DEMO_DATA) {
+            if (container.seedDemoOnStart) {
                 SeedData.seedIfEmpty(container.database)
             }
             if (container.audioScanOnStart) {

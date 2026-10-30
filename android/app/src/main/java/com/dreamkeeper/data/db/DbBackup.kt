@@ -1,6 +1,7 @@
 package com.dreamkeeper.data.db
 
 import android.content.Context
+import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import java.io.File
@@ -28,6 +29,14 @@ import java.util.Locale
 object DbBackup {
 
     private const val TAG = "DbBackup"
+
+    /**
+     * 打开数据库时注入的错误处理器：**只吞掉，不删文件**。
+     *
+     * Android 默认的 `DefaultDatabaseErrorHandler` 在 SQLite 报 NOTADB/CORRUPT 时会
+     * `deleteDatabase()`。备份探针跑在 Room 之前，绝不能因为「库读不开」先把库删了（§0.8）。
+     */
+    private val NO_DELETE_ON_CORRUPTION = DatabaseErrorHandler { /* no-op */ }
 
     /** `files/db-backup/`：与 Room 的 `databases/` 分开，卸载重装就一起没了，不额外泄漏隐私 */
     const val DIR_NAME = "db-backup"
@@ -60,22 +69,38 @@ object DbBackup {
         }
     }
 
-    /** 只读探测 `PRAGMA user_version`（会顺带读到 WAL 里的最新页）。 */
+    /**
+     * 只读探测 `PRAGMA user_version`（会顺带读到 WAL 里的最新页）。
+     *
+     * **必须自带 no-op [DatabaseErrorHandler]**：`openDatabase(path, null, flags)` 用的是 Android
+     * 默认 `DefaultDatabaseErrorHandler`，SQLite 一旦报 NOTADB/CORRUPT 它会把库文件**直接删掉**。
+     * 这个探针跑在 Room 打开库之前，删掉就等于「备份动作本身毁掉要备份的东西」——违反 §0.8
+     * 「备份前不动原库」。带 handler 后打开失败仍抛，由下面的 `runCatching` 兜成 `null`。
+     */
     fun readUserVersion(dbFile: File): Int? {
         val flags = SQLiteDatabase.OPEN_READONLY
         return runCatching {
-            SQLiteDatabase.openDatabase(dbFile.path, null, flags).use { db ->
-                db.rawQuery("PRAGMA user_version", null).use { c ->
-                    if (c.moveToFirst()) c.getInt(0) else null
+            SQLiteDatabase
+                .openDatabase(dbFile.path, null, flags, NO_DELETE_ON_CORRUPTION)
+                .use { db ->
+                    db.rawQuery("PRAGMA user_version", null).use { c ->
+                        if (c.moveToFirst()) c.getInt(0) else null
+                    }
                 }
-            }
         }.recoverCatching {
             // 个别设备上只读打开 WAL 库会失败（-shm 不可写），退回读写打开但只执行 PRAGMA
-            SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                db.rawQuery("PRAGMA user_version", null).use { c ->
-                    if (c.moveToFirst()) c.getInt(0) else null
+            SQLiteDatabase
+                .openDatabase(
+                    dbFile.path,
+                    null,
+                    SQLiteDatabase.OPEN_READWRITE,
+                    NO_DELETE_ON_CORRUPTION,
+                )
+                .use { db ->
+                    db.rawQuery("PRAGMA user_version", null).use { c ->
+                        if (c.moveToFirst()) c.getInt(0) else null
+                    }
                 }
-            }
         }.onFailure { Log.w(TAG, "探测 user_version 失败: ${dbFile.path}", it) }.getOrNull()
     }
 
