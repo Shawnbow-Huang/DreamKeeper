@@ -5,6 +5,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.nio.file.NoSuchFileException
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 一份 WAV 在某一时刻的头/尺寸快照。
@@ -56,14 +58,46 @@ interface WavWriter : Closeable {
  */
 class WavStore(private val rootDir: File) {
 
+    /**
+     * 当前进程里**正在写**的文件（绝对路径）。
+     *
+     * 启动扫描靠它区分「录音中」与「上一进程留下的孤儿」：录音先写占位头、行要等 DONE
+     * 才落库，所以「文件在 + 占位头 + 库无行」在录音中是**正常状态**（§0-3）。
+     * 进程被杀时集合随进程消失，下一次启动扫描就不会再跳过任何文件。
+     */
+    private val openFiles: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
+
     /** 只算路径，不落盘。 */
     fun fileFor(dreamId: String): File = File(rootDir, "$dreamId.wav")
+
+    /**
+     * 扫描入口：只认 `<uuid>.wav` 的普通文件。
+     *
+     * `.tmp` / `.part` / `dream-1.wav` 这类垃圾名不是生产路径产物（生产 id 一律 UUID），
+     * 混进扫描会按文件名恢复出假 dream，所以宁可不认。按文件名升序，结果可复现。
+     */
+    fun files(): List<File> {
+        val listed = rootDir.listFiles() ?: return emptyList()
+        return listed
+            .filter { it.isFile && it.name.endsWith(WAV_SUFFIX) }
+            .filter { UUID_NAME.matches(it.name.removeSuffix(WAV_SUFFIX)) }
+            .sortedBy { it.name }
+    }
+
+    /** 这个文件是否正被本进程打开（录音/补录中）。启动扫描必须跳过。 */
+    fun isOpen(file: File): Boolean = openFiles.contains(file.absolutePath)
 
     /** mkdirs + 截断重写 44 字节占位头（已存在也重来）。 */
     fun create(dreamId: String): File {
         val file = fileFor(dreamId)
         file.parentFile?.mkdirs()
-        FileOutputStream(file, false).use { it.write(placeholderHeader()) }
+        markFileOpen(file)
+        try {
+            FileOutputStream(file, false).use { it.write(placeholderHeader()) }
+        } catch (error: Throwable) {
+            unmarkFileOpen(file)
+            throw error
+        }
         return file
     }
 
@@ -102,16 +136,23 @@ class WavStore(private val rootDir: File) {
         if (WavMath.readU32(header, 4) == WavMath.PLACEHOLDER_SIZE &&
             WavMath.readU32(header, 40) == WavMath.PLACEHOLDER_SIZE
         ) {
+            markFileOpen(file)
             return // 已经是「正在写」，幂等
         }
-        RandomAccessFile(file, "rw").use { raf ->
-            val field = ByteArray(4)
-            WavMath.writeU32(field, 0, WavMath.PLACEHOLDER_SIZE)
-            raf.seek(4)
-            raf.write(field)
-            raf.seek(40)
-            raf.write(field)
-            raf.fd.sync()
+        markFileOpen(file)
+        try {
+            RandomAccessFile(file, "rw").use { raf ->
+                val field = ByteArray(4)
+                WavMath.writeU32(field, 0, WavMath.PLACEHOLDER_SIZE)
+                raf.seek(4)
+                raf.write(field)
+                raf.seek(40)
+                raf.write(field)
+                raf.fd.sync()
+            }
+        } catch (error: Throwable) {
+            unmarkFileOpen(file)
+            throw error
         }
     }
 
@@ -121,14 +162,24 @@ class WavStore(private val rootDir: File) {
         if (!file.exists() || file.length() < WavMath.HEADER_BYTES) {
             FileOutputStream(file, false).use { it.write(placeholderHeader()) }
         }
-        return PcmWavWriter(file)
+        markFileOpen(file)
+        return try {
+            PcmWavWriter(file)
+        } catch (error: Throwable) {
+            unmarkFileOpen(file)
+            throw error
+        }
     }
 
-    /** 扫描/离线用：等价 repair + sync。 */
+    /** 扫描/离线用：等价 repair + sync；无论成败都注销「打开中」标记。 */
     fun finish(file: File): WavState {
-        val state = repair(file)
-        RandomAccessFile(file, "rw").use { it.fd.sync() }
-        return state
+        try {
+            val state = repair(file)
+            RandomAccessFile(file, "rw").use { it.fd.sync() }
+            return state
+        } finally {
+            unmarkFileOpen(file)
+        }
     }
 
     /** 幂等：两字段与 fileBytes 对不上才回填，对得上一个字节都不动。 */
@@ -235,6 +286,7 @@ class WavStore(private val rootDir: File) {
                 raf.fd.sync()
                 raf.close()
                 finished = true
+                unmarkFileOpen(file) // §0-3：收尾后扫描才能碰这个文件
             }
             return state(file)
         }
@@ -243,5 +295,22 @@ class WavStore(private val rootDir: File) {
         override fun close() {
             if (!finished) finish()
         }
+    }
+
+    private fun markFileOpen(file: File) {
+        openFiles += file.absolutePath
+    }
+
+    private fun unmarkFileOpen(file: File) {
+        openFiles -= file.absolutePath
+    }
+
+    private companion object {
+        const val WAV_SUFFIX = ".wav"
+
+        /** 生产路径的 dreamId 一律是 UUID；`seed-dream-1`、`dream-1` 都是测试/垃圾名。 */
+        val UUID_NAME = Regex(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        )
     }
 }

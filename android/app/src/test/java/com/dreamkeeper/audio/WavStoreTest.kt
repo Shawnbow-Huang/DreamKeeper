@@ -381,6 +381,79 @@ class WavStoreTest {
         assertThrows(IllegalStateException::class.java) { store.markOpen(short) }
     }
 
+    // ---------------------------------------------------------------- 启动扫描：files / 「打开中」集合
+
+    @Test
+    fun `files lists only uuid named wav files in name order`() {
+        // 启动扫描按文件名推 dreamId，垃圾名混进来就会恢复出假 dream（§0-1）
+        val store = WavStore(tmp.root)
+        val first = "11111111-1111-4111-8111-111111111111"
+        val second = "22222222-2222-4222-8222-222222222222"
+        File(tmp.root, "$second.wav").writeBytes(ByteArray(44))
+        File(tmp.root, "$first.wav").writeBytes(ByteArray(44))
+        File(tmp.root, "dream-1.wav").writeBytes(ByteArray(44))
+        File(tmp.root, "$first.wav.tmp").writeBytes(ByteArray(44))
+        File(tmp.root, "$first.wav.part").writeBytes(ByteArray(44))
+        File(tmp.root, "AAAA.WAV").writeBytes(ByteArray(44))
+        File(tmp.root, "not-a-file.wav").mkdirs()
+
+        val names = store.files().map { it.name }
+
+        assertEquals(listOf("$first.wav", "$second.wav"), names)
+    }
+
+    @Test
+    fun `files returns empty when the audio dir was never created`() {
+        val store = WavStore(File(tmp.root, "files/audio"))
+
+        assertTrue(store.files().isEmpty())
+    }
+
+    @Test
+    fun `files still reports an open recording until the writer finishes`() {
+        // §0-3：录音中「占位头 + 文件在 + 库无行」是正常状态，扫描必须靠这个集合跳过
+        val store = WavStore(tmp.root)
+        val id = "33333333-3333-4333-8333-333333333333"
+        val file = store.create(id)
+
+        assertTrue("create 后必须标记打开中，否则启动扫描会把它当孤儿", store.isOpen(file))
+        assertEquals(44L, file.length())
+
+        val writer = store.openWriter(file)
+        writer.write(ByteArray(3_200), 3_200)
+        assertTrue("写完但没 finish 仍是打开中", store.isOpen(file))
+        writer.finish()
+
+        assertFalse("finish 之后扫描才能接手", store.isOpen(file))
+        assertEquals(3_244L, file.length())
+    }
+
+    @Test
+    fun `store finish clears the open marker`() {
+        val store = WavStore(tmp.root)
+        val id = "44444444-4444-4444-8444-444444444444"
+        val file = store.create(id)
+        RandomAccessFile(file, "rw").use { raf ->
+            raf.seek(44)
+            raf.write(ByteArray(3_200))
+        }
+
+        assertTrue(store.isOpen(file))
+        store.finish(file)
+        assertFalse(store.isOpen(file))
+    }
+
+    @Test
+    fun `a failed markOpen does not leave the file marked open`() {
+        // 打开失败还留在集合里，会让启动扫描永远跳过这枚文件
+        val store = WavStore(tmp.root)
+        val short = File(tmp.root, "55555555-5555-4555-8555-555555555555.wav")
+        short.writeBytes(ByteArray(43))
+
+        assertThrows(IllegalStateException::class.java) { store.markOpen(short) }
+        assertFalse(store.isOpen(short))
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** 只取前 44 字节（头），长度另行断言。 */

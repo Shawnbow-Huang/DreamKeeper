@@ -91,4 +91,48 @@ interface DreamDao {
         ORDER BY dreamDate DESC, createdAt DESC
     """)
     suspend fun searchTerm(term: String): List<DreamEntity>
+
+    // ---- 启动扫描（Task 6）：只加查询/窄更新，不动实体，schema 一个字节都不变 ----
+
+    /**
+     * 所有带音频指针的行，供启动扫描和文件系统对账。
+     *
+     * **不过滤 `deletedAt`**：回收站里的梦也可能带着音频文件，文件不认识软删除；
+     * 扫描只负责「指针 ↔ 文件」的一致，删不删由用户决定。
+     */
+    @Query("SELECT * FROM dreams WHERE rawAudioPath IS NOT NULL")
+    suspend fun audioRows(): List<DreamEntity>
+
+    /** 扫描恢复草稿前的「按 id 不存在才插」判据。 */
+    @Query("SELECT EXISTS(SELECT 1 FROM dreams WHERE id = :id)")
+    suspend fun existsById(id: String): Boolean
+
+    /**
+     * 文件没了：清指针 + 标 FAILED，**不碰** `rawTranscript` 与 `updatedAt`。
+     *
+     * 不能走 `updateAudio`：那个方法会把 `transcriptStatus` 写成调用方给的值，
+     * 扫描这里恰好需要反方向（把可能残留的 OK 改回 FAILED）。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawAudioPath = NULL, rawAudioMs = NULL, transcriptStatus = 'FAILED'
+        WHERE id = :id
+    """)
+    suspend fun clearAudio(id: String)
+
+    /** 只改时长：不许碰 `transcriptStatus`（`updateAudio` 会把 FAILED 悄悄改回 OK）。 */
+    @Query("UPDATE dreams SET rawAudioMs = :rawAudioMs WHERE id = :id")
+    suspend fun setAudioMs(id: String, rawAudioMs: Long)
+
+    /**
+     * 行已存在时补写本次 take 的路径与时长（§0-4）。
+     *
+     * 与 [updateAudio] 的分工：不动 `transcriptStatus`，也不动 `updatedAt` 与文本列。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawAudioPath = :rawAudioPath, rawAudioMs = :rawAudioMs
+        WHERE id = :id
+    """)
+    suspend fun setAudio(id: String, rawAudioPath: String, rawAudioMs: Long)
 }

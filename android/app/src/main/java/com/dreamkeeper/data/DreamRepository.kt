@@ -6,14 +6,17 @@ import com.dreamkeeper.data.db.DreamEntity
 import com.dreamkeeper.data.db.DreamTagEntity
 import com.dreamkeeper.data.db.MediaAssetEntity
 import com.dreamkeeper.data.db.TagEntity
+import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.DreamCalendar
 import com.dreamkeeper.domain.MediaAsset
 import com.dreamkeeper.domain.Tag
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 
 /**
  * 领域模型与数据库之间的**唯一**翻译层。
@@ -167,6 +170,74 @@ class DreamRepository(
      */
     suspend fun updateAudio(id: String, rawAudioMs: Long, transcriptStatus: String) {
         dreams.updateAudio(id, rawAudioMs, transcriptStatus)
+    }
+
+    // ---- 音频兜底扫描（Task 6）：文件系统是「存在与时长」的唯一真源 ----
+
+    /** 所有带音频指针的行（含回收站）；扫描拿它和 `files/audio/` 下的 wav 对账。 */
+    suspend fun dreamsWithAudio(): List<Dream> = dreams.audioRows().map(::toDomain)
+
+    /** 扫描的一次性存在判据（`observe` 是 Flow，不适合逐文件判重）。 */
+    suspend fun hasDream(id: String): Boolean = dreams.existsById(id)
+
+    /** 只改音频时长：不碰 `transcriptStatus`，也不动 `updatedAt`。 */
+    suspend fun fixAudioMs(id: String, rawAudioMs: Long) {
+        dreams.setAudioMs(id, rawAudioMs)
+    }
+
+    /** 文件已丢：清指针并标 FAILED；文本、编辑标记、`updatedAt` 一律不动。 */
+    suspend fun markMissing(id: String) {
+        db.withTransaction { dreams.clearAudio(id) }
+    }
+
+    /**
+     * 行已存在时补写本次 take 的路径/时长（`RecordViewModel` 的「已存在」分支）。
+     *
+     * 不走 [save]：整行写会把扫描刚恢复的 `createdAt` 改成此刻，还会覆盖并发编辑。
+     */
+    suspend fun attachAudio(id: String, rawAudioPath: String, rawAudioMs: Long) {
+        dreams.setAudio(id, rawAudioPath, rawAudioMs)
+    }
+
+    /**
+     * 把一枚孤儿 WAV 恢复成草稿；**行已存在就返回 false**（重跑不许重置 `createdAt`）。
+     *
+     * 日期与时间取文件 mtime 而不是 [clock]：录音发生在过去，用「今天」会把跨夜的
+     * 录音记到错误的一天（§0-6）。事务内先查后插，避免同一 id 被并发扫描插两次。
+     */
+    suspend fun recoverDraft(
+        dreamId: String,
+        filePath: String,
+        rawAudioMs: Long,
+        lastModifiedMs: Long,
+    ): Boolean = db.withTransaction {
+        if (dreams.existsById(dreamId)) return@withTransaction false
+        val date = Instant.ofEpochMilli(lastModifiedMs).atZone(ZoneId.systemDefault()).toLocalDate()
+        dreams.upsert(
+            DreamEntity(
+                id = dreamId,
+                ownerId = "local",
+                dreamDate = date,
+                createdAt = lastModifiedMs,
+                title = null,
+                rawTranscript = "",
+                faithfulText = null,
+                novelText = null,
+                novelVersion = 0,
+                novelChangeLog = null,
+                mood = null,
+                isDraft = true,
+                deletedAt = null,
+                updatedAt = lastModifiedMs,
+                rawAudioPath = filePath,
+                rawAudioMs = rawAudioMs,
+                faithfulEditedByUser = false,
+                novelEditedByUser = false,
+                remoteId = null,
+                transcriptStatus = TranscriptStatus.PENDING,
+            ),
+        )
+        true
     }
 
     /**
