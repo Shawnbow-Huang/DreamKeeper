@@ -224,10 +224,16 @@ def verify_db(db_path, sidecar_path):
         user_version = conn.execute("PRAGMA user_version").fetchone()[0]
         if user_version != EXPECTED_USER_VERSION:
             raise InputError("user_version=%r != %d" % (user_version, EXPECTED_USER_VERSION))
+        # Android 的 SQLiteDatabase 会自动建 android_metadata，Room 另建 room_master_table。
+        # 计划「表数==9」指 8 张 @Entity 表 + room_master_table；android_metadata 与
+        # sqlite_ 内部表不计入（设备真库实测 10 张表 = 9 + android_metadata）。
         tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT IN ('android_metadata') AND name NOT LIKE 'sqlite_%' "
+            "ORDER BY name")]
         if len(tables) != EXPECTED_TABLES:
-            raise InputError("表数=%d != %d：%r" % (len(tables), EXPECTED_TABLES, tables))
+            raise InputError("表数=%d != %d（不含 android_metadata）：%r"
+                             % (len(tables), EXPECTED_TABLES, tables))
         for table in ("novel_versions", "llm_calls"):
             count = conn.execute("SELECT COUNT(*) FROM %s" % table).fetchone()[0]
             if count <= 0:
@@ -476,8 +482,24 @@ def check_pdf(checker, path, file_name_arg=None):
                        "/Contents 引用对象 %s 存在" % ref.decode(), "对象缺失")
     checker.expect(len(re.findall(rb"/MediaBox", data)) >= page_count, "每页有 MediaBox",
                    "MediaBox 少于页数")
-    checker.expect(re.search(rb"/BaseFont", data) is not None, "至少一处 /BaseFont（文本绘制锚）",
-                   "找不到 /BaseFont")
+    has_base_font = re.search(rb"/BaseFont", data) is not None
+    # 偏差候选（待 Lead 分配 D 号）：计划 §0.5 写「至少一处 /BaseFont」，但 Android
+    # android.graphics.pdf.PdfDocument 在设备上把 CJK 字形嵌入为 Type3 字体
+    # （/Type /Font + /Subtype /Type3 + /FontMatrix），不产生 /BaseFont。仍要求字体对象存在，
+    # 只是接受 Type3 作为文本绘制锚；其余 pdf 断言不变。
+    type3_count = len(re.findall(rb"/Subtype\s*/Type3", data))
+    has_type3_font = (type3_count >= 1
+                      and re.search(rb"/Type\s*/Font", data) is not None
+                      and re.search(rb"/FontMatrix", data) is not None)
+    if not checker.quiet:
+        if has_base_font:
+            print("[INFO] PDF 字体锚：/BaseFont 存在")
+        elif has_type3_font:
+            print("[INFO] PDF 字体锚：Type3 字体对象 %d 处（Android PdfDocument 嵌入 CJK 字形，无 /BaseFont；偏差候选待编号）"
+                  % type3_count)
+    checker.expect(has_base_font or has_type3_font,
+                   "至少一处字体绘制锚（/BaseFont 或 Type3 /Font+/FontMatrix）",
+                   "找不到 /BaseFont，也没有 Type3 字体对象")
     checker.expect(len(data) > 2048, "字节数 > 2KB", "只有 %d 字节" % len(data))
     checker.expect(b"/Encrypt" not in data, "无 /Encrypt", "PDF 被加密")
     if file_name_arg:
