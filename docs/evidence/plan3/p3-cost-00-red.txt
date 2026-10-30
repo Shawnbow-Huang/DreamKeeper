@@ -1,0 +1,81 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734 (Task 2 的 debug APK；red 阶段只跑单测，不重新打包)
+DEVICE_TIME=host-only 2026-10-30
+REPLAY=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.CostCalculatorTest" --tests "com.dreamkeeper.llm.PricingTest" --console=plain
+
+=========== TDD RED：实现前（Pricing.kt / CostCalculator.kt 全是 TODO 桩；资产已写但未提交） ===========
+COMMAND=./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.CostCalculatorTest" --tests "com.dreamkeeper.llm.PricingTest" --console=plain
+EXIT=1  22 tests completed, 21 failed
+（唯一通过的是「向量 usage 与 hit-miss-out 自洽」：它只读向量 JSON，不调用被测实现，红阶段本就该绿）
+
+CostCalculatorTest > 时区反事实-同一 Instant 按 UTC 判会翻转 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:74
+
+CostCalculatorTest > 生效日之前判 CardNotApplicable-不是谷价 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:149
+
+CostCalculatorTest > 零用量成本为 0 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:197
+
+CostCalculatorTest > 两倍差-整除组写等式-通用组合每股漂移不超过 1 微元 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:110
+
+CostCalculatorTest > 只在最后取整一次-4-65-微元得 5 而非 4 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:190
+
+CostCalculatorTest > 未知模型前置拒绝-绝不退化成 0 元 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:135
+
+CostCalculatorTest > 14 组向量的微元价与峰谷判定逐条相符 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:38
+
+CostCalculatorTest > isPeak 逐组与向量期望一致 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:61
+
+CostCalculatorTest > 默认时区改成纽约后仍按 Asia-Shanghai 判峰 FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:86
+
+CostCalculatorTest > 溢出抛 ArithmeticException-价格层归为 Overflow FAILED
+    kotlin.NotImplementedError at CostCalculatorTest.kt:171
+
+PricingTest > deepseek-v4-pro 峰谷价与计划常量逐字段一致 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:130
+
+PricingTest > deepseek-flash 峰谷价与计划常量逐字段一致 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:130
+
+PricingTest > 每个模型每个字段 offPeak 恰为 peak 之半 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:130
+
+PricingTest > AssetPriceCardSource 从 assets 读出与仓库文件相同的卡 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:99
+
+PricingTest > 资产解析出计划钉死的版本-生效日-来源 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:130
+
+PricingTest > offPeak 不是 peak 之半时拒绝加载 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:134
+
+PricingTest > PriceCardSource 接口可被测试替身替换 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:130
+
+PricingTest > cardSha256 是资产原始字节的哈希 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:130
+
+PricingTest > 不认识的 currency 拒绝加载 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:134
+
+PricingTest > 不认识的 unit 拒绝加载 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:134
+
+PricingTest > 不认识的 provenance 拒绝加载 FAILED
+    kotlin.NotImplementedError at PricingTest.kt:134
+
+22 tests completed, 21 failed
+
+> Task :app:testDebugUnitTest FAILED
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+--------- 原始输出结束（上面每一行 FAILED 都停在 kotlin.NotImplementedError） ----------
