@@ -524,12 +524,94 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 8 GenerationOrchestrator（含四级失败链与记账）
 
-- Files：`llm/GenerationOrchestrator.kt`、`llm/GenerationResult.kt`、`ui/detail/DetailViewModel.kt`（接生成）、
-  `ui/detail/NovelTab.kt`（改动清单 + caption）、`test/.../GenerationOrchestratorTest.kt`。
-- 要点：per-dream 单飞；每次尝试写一行 `llm_calls`（`attemptNo` 递增、`stage` 落 `generation_jobs`）；
-  T0–T3 状态机；T1 的网络错误不退档；`changeLog` 的 `quote` 校验与丢弃计数；成功后写 `novel_versions` + `dreams.novelText`。
-- Steps：先写 8 条（T0 一次过、T0 红→T1 过、T1 网络错→重试同档、T1 红→T2 等值、T2 不等值→T3、quote 全丢、
-  单飞拦截、成本行数==尝试次数），红 → 实现 → 绿；变异（把 T1 的「清单注入」去掉，必须红）。
+- Files：`llm/GenerationOrchestrator.kt`（新）、`llm/GenerationResult.kt`（新）、`data/GenerationStore.kt`（新）、
+  `data/db/DreamDao.kt`（只加一条窄更新，不动既有语句）、`llm/Pricing.kt`（只在 `PriceCard` 末尾加一个默认参数）、
+  `di/AppContainer.kt`（装配）、`ui/detail/DetailScreen.kt`（只给 `novelChangeCount` 加 JSON 分支）、
+  `ui/detail/DetailViewModel.kt`（接生成入口与 `GenerationPhase` 映射）、
+  `test/.../llm/GenerationOrchestratorTest.kt`（新）、`docs/evidence/plan3/p3-gen-*`。
+
+- §0.1 落点与事务（D314）：新增 `data/GenerationStore.kt`——`interface GenerationStore` + `class RoomGenerationStore(db)`：
+  `recordAttempts(List<LlmCallEntity>)`、`recordJob(GenerationJobEntity)`、`commitSuccess(dreamId, draft, changeLogJson, stage): Int`、
+  `updateStage(dreamId, stage)`、`callCount(dreamId)`。
+  `commitSuccess` 必须是**一个** `db.withTransaction { }`：`novelVersionDao().insertWithNextVersion(draft)` +
+  `dreamDao().updateNovelAfterGeneration(dreamId, text, changeLogJson, stage)`，返回新版本号。
+  `DreamDao` 新语句只改 `novelText/novelChangeLog/generationStage` 三列，**不写 `novelSelectedVersion`**（选择归 Task 9）。
+  Task 8 不许调用 `DreamRepository.save()`——`upsert` 是 `@Insert(onConflict = REPLACE)`，会覆盖转写（D202/§六）。
+
+- §0.2 可测缝（D315）：orchestrator 构造全注入——
+  `llm: LlmClient`、`prompts: PromptRenderer`、`store: GenerationStore`、`priceCard: PriceCard`、
+  `clock: () -> Long = System::currentTimeMillis`、`id: () -> String`、
+  `gate: (input: String, output: String, mode: GateMode) -> GateReport = FaithfulGates::check`、
+  `onProgress: (GenerationKind, GenerationStage, Int) -> Unit = { _, _, _ -> }`。
+  `interface PromptRenderer { fun render(promptId: String, slots: Map<String, String?>, markers: Set<PromptMarker>, payloads: Map<PromptMarker, String>): RenderedPrompt }`
+  + `PromptRepositoryAdapter(repo)` 放在 orchestrator 文件里（`PromptRepository` 本身是 concrete、会自校验指纹，不改成接口）。
+  `GenerationKind { FAITHFUL, NOVEL }`、`GenerationStage { T0, T1, T2, T3 }`、gate mode 直接复用 Task 7 的 `GateMode`。
+
+- §0.3 faithful 四级链：`rawTranscript` 为输入，逐档执行：
+  - **T0**：`temperature = 0.1`、`thinking = DISABLED`、不带标记。`gate(input, out, GateMode.FAITHFUL)` 全绿且 `out` 非空 → 提交，`stage = T0`。
+  - **T1**：`temperature = 0.0`，带 `PREVIOUS_VIOLATIONS` 载荷（由 T0 的 `GateReport` 生成：G1 引文至多 10 条、G4/G5 至多 6 条、其余 advisory 至多 12 条，每条一行）。
+    T1 的**网络错误不退档**：同档把重试预算用完即整次失败（`failure = Llm`），**不降 T2**。
+  - **T2**：`temperature = 0.0`，只带 `PUNCTUATION_ONLY`。判据只有一条：`FaithfulGates.isConservativeOk(input, output)`——
+    即 `contentChars(input) == contentChars(output)` **字符串逐字相等**，不是长度相等、也不是多重集相等（plan:517）。
+  - **T3**：不调模型，`faithfulText = rawTranscript`、`stage = T3`、`failure = null`（兜底成功，不是失败）。
+  每次进入下一档前先 `onProgress(kind, stage, runAttempt)`；同一档内的 HTTP 重试由 `DeepSeekClient` 负责，
+  `runAttempt` 是档序号（1..4），≠ HTTP `attemptNo`。
+
+- §0.4 生成闸门（D319）：进入前必须 `transcriptStatus == OK && rawTranscript.trim().isNotEmpty()`；
+  否则直接返回 `failure = Protocol(...)`，**不写任何 `llm_calls` / `generation_jobs` / `novel_versions`**，也不碰 `dreams`。
+  NOVEL 的基座统一为 `base = faithfulText?.takeIf { it.isNotBlank() } ?: rawTranscript`，与渲染、校验、UI 同源。
+
+- §0.5 小说化（NOVEL）：单次调用（`temperature = 0.1`、`thinking = DISABLED`、`jsonMode = true`），槽
+  `【原始转写】 = base`、`【理顺稿】 = base`、`【标签/选填】 = 标签拼接`；要求返回
+  `{"title":..., "body":..., "changeLog":[{"type","detail","quote"}], "mood":...}`。
+  `body` 非空才收；`changeLog` 的 `quote` 必须是 `base` 里 **4–40 个码点**（`codePointCount`）的精确子串，找不到就丢弃并计数；
+  全丢时存 `[]`（D318）。落库：`novelText = body`、`novelChangeLog = JSON 数组文本`、`novelVersion` 由事务自增。
+  `title`/`mood` 只进 `GenerationResult`，**不写 `dreams`**（现有列口径冲突，见 D315；落点归 Task 9）。
+
+- §0.6 记账（D316）：每次 HTTP 交换写**一行** `llm_calls`（`ChatResponse.attempts` 与传输错误逐条）。
+  成功行：`usageJson` 写 `{"prompt_tokens","completion_tokens","total_tokens","prompt_cache_hit_tokens","prompt_cache_miss_tokens"}`，
+  `promptCacheHitTokens/promptCacheMissTokens/completionTokens/reasoningTokens` 照抄 `Usage`，
+  `costMicroYuan = price(...).microYuan`、`formulaVersion = "cost-v1"`、`priceSnapshotJson = priceCard.rawJson`、
+  `httpStatus`、`requestId`、`attemptNo`、`latencyMs`、`createdAt = attempt.startedAtMs`、`isPeak` 按 `createdAt` 判定。
+  失败行：`usageJson = null`、四个 token 列 `null`、`costMicroYuan = 0`（列 NOT NULL）、`formulaVersion = ""`、
+  `error = kind.name`、`priceSnapshotJson` 仍写卡原文。**不允许只导成功行**。
+  为此 Task 10 必须同步改 `scripts/check-cost.py`：`error IS NOT NULL` 的行跳过 usage/价卡复算，只断言 `cost == 0 && usageJson IS NULL`；
+  summary 打 `failed=N`。Task 8 只负责把数据写成这样，不负责改脚本。
+
+- §0.7 价卡快照（D317）：`PriceCard` 末尾加 `val rawJson: String = ""`（默认值保证既有命名参数构造与 `PricingTest` 不破），
+  `parsePriceCardOrThrow` 返回处填入资产原文（`String(rawBytes, UTF_8)`，要能被 `check-cost.py` 读到六键，不是重新序列化）。
+
+- §0.8 结果与进度（D319）：`data class GenerationResult(kind, finalStage, text, version: Int?, changeLogKept: Int,
+  changeLogDropped: Int, attempts: Int, costMicroYuan: Long, failure: GenerationFailure?)`；
+  `GenerationFailure = Llm(kind: LlmException.Kind, message: String) | Gate(failed: Set<Gate>, detail: String) | Protocol(message: String)`。
+  T2/T3 成功时 `failure = null`（UI 只对 `failure != null` 显示失败）。`DetailViewModel` 把回调映射成
+  `GenerationPhase { Idle, Running(kind, attempt), Failed(kind, reason) }`，**不新增 orchestrator 全局单例**。
+
+- §0.9 单飞（D321）：`ConcurrentHashMap<String, Mutex>`，per-dream 锁必须包住「检查闸门 → 占位 → 启动」，
+  第二个并发调用立即返回 `failure = Protocol("busy")`（不发请求、不写行）。
+  `generationStage` 只在成功时写（D320）：失败只靠 `generation_jobs.error` 表达，因此启动时无需清扫遗留状态。
+
+- §0.10 `generation_jobs`：每档一行——成功写 `stage = 最终档`、`attemptNo = 该档 runAttempt`、`error = null`；
+  整次失败写 `stage = 失败所在档`、`error = failure` 描述；`createdAt = clock()`。保留历史，UI 取最新一行。
+
+- §0.11 Steps（先红后绿，8 条用例，仅 #1/#8 用真 Room + `@Config(sdk=[34])`，其余 fake `GenerationStore` + fake `LlmClient`）：
+  1. **T0 一次过**：gate 绿 → `commitSuccess` 调用一次、`stage = T0`、`llm_calls` 1 行、`generation_jobs` 1 行 `error = null`（真 Room）。
+  2. **T0 红 → T1 绿**：T0 输出把「三十」改「四十」（`[G1, G3]`）→ T1 输出干净 → 共 2 次请求、`stage = T1`，
+     且 T1 请求体含 `【上一版违规清单】` 与至少一条引文（断言标记载荷，不是断言开关）。
+  3. **T1 网络错同档重试**：fake `LlmClient` 第一次抛 `LlmException(NETWORK)`、第二次成功 → 仍 `stage = T1`（不降 T2），`attempts ≥ 2`。
+  4. **T1 红 → T2 等值**：T1 仍红 → T2 输出与输入 `contentChars` 逐字相等 → `stage = T2`。
+  5. **T2 不等值 → T3**：T2 输出多一个字符 → 整次落 T3、`faithfulText == rawTranscript`、模型总调用数 = 3、`failure == null`。
+  6. **quote 全丢**：novel 返回 3 条 quote 都不在 `base` 里 → `novelChangeLog == "[]"`、`dropped == 3`、`novelText` 仍落库、`version == 1`。
+  7. **单飞**：同一 `dreamId` 两次并发 generate → 第二次 `failure = Protocol("busy")`、`llm` 只被调用 1 次。
+  8. **记账**（真 Room）：构造 4 次 HTTP 交换（2 次 429、1 次传输错、1 次 200）→ `llm_calls` 行数 == 4、
+     失败行 `costMicroYuan == 0 && usageJson == null && error != null`、成功行 `costMicroYuan > 0 && usageJson != null`、
+     `generation_jobs` 行数 == 档数。
+  变异：删掉 T1 的 `PREVIOUS_VIOLATIONS` 注入 → 用例 2 必红；把 T2 判据换成 `contentChars(in).length == contentChars(out).length` → 用例 5 必红。
+  恢复后各复绿。
+
+- Expected：`com.dreamkeeper.llm.GenerationOrchestratorTest` 8/8；targeted 绿；变异至少 1 红、恢复后复绿；
+  全量 `33 类 / 334 例`（326 + 8）0 失败；证据 `p3-gen-00-red.txt`（8 failed）、`01-green.txt`、`02-mutation.txt`、`03-full.txt`，首三行按 README（host-only 例外）。
+  红线：不改既有列定义、不改既有 DAO 语句、不动 `ui` 布局（除 `novelChangeCount`）、不写 `novelSelectedVersion`。
 
 ### Task 9 对话改稿 + 多版本 + 选最终稿
 
@@ -655,6 +737,16 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D311 | T6-5：§0.1「fail fast」与 D285 的取舍落地为「先 `Log.w` 再抛 `IllegalStateException`，不写库」 | 两条要求不冲突：D285 要求漂移可观测（logcat），§0.1 要求启动即失败（抛异常）；两者串行执行，未回退成静默 |
 | D312 | T6-6：派工书「30 类 / 310 例」类数笔误，实际 31 类 / 310 例（新增 1 个测试类） | 实测 XML `classes=31 tests=310`；新增测试类必然 +1 类，310 = 301 + 9 |
 | D313 | T6-7：Sync 接线试错未留在代码里——`addGeneratedSourceDirectory` 编译错（`Inapplicable candidate(s): var destinationDir: File`）、Provider 入 `assets.srcDir` 被 AGP 拒（`You cannot add Provider instances to the Android SourceSet API.`），最终 `File` + `preBuild` 依赖 | 实测报错原文见 `task-6-report.md` 与 `android/app/build.gradle.kts` 注释；两版方案都不可行，留注释避免后来者重踩 |
+
+| D314 | T8-1：事务落点改为新增 `data/GenerationStore.kt`（`interface` + `RoomGenerationStore`），`commitSuccess` 用 `db.withTransaction` 包 `insertWithNextVersion` + 窄 UPDATE；`DreamDao` 新语句只改 `novelText/novelChangeLog/generationStage`，不写 `novelSelectedVersion` | 仓库已在 `DreamRepository.kt:80/105/260`、`SeedData.kt:48` 使用 room-ktx `withTransaction`，不需新依赖；`DreamRepository.save()` 走 `@Insert(onConflict = REPLACE)`（`DreamDao.kt:12-13`），Task 8 复用它会把转写覆盖成旧值（与 D202 同类风险） |
+| D315 | T8-2：可测缝——新增 `GenerationStore` 接口；orchestrator 加 `PromptRenderer` 适配器、gate 函数参数、`clock`/`id` 注入；`title`/`mood` 不写 `dreams`，只进 `GenerationResult` | `PromptRepository` 是 concrete 且自校验指纹，改接口会牵连 Task 6 的 10 条用例；`dreams` 无 mood 列，设计 §4「三字段一次交回」与现有列口径冲突，落点归 Task 9 |
+| D316 | T8-3：`llm_calls` 失败行口径：`costMicroYuan=0`、`formulaVersion=""`、`usageJson=null`、四个 token 列 `null`、`error=kind.name`、`priceSnapshotJson` 照写卡原文；Task 10 必须同步改 `check-cost.py` 跳过 `error IS NOT NULL` 行 | `2.json` 里 `costMicroYuan`/`formulaVersion` 是 NOT NULL，plan §4 的「未知 model 写 cost=NULL」无法落地；设计「绝不静默丢弃失败」要求每尝试一行；只导成功行会漏账 |
+| D317 | T8-4：`PriceCard` 末尾加 `val rawJson: String = ""` 存价卡资产原文 | `check-cost.py:127-167` 需要六键原文复算，重新序列化会有键序/数字格式差；默认值保证既有命名参数构造与 `PricingTest.kt:101` 不破 |
+| D318 | T8-5：`novelChangeLog` 新口径存 JSON 数组 `[{"type","detail","quote"}]`；全丢存 `[]`；`novelChangeCount` 加 JSON 分支并保留旧文本 regex 回退 | `DetailScreen.kt:105-108` 现在用正则从「补写 N 处」抽数，种子里是旧文本格式（`SeedData.kt:112-117`）；两格式并存必须靠前缀分支，否则种子行的「补写 2 处」会消失 |
+| D319 | T8-6：生成闸门 = `transcriptStatus == OK && rawTranscript.trim().isNotEmpty()`；T3 兜底 `failure = null`（不算失败） | Plan 2 的 PENDING/FAILED 说明转写未定稿；T3 是设计里的保守兜底，记成失败会让 UI 把「已退回原始记录」显示成错误 |
+| D320 | T8-7：`generationStage` 只在成功时写，失败只靠 `generation_jobs.error`；启动不清扫遗留状态 | 失败时若也写 `generationStage`，重启后 UI 无法区分「正在生成」与「上次失败」；`generation_jobs` 已带 `stage/error/createdAt` |
+| D321 | T8-8：单飞用 per-dream `Mutex`，锁包住「检查闸门 → 占位 → 启动」；并发第二个调用返回 `Protocol("busy")`，不发请求不写行 | 先检查后占位会双开；Busy 不写 `llm_calls` 是为守住「行数 == 尝试数」的 Task 10 断言 |
+| D322 | T8-9：Task 8 测试口径 8 例，仅 #1/#8 需真 Room + Robolectric，其余 fake；全量期望 33 类 / 334 例 | 与 Task 5「能 fake 就 fake」一致；真 Room 只用于原子性与记账两处不可替代的断言 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
