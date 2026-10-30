@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 18:30 —— **Plan 2 进行中 6/9：Task 1–6 已验收（219 用例全绿）；Task 6 五态兜底实测通过；Task 7 本地转写已派工（三位专家 §0 已落）**
+> 最后更新：2026-10-30 19:20 —— **Plan 2 进行中 7/9：Task 1–7 已验收（237 用例全绿）；Task 7 本机探测=Unavailable，33+ 正路径标未验证；Task 8 详情页播放已派工**
 
 ## 一、当前在做
 
@@ -32,7 +32,7 @@
 
 **现在装到手机上能干什么**：翻月历看哪天有梦（红点）、点日期看当天的梦、切「全部」看时间轴/卡片、全文搜索、点进详情看四 tab（原样 / 小说化 / 标签 / 素材占位）、管标签（改名/合并/删除）。
 
-## 二·五、Plan 2（录音与转写）进行中 6/9
+## 二·五、Plan 2（录音与转写）进行中 7/9
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -49,6 +49,7 @@
 任务书：[plans/2026-10-30-audio-and-transcription.md](superpowers/plans/2026-10-30-audio-and-transcription.md) · 证据约定：[evidence/plan2/README.md](evidence/plan2/README.md)
 
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
+| 7 本地转写（系统识别器） | ✅ 完成（有未验证项） | `fe6e94f` + `5d1493c`：`SttEngine`/`SystemSttEngine`/`TranscriptWriter`；探测四档 + `mapSupport` 纯函数；CAS 窄更新 + 失败态第二条 CAS；写回投 `transcriptionScope`；详情页三分支 + 手动补字。真机：四张语言表全空 → `Unavailable(本机没有中文离线识别)` → 写回 `FAILED` rows=1；手动补字后 `OK` 且 `updatedAt` 未变。**33+ 文件转写正路径（pipe/分段/Ok）设备未验证**（本机无中文离线包），负对照 NOT_EXECUTED，均如实标注。Lead 修 `FollowUpViewModel` 把 FAILED 盖回 PENDING 的真 bug（D198，含变异验证），全量 237 用例 |
 
 ## 三、你提的需求（已收下，落点如下）
 
