@@ -1,0 +1,14 @@
+APK_SHA256=3286734d1ed3e23c8c7d6821f29df0a13d66f0876a8c51ce5c87b4bb295469f1
+DEVICE_TIME=Fri Oct 30 20:37:00     2026
+REPLAY=cd android && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./gradlew :app:testDebugUnitTest --tests 'com.dreamkeeper.data.security.ApiKeyStoreTest'
+NOTE=变异 2（load 去掉 try/catch，坏 base64 分支直接 throw），APK_SHA256 为改动前已装 debug 包；该变异代码未构建 APK
+--- gradle ---
+ApiKeyStoreTest > packed value with iv only is treated as not configured FAILED
+ApiKeyStoreTest > bad base64 is treated as not configured and residue is cleared FAILED
+ApiKeyStoreTest > cipher AEADBadTag is treated as not configured and residue is cleared FAILED
+11 tests completed, 3 failed
+BUILD FAILED in 6s
+--- failure messages (XML) ---
+<failure message="java.lang.IllegalArgumentException: 只有 IV 没有密文"
+<failure message="java.lang.IllegalArgumentException: 坏 base64 / 缺 IV"
+<failure message="javax.crypto.AEADBadTagException: bad tag"

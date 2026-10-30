@@ -1,0 +1,10 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734
+DEVICE_TIME=Fri Oct 30 20:46:51 CST 2026
+REPLAY=adb logcat -c; adb shell 'log -t QAPROBE "$(cat /data/local/tmp/dk_key.txt)"'; adb logcat -d
+PURPOSE=正对照：证明「logcat 里 grep 不到 Key」不是因为 Key 写不进去
+NEEDLE_GREP_COUNT=1
+
+--- 命中行（第 2 行即 QAPROBE，第 1 行是 adbd 记录的命令本身，命令里只有 $(cat ...)）---
+10-30 20:46:51.844   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:log -t QAPROBE "$(cat /data/local/tmp/dk_key.txt)"'
+10-30 20:46:51.857 29769 29769 I QAPROBE : sk-test-needle-8c1f4a7b2e9d3056
+10-30 20:46:52.982   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb:export ANDROID_LOG_TAGS=''; exec logcat '-d''

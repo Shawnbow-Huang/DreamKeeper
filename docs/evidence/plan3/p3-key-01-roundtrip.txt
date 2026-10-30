@@ -1,0 +1,67 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734
+DEVICE_TIME=Fri Oct 30 20:46 CST 2026
+REPLAY=adb shell input tap 381 711; adb shell input tap 540 542; adb shell 'input text "$(cat /data/local/tmp/dk_key.txt)"'; adb shell input tap 184 711; adb shell am force-stop com.dreamkeeper; adb shell am start -W -n com.dreamkeeper/.MainActivity; adb shell input tap 1006 126; adb shell uiautomator dump
+NEEDLE_SHA256=a6c1bcaf6f654f12253e33389dce89e0ccb04c23091249ca64326ae4b7baffbc
+NEEDLE_NOTE=测试用假 Key 不进证据文本，只留 sha256；密文实物见 p3-key-02-prefs.txt
+WHAT=UI 真路径（不依赖 debug intent）：清除 -> 输入 -> 保存 -> force-stop -> 重进设置页
+
+[1] 未配置（点「清除」后）
+
+text="‹"
+text="设置"
+text="DeepSeek Key"
+text="API Key"
+text="还没配置"
+text="粘贴 API Key"
+text="保存"
+text="清除"
+text="Key 只保存在本机安全存储里，不会写进日志或备份。"
+text="说明"
+text="思考模式开着时，服务端会忽略 temperature。"
+
+[2] 编辑中（输入后，PasswordVisualTransformation：dump 里只有圆点，没有明文）
+
+text="‹"
+text="设置"
+text="DeepSeek Key"
+text="API Key"
+text="编辑中"
+text="•••••••••••••••••••••••••••••••"
+text="保存"
+text="清除"
+text="Key 只保存在本机安全存储里，不会写进日志或备份。"
+text="说明"
+text="思考模式开着时，服务端会忽略 temperature。"
+
+[3] 保存后（同一 session）
+
+text="‹"
+text="设置"
+text="DeepSeek Key"
+text="API Key"
+text="已保存（还没验证）"
+text="sk-…3056"
+text="粘贴 API Key"
+text="保存"
+text="清除"
+text="Key 只保存在本机安全存储里，不会写进日志或备份。"
+text="说明"
+text="思考模式开着时，服务端会忽略 temperature。"
+
+[4] force-stop 后冷启动再进设置页（同一 Key 从 Keystore 解回来）
+
+text="‹"
+text="设置"
+text="DeepSeek Key"
+text="API Key"
+text="已保存（还没验证）"
+text="sk-…3056"
+text="粘贴 API Key"
+text="保存"
+text="清除"
+text="Key 只保存在本机安全存储里，不会写进日志或备份。"
+text="说明"
+text="思考模式开着时，服务端会忽略 temperature。"
+
+RESULT=PASS 四态与设计一致；[4] 冷启动后仍显示 sk-…3056，说明 load() 解密回环成立
+PREFS_AFTER=1 packed entry, needle=0 in prefs

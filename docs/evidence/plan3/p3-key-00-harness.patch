@@ -1,0 +1,46 @@
+diff --git a/android/app/src/main/java/com/dreamkeeper/MainActivity.kt b/android/app/src/main/java/com/dreamkeeper/MainActivity.kt
+index f1fcacf..3857ca0 100644
+--- a/android/app/src/main/java/com/dreamkeeper/MainActivity.kt
++++ b/android/app/src/main/java/com/dreamkeeper/MainActivity.kt
+@@ -73,6 +73,8 @@ class MainActivity : ComponentActivity() {
+         } else {
+             null
+         }
++        // Task 2 的 debug 写入口（brief §0.11）：给 prefs/logcat 取实物证据用，release 里不存在。
++        applyDebugKeyIntent(intent)
+ 
+         // Activity 只做一件事：把根界面接进主题
+         setContent {
+@@ -114,6 +118,7 @@ class MainActivity : ComponentActivity() {
+     override fun onNewIntent(intent: Intent) {
+         super.onNewIntent(intent)
+         setIntent(intent)
++        applyDebugKeyIntent(intent)
+         val entry = intent
+             .getStringExtra(RecordingService.EXTRA_ENTRY)
+             ?.let { RecordViewModel.parseEntry(it) }
+@@ -143,6 +148,24 @@ class MainActivity : ComponentActivity() {
+         }
+     }
+ 
++    /**
++     * Task 2 的 debug 写入口（brief §0.11）：
++     * `adb shell am start -n com.dreamkeeper/.MainActivity --es dk_debug_save_key <key>`
++     * 走容器真实保存，`--ez dk_debug_clear_key true` 清除——只为拿 prefs/logcat 实物证据。
++     * **只在 DEBUG 包里生效**；release 用 `grep -c dk_debug_save_key app-release-unsigned.apk` = 0 把关。
++     *
++     * 同步执行：Keystore 加密 + `commit()` 都是毫秒级，且取证脚本随后就会读 prefs，
++     * 放到异步线程反而要猜何时写完。
++     */
++    private fun applyDebugKeyIntent(intent: Intent?) {
++        if (!BuildConfig.DEBUG) return
++        val container = (application as DreamKeeperApp).container
++        intent?.getStringExtra("dk_debug_save_key")?.let { container.apiKeyStore.save(it) }
++        if (intent?.getBooleanExtra("dk_debug_clear_key", false) == true) {
++            container.apiKeyStore.clear()
++        }
++    }
++
+     private fun hasAskedMicOnce(): Boolean =
+         getSharedPreferences(RECORD_PREFS, MODE_PRIVATE).getBoolean(KEY_MIC_ASKED, false)
+ 

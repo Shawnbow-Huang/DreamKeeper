@@ -1,0 +1,10 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734
+DEVICE_TIME=Fri Oct 30 20:47 CST 2026
+REPLAY=cd D:\DreamKeeper && aapt2 dump xmltree --file AndroidManifest.xml android/app/build/outputs/apk/debug/app-debug.apk | grep allowBackup; adb shell dumpsys package com.dreamkeeper | grep ALLOW_BACKUP
+--- aapt2（build-tools/36.0.0，cwd=D:\DreamKeeper）---
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false
+
+--- dumpsys package ---
+ALLOW_BACKUP 命中=0（该 flag 只会在 true 时出现）
+
+RESULT=PASS allowBackup=false，备份不会带走 settings.xml；manifest 本任务未改（git status 里没有它）

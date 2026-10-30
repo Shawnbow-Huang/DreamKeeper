@@ -1,0 +1,111 @@
+APK_SHA256=3286734d1ed3e23c8c7d6821f29df0a13d66f0876a8c51ce5c87b4bb295469f1 (改动前的 debug APK，red 阶段只跑单测不重新打包)
+DEVICE_TIME=Fri Oct 30 20:35:01 CST 2026
+REPLAY=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.security.ApiKeyStoreTest" --console=plain
+
+=========== TDD RED：实现前（KeystoreApiKeyStore 三个方法都是 TODO） ===========
+COMMAND=./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.security.ApiKeyStoreTest" --console=plain
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:packageDebugUnitTestForUnitTest UP-TO-DATE
+> Task :app:mergeDebugUnitTestManifest UP-TO-DATE
+> Task :app:processDebugUnitTestManifest UP-TO-DATE
+> Task :app:kspDebugKotlin
+> Task :app:compileDebugKotlin
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:kspDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:generateDebugUnitTestConfig UP-TO-DATE
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+> Task :app:testDebugUnitTest
+
+ApiKeyStoreTest > packed value with iv only is treated as not configured FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:97
+
+ApiKeyStoreTest > bad base64 is treated as not configured and residue is cleared FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:77
+
+ApiKeyStoreTest > logger really receives messages and none contain the key FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:147
+
+ApiKeyStoreTest > masked short key hides the tail FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:140
+
+ApiKeyStoreTest > masked key keeps sk- prefix and last four chars FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:132
+
+ApiKeyStoreTest > clear removes the only pref entry FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:57
+
+ApiKeyStoreTest > cipher AEADBadTag is treated as not configured and residue is cleared FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:84
+
+ApiKeyStoreTest > prefs hold ciphertext and never the plaintext in one snapshot FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:104
+
+ApiKeyStoreTest > save overwrites the previous ciphertext with a fresh iv FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:118
+
+ApiKeyStoreTest > save then load round-trips and trims FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:49
+
+ApiKeyStoreTest > blank save is equivalent to clear FAILED
+    kotlin.NotImplementedError at ApiKeyStoreTest.kt:67
+
+11 tests completed, 11 failed
+
+> Task :app:testDebugUnitTest FAILED
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testDebugUnitTest'.
+> There were failing tests. See the report at: file:///D:/DreamKeeper/android/app/build/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 10s
+34 actionable tasks: 9 executed, 25 up-to-date
+
+EXIT_CODE=1

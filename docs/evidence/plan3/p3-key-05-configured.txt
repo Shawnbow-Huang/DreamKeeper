@@ -1,0 +1,23 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734
+DEVICE_TIME=Fri Oct 30 20:48 CST 2026
+REPLAY=adb shell am force-stop com.dreamkeeper; adb shell am start -W -n com.dreamkeeper/.MainActivity; adb shell input tap 1006 126; powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-key-05-configured.png
+PNG_SHA256=EE9619C3224DAE8C2F247FDD33C1C301D2AE86927939D95E17449F6E2FFC3BCC
+PNG=dims 1080x2400
+NEAR_WHITE=OK nearWhite=0 ratio=0.0000%（-TopOffset 100 -MaxRatio 0）
+NEEDLE_IN_DUMP=0
+
+--- 冷启动后设置页 UI dump 文本 ---
+text="‹"
+text="设置"
+text="DeepSeek Key"
+text="API Key"
+text="已保存（还没验证）"
+text="sk-…3056"
+text="粘贴 API Key"
+text="保存"
+text="清除"
+text="Key 只保存在本机安全存储里，不会写进日志或备份。"
+text="说明"
+text="思考模式开着时，服务端会忽略 temperature。"
+
+RESULT=PASS force-stop 重进后 keyConfigured=true（已保存（还没验证）+ sk-…3056），页面无明文

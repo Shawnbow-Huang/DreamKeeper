@@ -1,0 +1,23 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734
+DEVICE_TIME=Fri Oct 30 20:46 CST 2026
+REPLAY=adb shell run-as com.dreamkeeper cat //data/data/com.dreamkeeper/shared_prefs/settings.xml; adb shell run-as com.dreamkeeper grep -rl <needle> //data/data/com.dreamkeeper; adb shell run-as com.dreamkeeper grep -rl CARDS //data/data/com.dreamkeeper
+WHAT=同一份 settings.xml 里同时满足「有密文」「无明文」；目录扫描带 CARDS 正对照
+
+--- cat //data/data/com.dreamkeeper/shared_prefs/settings.xml ---
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="api_key_packed">JqqQOMvRO9TcfTnkqEkQu+q2lfSeqo9zOjLxiccrxzXjqeOS9hdrAYT/FttWCFFMO7n4nBKOIHU2vgc=</string>
+</map>
+
+--- 同一个文件的 greps ---
+api_key_packed=1
+<string 子项=1
+needle(明文)=0
+packed 长度=80 字符 = 12B IV + 31B 密文 + 16B tag
+
+--- 全目录扫描（run-as 越过沙箱读权限）---
+needle 文件数=0
+CARDS 命中=//data/data/com.dreamkeeper/shared_prefs/layout_prefs.xml
+
+RESULT=PASS 单键 api_key_packed、值为密文、无明文；CARDS 命中证明扫描确实能看见 prefs 字符串（正对照）
+NOTES=12B IV + 31B 密文 + 16B tag = 59B -> base64 80 字符；明文 Key 没有落盘文件，Keystore 别名在 /data/misc/keystore（不可 run-as 读）

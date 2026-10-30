@@ -1,0 +1,14 @@
+APK_SHA256=3286734d1ed3e23c8c7d6821f29df0a13d66f0876a8c51ce5c87b4bb295469f1
+DEVICE_TIME=Fri Oct 30 20:36:40     2026
+REPLAY=cd android && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./gradlew :app:testDebugUnitTest --tests 'com.dreamkeeper.data.security.ApiKeyStoreTest'
+NOTE=变异 1（save 明文写 prefs），APK_SHA256 为改动前已装 debug 包；该变异代码未构建 APK
+--- gradle ---
+ApiKeyStoreTest > prefs hold ciphertext and never the plaintext in one snapshot FAILED
+ApiKeyStoreTest > save overwrites the previous ciphertext with a fresh iv FAILED
+ApiKeyStoreTest > save then load round-trips and trims FAILED
+11 tests completed, 3 failed
+BUILD FAILED in 6s
+--- failure messages (XML) ---
+<failure message="java.lang.AssertionError: prefs 里不许出现明文 Key"
+<failure message="java.lang.AssertionError: expected:&lt;sk-second-222222222222222222&gt; but was:&lt;null&gt;"
+<failure message="java.lang.AssertionError: expected:&lt;sk-test-needle-8c1f4a7b2e9d3056&gt; but was:&lt;null&gt;"

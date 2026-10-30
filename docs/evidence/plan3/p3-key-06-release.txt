@@ -1,0 +1,26 @@
+APK_SHA256=ad2a6fb4f577e6b954ce05a0d6f97a2689e84662865640f975b2fdb3ad5fc734
+DEVICE_TIME=Fri Oct 30 20:47 CST 2026
+REPLAY=./gradlew :app:assembleRelease; grep -c dk_debug_save_key app-release-unsigned.apk; unzip -p app-release-unsigned.apk classes.dex | grep -c dk_debug_save_key
+--- assembleRelease ---
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2s
+50 actionable tasks: 1 executed, 49 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+
+--- release APK ---
+path=android/app/build/outputs/apk/release/app-release-unsigned.apk size=9328259 sha256=9aa8a8a998aae8986e1b76d6c6c01997654f35ed4cc47955a4f90b9c06898073
+
+--- APK 级 grep（弱证据：zip 压缩后恒 0，仅按要求留档）---
+save=0 clear=0
+
+--- dex 级（强证据）：release 两个 dex 全 0 ---
+classes.dex save=0 clear=0
+classes2.dex save=0 clear=0
+
+--- debug 正对照（同一条 grep 在 debug 包里命中 classes8.dex）---
+classes8.dex save=1 clear=1
+
+RESULT=PASS release dex 里 dk_debug_save_key/dk_debug_clear_key 都是 0，debug 包同一 grep 命中 -> if (BuildConfig.DEBUG) 分支在 release 被编译消除
+NOTES=release APK 构建于 20:41，晚于所有 src/*.kt 的最后修改（find -newer 计数 0）
