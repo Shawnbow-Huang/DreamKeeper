@@ -546,6 +546,62 @@ class AudioScan(
 
 ## Task 7：SttEngine（可用性探测 + 一次性转写 + 窄更新写回）
 
+### 0. 派工前修订（Lead 依三位专家预审裁定，覆盖下文任何冲突）
+
+0.1 **接口改成 suspend 探测**：`suspend fun availability(): SttAvailability`，`SttAvailability` 分四档
+`Available` / `AvailableButNoFileInput` / `NeedsDownload(locale)` / `Unavailable(reason)`。
+**`Available` 只表示「API 33+ 文件转写可用」**。探测顺序：API<31 → `Unavailable("系统版本过低")` →
+`isOnDeviceRecognitionAvailable()` 为 false → `Unavailable` → `createOnDeviceSpeechRecognizer` 包 try/catch（失败即 `Unavailable`）
+→ API 33+ `checkRecognitionSupport(intent, mainExecutor, cb)` 读四张语言表：`installedOnDeviceLanguages` 含 zh → `Available`；
+`supportedOnDeviceLanguages` 或 `pendingOnDeviceLanguages` 含 zh → `NeedsDownload("zh-CN")`；
+**只有 `onlineLanguages` 命中 → `Unavailable("只有在线识别")`，绝不许报 Available**。探测结果按进程缓存一次，不许每次转写都探。
+
+0.2 **不许 seek 跳过 44 字节头**（`ParcelFileDescriptor` 动的是共享 offset，会踩成后半段）：一律
+`ParcelFileDescriptor.createPipe()`，IO 线程把 `[44, EOF)` 拷进写端后**关闭写端**（会话只在音频关闭时结束）。
+管道方案失败时的兜底：先复制成 `<id>.pcm` 再传其 PFD。
+
+0.3 **分段**：`rawAudioMs` ≤ 45 s 单段；否则按 30–45 s 切段，逐段 pipe→识别→拼接；每段超时 `max(60_000, 2 * 段长ms)`。
+若用 `EXTRA_SEGMENTED_SESSION`，它是**字符串**、值取 `RecognizerIntent.EXTRA_AUDIO_SOURCE`，结果从 `onSegmentResults` 累积、
+`onEndOfSegmentedSession` 收尾；只接 `onResults` 会漏段。
+
+0.4 必须显式 `EXTRA_LANGUAGE = "zh-CN"`、`EXTRA_PREFER_OFFLINE = true`。
+
+0.5 **`Ok` 的判定**：终态文本 `trim()` 非空且至少含一个汉字或字母，否则一律 `Failed`。
+全零输入（本机模拟器）下出现非空 `Ok` 直接判为伪造，见 0.12。
+
+0.6 **与补录并发互斥**：转写开始记 `WavState.dataSize` 与 `rawTranscript` 快照；写回前重查
+`audioStore.state(file)`，`placeholder == true` 或 `isOpen(file)` 或 `dataSize` 已变 → **丢弃结果**、状态保持 `PENDING`。
+per-dreamId 单飞（`Mutex` 或 in-flight 集合）。
+
+0.7 **写回用 CAS 窄更新**，返回受影响行数：
+`UPDATE dreams SET rawTranscript = COALESCE(:text, rawTranscript), transcriptStatus = :status WHERE id = :id AND rawAudioMs = :expectedMs AND TRIM(rawTranscript) = ''`
+0 行 = 让位（不改状态、只记日志）。**不许写 `updatedAt`**（`DreamDao.kt` 既有口径：补录与转写都不算用户编辑）。
+
+0.8 **不加列、不迁移**：`rawTranscript` 本轮不做 edited-by-user 标记；`TRIM(rawTranscript) = ''` 就是保守闸门。
+
+0.9 `domain/Dream.kt` 的 `transcriptStatus: String = "OK"` 改为 `"PENDING"`（默认值伪造成功，必须改）。
+
+0.10 **触发与 scope**：`RecordingService` 收尾时把转写任务投到 `AppContainer.transcriptionScope`
+（`DreamKeeperApp.appScope` 现为 private，暴露为 `container.transcriptionScope`，`SupervisorJob + Dispatchers.IO`）。
+`SpeechRecognizer` 必须在**有 Looper 的线程**（`Dispatchers.Main.immediate`）创建、调用、`destroy()`；
+进程被杀就留 `PENDING`，这是诚实结果。
+
+0.11 **UI 必修**（Task 7 Files 必须含 `ui/detail/DetailScreen.kt`）：tab0 三分支——`OK` 才当正文；
+`PENDING` 显示「正在转写…」；`FAILED` 显示一句原因 + 「手动补字」入口（走同一条窄更新）。任何分支都不许清空已有原文。
+
+0.12 **证据纪律**：每份 stt 证据首行写死「绑定的识别服务 = 包名/服务名 + uid」（`settings get secure voice_recognition_service` + `dumpsys`）；
+`com.dreamkeeper` 无 INTERNET **不构成**「音频没出机」（识别跑在 `com.google.android.tts`，该包有 INTERNET）；
+「真的跑到了」需三件缺一不可：app 侧 trace（进出 `transcribe` + 写入 PFD 的字节数 == `fileBytes - 44` + 回调码 + elapsedMs）、
+同一时间窗识别器 logcat（带 pid）、坏文件负对照（识别器日志必须为空）；「不依赖网络」需断网对照或 netstats per-uid 差分，否则一律写「未验证」。
+
+0.13 **本机预期**：模拟器输入全零（启动未加 `-allow-host-audio`），最多得到 `Failed(ERROR_NO_MATCH/ERROR_SPEECH_TIMEOUT)` 或空文本。
+若探测结论是 `Unavailable`，Task 7 只交「能失败、不伪造」并把 33+ 文件转写路径标「未验证」，不许写成已通过。
+
+0.14 **硬约束**：不改 `data/db/DreamEntity.kt`、`android/app/schemas/**`、`android/app/build.gradle.kts`、`android/gradle/**`。
+实现者报告里的偏差自己编号 `T7-1…T7-n`，由 Lead 记账时映射成 D 号。
+
+
+
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/stt/SttEngine.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/stt/SystemSttEngine.kt`
@@ -763,6 +819,13 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D186 | 四种状态若只靠手改 DB/文件造出来，无法区分「App 自己发现的」与「人摆出来的」 | 每态证据强制一行 `pre_state_by:` + 造数脚本入库；干净态用「前后 sha256 + mtime 不变」证 `Noop`，不靠日志自证 | 计划 Task 6 §0 第 13 条 |
 | D187 | 拉 WAV 与查库的取证方法会自己骗自己：PS 重定向毁二进制、边跑边 cat 是撕裂读、拿 App 写的 ms 当判据 | 拉文件必须 `cmd /c` + 设备/宿主 sha256 逐字符比对；查库先 force-stop 再导出、宿主 python 只读打开；交叉表输出 `(bytes-44)//32 | rawAudioMs | diff`，`diff != 0` 即红 | 计划 Task 6 §0 第 14 条 |
 | D188 | 要把「恢复的草稿能看能播、权限路径 A 整链、100+ 文件扫描耗时、多次重启幂等」这些端到端项塞进本任务，会让证据变成截图堆 | 这些挪给 Task 9；本任务只留四态 + 第 5 态矩阵、变异验证、clean 态字节不变 | 计划 Task 6 §0 第 16 条 |
+| D189 | Task 6 实现者要「只 Robolectric 下跑扫描」需改 `build.gradle.kts` 的 `BuildConfig` 门闩；禁改清单禁止改 gradle | 改运行期特征识别（VM 名等）决定是否跑扫描，不动构建文件 | 计划 Task 6 第 8 步；219 用例全绿，扫描测试在 JVM 上真跑 |
+| D190 | 扫描恢复出的草稿若一律发 `savedDreamId`，会破坏 D148 与「只有亲历的 take 才跳追问」 | 只在本 VM 亲历该 take 时才发 `savedDreamId`；恢复草稿只入库、不进追问页 | 计划 Task 6 §0-4；`RecordViewModelTakeRecoveryTest` 覆盖 |
+| D191 | 原 Files 只列 `AudioScanTest`，但恢复分支需 VM 级验证 | 新增 `test/.../ui/record/RecordViewModelTakeRecoveryTest.kt`（3 条） | 计划 Task 6 Files 清单偏窄 |
+| D192 | `ffmpeg -v warning` 对**任何**合法 mono PCM WAV 都打一行 `Guessed Channel Layout: mono`（WAV 头没有 channel layout），原判据「stderr 必须为空」会把绿样本判红 | 校验脚本精确放行这一行（`BENIGN_STDERR` 正则），其余 stderr 仍判红；实测 before 4 行红、after 仅 1 行绿 | 计划 Task 6 §0-11；`p2-scan-01/02-validate.txt` 逐行标注 `(allowed: benign mono layout notice)` |
+| D193 | Task 6 需「只改音频指针」与「读音频相关行」两个动作，既有 DAO 方法不够 | `DreamDao` 加 `setAudio`，`DreamRepository` 加对应读方法（都不碰 `rawTranscript`/`updatedAt`） | 计划 Task 6 Files；schema 零变更（`git diff --exit-code -- android/app/schemas` = 0） |
+| D194 | 状态③（有行无文件）若用干净行做前置，证据会「自己证明自己」 | 先用状态②恢复出的草稿行做前置，再删文件观察 `markMissing` | 计划 Task 6 §0-7；`p2-scan-03-db.txt` / `p2-scan-06-orphan-before/after.txt` |
+| D195 | 计划只规定四态各一张图，实际恢复出的草稿在首页与当日页都可见 | 额外补 `p2-scan-07-home.png` / `p2-scan-07-day.png` / `p2-scan-07-ui.txt` | 计划 Task 6 §0-12 证据清单 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
