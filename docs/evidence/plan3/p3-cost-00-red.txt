@@ -79,3 +79,33 @@ PricingTest > 不认识的 provenance 拒绝加载 FAILED
 FAILURE: Build failed with an exception.
 
 --------- 原始输出结束（上面每一行 FAILED 都停在 kotlin.NotImplementedError） ----------
+
+========== 咬合验证（mutation bite）：向量 expect_micro +1 必须红（2026-10-30 host） ==========
+
+改动（只改证据向量，未动实现）:
+  docs/evidence/plan3/p3-cost-01-vectors.json   peak-01-0100Z  "expect_micro": 5 -> 6
+  突变后 sha256 = a38099de4409149b84c3f9f41720d6439f847482df6e9e2b9c99eb54d422dab4
+
+COMMAND=
+  cd android && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && \
+    ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.CostCalculatorTest" \
+      --tests "com.dreamkeeper.llm.PricingTest" --console=plain --rerun
+EXIT=1
+
+原始输出:
+  > Task :app:testDebugUnitTest FAILED
+  CostCalculatorTest > 14 组向量的微元价与峰谷判定逐条相符 FAILED
+  22 tests completed, 1 failed
+  java.lang.AssertionError: peak-01-0100Z microYuan expected:<6> but was:<5>
+      at com.dreamkeeper.llm.CostCalculatorTest... (CostCalculatorTest.kt:48)
+
+必须 --rerun 的原因（偏差 D266）:
+  Gradle 不把 docs/evidence/plan3/*.json 声明为 test 任务输入，直接重跑会 UP-TO-DATE 跳过
+  （实测：不写 --rerun 时 BUILD SUCCESSFUL in 1s，测试根本没执行）。证据里的红/绿都带 --rerun。
+
+恢复:
+  git checkout -- docs/evidence/plan3/p3-cost-01-vectors.json
+  恢复后 sha256 = cf8b2431a428dee15360cb0338d31f879569dcfd596cf7ad39dd23d7a764440e
+  （与提交 0218952 的 blob 79de6a30… 一致；git status 只剩本证据文件与 p3-cost-02-unit.txt）
+  同一命令 --rerun 复跑: EXIT=0  BUILD SUCCESSFUL in 5s
+  → 红是 expect_micro 变异造成的，不是环境问题。

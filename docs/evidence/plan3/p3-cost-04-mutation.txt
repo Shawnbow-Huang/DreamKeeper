@@ -1,0 +1,150 @@
+APK_SHA256=07ccc3a0c466afaa2402181da8797a38b1bcdee77b775896170b921bbc1cc67e（assembleDebug；APK 内 assets/pricing/deepseek.json = becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d）
+DEVICE_TIME=host-only 2026-10-30
+REPLAY=python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+
+CASE=Task 3 闸门变异：三条实现/数据变异各必须 mismatches>=1 且 exit 1；未变异副本 exit 0
+GATE_SHA256=2404ec4824109b004c75394176ae04aef83301a270348164646dc5b30398bf99
+NOTES:
+  - 变异都在副本上做，源码 scripts/check-cost.py 从未改动（sha256 同上）。
+  - 副本与合成库位于 android/app/build/tmp/p3cost/（build 目录，不入库），可用本文命令重建。
+  - 合成 sqlite 库只为验证 --db-copy 的快照复算分支，**不是真实数据**；
+    真实 llm_calls 由 Task 4 建表、Task 8 写行、Task 10 真跑（见 p3-cost-06-dbcopy.txt）。
+
+===== 基线（未变异，exit 0） =====
+COMMAND=python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+EXIT=0
+[OK] peak-01-0100Z            cost=5 peak=True
+[OK] peak-02-085959Z          cost=5 peak=True
+[OK] peak-03-035959Z          cost=5 peak=True
+[OK] peak-04-040000Z          cost=3 peak=False
+[OK] peak-05-050000Z          cost=3 peak=False
+[OK] peak-06-055959Z          cost=3 peak=False
+[OK] peak-07-060000Z          cost=5 peak=True
+[OK] peak-08-095959Z          cost=5 peak=True
+[OK] peak-09-100000Z          cost=3 peak=False
+[OK] peak-10-sat0200Z         cost=3 peak=False
+[OK] arith-01-millions        cost=5020000 peak=True
+[OK] arith-02-rounding        cost=5 peak=True
+[OK] tz-01-sh-peak-utc-offpeak cost=5 peak=True
+[OK] tz-02-sh-offpeak-utc-peak cost=3 peak=False
+rows=14 mismatches=0
+
+
+===== 变异 1：整数复算与有理数复算各 +1（模拟 costMicroYuan+1） =====
+BUILD=python C:/Users/17383/AppData/Local/Temp/m1_mutate.py
+  → android/app/build/tmp/p3cost/m1-cost-plus1.py  sha256=722f0c486a92d92b0fb6f49110afe50043c88ddc3f7868e74164c04d23309a23
+  → 改动 2 处：`return (units + HALF) // MICRO` 与 Fraction 版各 +1
+COMMAND=python android/app/build/tmp/p3cost/m1-cost-plus1.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+EXIT=1
+[MISMATCH] peak-01-0100Z            (p3-cost-01-vectors.json#0)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] peak-02-085959Z          (p3-cost-01-vectors.json#1)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] peak-03-035959Z          (p3-cost-01-vectors.json#2)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] peak-04-040000Z          (p3-cost-01-vectors.json#3)
+           - ① cost 复算 4 != 行内 costMicroYuan 3（差 -1）
+[MISMATCH] peak-05-050000Z          (p3-cost-01-vectors.json#4)
+           - ① cost 复算 4 != 行内 costMicroYuan 3（差 -1）
+[MISMATCH] peak-06-055959Z          (p3-cost-01-vectors.json#5)
+           - ① cost 复算 4 != 行内 costMicroYuan 3（差 -1）
+[MISMATCH] peak-07-060000Z          (p3-cost-01-vectors.json#6)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] peak-08-095959Z          (p3-cost-01-vectors.json#7)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] peak-09-100000Z          (p3-cost-01-vectors.json#8)
+           - ① cost 复算 4 != 行内 costMicroYuan 3（差 -1）
+[MISMATCH] peak-10-sat0200Z         (p3-cost-01-vectors.json#9)
+           - ① cost 复算 4 != 行内 costMicroYuan 3（差 -1）
+[MISMATCH] arith-01-millions        (p3-cost-01-vectors.json#10)
+           - ① cost 复算 5020001 != 行内 costMicroYuan 5020000（差 -1）
+[MISMATCH] arith-02-rounding        (p3-cost-01-vectors.json#11)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] tz-01-sh-peak-utc-offpeak (p3-cost-01-vectors.json#12)
+           - ① cost 复算 6 != 行内 costMicroYuan 5（差 -1）
+[MISMATCH] tz-02-sh-offpeak-utc-peak (p3-cost-01-vectors.json#13)
+           - ① cost 复算 4 != 行内 costMicroYuan 3（差 -1）
+rows=14 mismatches=14
+
+
+===== 变异 2：is_peak 整体取反（模拟 isPeak 判反） =====
+BUILD=python C:/Users/17383/AppData/Local/Temp/m2_mutate.py
+  → android/app/build/tmp/p3cost/m2-ispeak-flip.py  sha256=63dc257841b279aa2bf07e43db1930ce5a378a5bed196b39f3b485992af30f2f
+  → 周末分支与工作日窗口均取反
+COMMAND=python android/app/build/tmp/p3cost/m2-ispeak-flip.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+EXIT=1
+[MISMATCH] peak-01-0100Z            (p3-cost-01-vectors.json#0)
+           - ① cost 复算 3 != 行内 costMicroYuan 5（差 +2）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T09:00:00+08:00, Asia/Shanghai）
+[MISMATCH] peak-02-085959Z          (p3-cost-01-vectors.json#1)
+           - ① cost 复算 3 != 行内 costMicroYuan 5（差 +2）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T16:59:59+08:00, Asia/Shanghai）
+[MISMATCH] peak-03-035959Z          (p3-cost-01-vectors.json#2)
+           - ① cost 复算 3 != 行内 costMicroYuan 5（差 +2）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T11:59:59+08:00, Asia/Shanghai）
+[MISMATCH] peak-04-040000Z          (p3-cost-01-vectors.json#3)
+           - ① cost 复算 5 != 行内 costMicroYuan 3（差 -2）
+           - ② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-30T12:00:00+08:00, Asia/Shanghai）
+[MISMATCH] peak-05-050000Z          (p3-cost-01-vectors.json#4)
+           - ① cost 复算 5 != 行内 costMicroYuan 3（差 -2）
+           - ② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-30T13:00:00+08:00, Asia/Shanghai）
+[MISMATCH] peak-06-055959Z          (p3-cost-01-vectors.json#5)
+           - ① cost 复算 5 != 行内 costMicroYuan 3（差 -2）
+           - ② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-30T13:59:59+08:00, Asia/Shanghai）
+[MISMATCH] peak-07-060000Z          (p3-cost-01-vectors.json#6)
+           - ① cost 复算 3 != 行内 costMicroYuan 5（差 +2）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T14:00:00+08:00, Asia/Shanghai）
+[MISMATCH] peak-08-095959Z          (p3-cost-01-vectors.json#7)
+           - ① cost 复算 3 != 行内 costMicroYuan 5（差 +2）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T17:59:59+08:00, Asia/Shanghai）
+[MISMATCH] peak-09-100000Z          (p3-cost-01-vectors.json#8)
+           - ① cost 复算 5 != 行内 costMicroYuan 3（差 -2）
+           - ② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-30T18:00:00+08:00, Asia/Shanghai）
+[MISMATCH] peak-10-sat0200Z         (p3-cost-01-vectors.json#9)
+           - ① cost 复算 5 != 行内 costMicroYuan 3（差 -2）
+           - ② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-31T10:00:00+08:00, Asia/Shanghai）
+[MISMATCH] arith-01-millions        (p3-cost-01-vectors.json#10)
+           - ① cost 复算 2510000 != 行内 costMicroYuan 5020000（差 +2510000）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T10:00:00+08:00, Asia/Shanghai）
+[MISMATCH] arith-02-rounding        (p3-cost-01-vectors.json#11)
+           - ① cost 复算 2 != 行内 costMicroYuan 5（差 +3）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T10:00:00+08:00, Asia/Shanghai）
+[MISMATCH] tz-01-sh-peak-utc-offpeak (p3-cost-01-vectors.json#12)
+           - ① cost 复算 3 != 行内 costMicroYuan 5（差 +2）
+           - ② isPeak 复算 False != 行内 isPeak True（createdAt=2026-10-30T09:00:00+08:00, Asia/Shanghai）
+           - fixture expect_peak_utc=False 与 UTC 判定 True 不一致
+[MISMATCH] tz-02-sh-offpeak-utc-peak (p3-cost-01-vectors.json#13)
+           - ① cost 复算 5 != 行内 costMicroYuan 3（差 -2）
+           - ② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-30T18:30:00+08:00, Asia/Shanghai）
+           - fixture expect_peak_utc=True 与 UTC 判定 False 不一致
+rows=14 mismatches=14
+
+
+===== 变异 3：priceSnapshotJson 里 cacheMiss+1（必须读行内快照才能抓到） =====
+BUILD=python C:/Users/17383/AppData/Local/Temp/make_synth_db.py
+  合成库（单行，flash 1M/1M/1M，costMicroYuan=5,020,000）:
+    synth-pristine.db   sha256=4b765ff052ecf4bd4794a4ecf90f90fe9e640b67f468c7e344f37fc41b542258
+    synth-cachemiss.db  sha256=861443c14320e58e6f2674ea57ef52ab2f2601cfaf81f3e1951606b187b9f1de
+  cachemiss 副本只把行内快照 deepseek-flash.peak.cacheMiss 1000000 -> 1000001，行内 cost 不动。
+COMMAND（未变异副本，作为对照）:
+  python scripts/check-cost.py --db-copy android/app/build/tmp/p3cost/synth-pristine.db
+EXIT=0
+[OK] 1                        cost=5020000 peak=True
+rows=1 mismatches=0
+
+COMMAND（快照 cacheMiss+1）:
+  python scripts/check-cost.py --db-copy android/app/build/tmp/p3cost/synth-cachemiss.db
+EXIT=1
+[MISMATCH] 1                        (synth-cachemiss.db#0)
+           - ① cost 复算 5020001 != 行内 costMicroYuan 5020000（差 -1）
+rows=1 mismatches=1
+
+
+===== 结论 =====
+  变异 1: rows=14 mismatches=14 exit 1     （每条都报 ① cost 复算差 1）
+  变异 2: rows=14 mismatches=14 exit 1     （② isPeak 复算相反，连带 ① 选错费率）
+  变异 3: rows=1  mismatches=1  exit 1     （① 复算 5,020,001 != 行内 5,020,000）
+  未变异: vectors exit 0；合成库 exit 0。三条变异全部咬住。
+  若实现改成读当前资产复算，变异 3 不会变（资产没动），这正是它要抓的（D260）。
+  formulaVersion 白名单单独由 --self-test 的 unknown formulaVersion 用例覆盖（exit 2）。
+  空库（0 字节）也会被明确拒绝: exit 2，绝不报 0 行 0 差异（见 p3-cost-06-dbcopy.txt 摘录）。

@@ -1,0 +1,54 @@
+APK_SHA256=07ccc3a0c466afaa2402181da8797a38b1bcdee77b775896170b921bbc1cc67e（assembleDebug；APK 内 assets/pricing/deepseek.json = becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d）
+DEVICE_TIME=host-only 2026-10-30
+REPLAY=python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+
+CASE=Task 3 峰谷两倍关系：价卡 offPeak*2 == peak 的算术后果
+ASSET=android/app/src/main/assets/pricing/deepseek.json
+ASSET_SHA256=becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d
+CARD_VERSION=2026-10-30  EFFECTIVE_FROM=2026-10-30  PROVENANCE=project-convention
+
+一、价卡逐字段 offPeak*2 == peak（加载时硬校验，任一不等即 IllegalArgumentException）
+  model            field     peak       offPeak    offPeak*2  equal
+  deepseek-flash   cacheHit  20000      10000      20000      True
+  deepseek-flash   cacheMiss 1000000    500000     1000000    True
+  deepseek-flash   output    4000000    2000000    4000000    True
+  deepseek-v4-pro  cacheHit  150000     75000      150000     True
+  deepseek-v4-pro  cacheMiss 4500000    2250000    4500000    True
+  deepseek-v4-pro  output    13500000   6750000    13500000   True
+
+二、1M×3 组（hit=miss=out=1,000,000；整除组必须严格两倍）
+  deepseek-flash   peak=5020000    offPeak=2510000    2*offPeak=5020000    相等=True
+  deepseek-v4-pro  peak=18150000   offPeak=9075000    2*offPeak=18150000   相等=True
+
+三、全向量组 peak vs 2×offPeak（同一 hit/miss/out，仅费率不同）
+  peak-01-0100Z            peak=5          offPeak=3          delta=-1 
+  peak-02-085959Z          peak=5          offPeak=3          delta=-1 
+  peak-03-035959Z          peak=5          offPeak=3          delta=-1 
+  peak-04-040000Z          peak=5          offPeak=3          delta=-1 
+  peak-05-050000Z          peak=5          offPeak=3          delta=-1 
+  peak-06-055959Z          peak=5          offPeak=3          delta=-1 
+  peak-07-060000Z          peak=5          offPeak=3          delta=-1 
+  peak-08-095959Z          peak=5          offPeak=3          delta=-1 
+  peak-09-100000Z          peak=5          offPeak=3          delta=-1 
+  peak-10-sat0200Z         peak=5          offPeak=3          delta=-1 
+  arith-01-millions        peak=5020000    offPeak=2510000    delta=0  
+  arith-02-rounding        peak=5          offPeak=2          delta=1  
+  tz-01-sh-peak-utc-offpeak peak=5          offPeak=3          delta=-1 
+  tz-02-sh-offpeak-utc-peak peak=5          offPeak=3          delta=-1 
+
+  统计: delta 范围 [-1, 1]；arith-02-rounding 是 +1 见证:
+    4.65 微元半格向上 = 5，2×2.325 = 2×2 = 4，差 +1。
+  因此 brief §0.8 的通用断言 "-1..0" 不成立，正确区间是 -1..1（偏差 D263）。
+  两倍关系只在**整除组**（1M）成立；小样本受两次独立取整影响，允许 ±1 微元漂移。
+
+四、Kotlin 侧对应断言（同一口径，防实现漂移）
+  android/app/src/test/java/com/dreamkeeper/llm/PricingTest.kt:45-46
+    costMicroYuan(flash.peak, 1M, 1M, 1M) == 5_020_000L
+    costMicroYuan(flash.offPeak, 1M, 1M, 1M) == 2_510_000L
+  android/app/src/test/java/com/dreamkeeper/llm/CostCalculatorTest.kt:106-129
+    peak1M.microYuan == 2 * off1M.microYuan（整除组等式，:115-117）
+    全向量 delta in -1L..1L（:127-129，注释点明 D263）
+
+复算命令:
+  python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+  sha256sum android/app/src/main/assets/pricing/deepseek.json

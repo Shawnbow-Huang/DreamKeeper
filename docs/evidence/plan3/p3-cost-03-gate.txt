@@ -1,0 +1,117 @@
+APK_SHA256=07ccc3a0c466afaa2402181da8797a38b1bcdee77b775896170b921bbc1cc67e（assembleDebug；APK 内 assets/pricing/deepseek.json = becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d）
+DEVICE_TIME=host-only 2026-10-30
+REPLAY=python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+
+CASE=Task 3 成本复算闸门：--vectors 全绿 + --self-test
+GATE=scripts/check-cost.py
+GATE_SHA256=2404ec4824109b004c75394176ae04aef83301a270348164646dc5b30398bf99
+VECTORS_JSON_SHA256=cf8b2431a428dee15360cb0338d31f879569dcfd596cf7ad39dd23d7a764440e
+
+闸门五条断言（同一 check_rows 里逐行跑，--vectors 也真跑全部五条）:
+  ① cost 复算相符（用行内快照价卡，不用当前资产）
+  ② isPeak 复算相符（createdAt 按 Asia/Shanghai 判峰谷）
+  ③ usage 自洽（prompt=hit+miss、total=prompt+completion、completion=out、两个 cache 字段）
+  ④ formulaVersion 必须在 {"cost-v1"} 白名单，否则 exit 2
+  ⑤ fractions.Fraction 精确有理数按半格四舍五入交叉比对 ① 的整数结果
+末行固定 rows=N mismatches=M；退出码 0/1/2。--db-copy 本轮为 PENDING（见 p3-cost-06-dbcopy.txt）。
+
+COMMAND 1（向量全绿）:
+  cd /d/DreamKeeper && python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+EXIT=0
+原始输出:
+[OK] peak-01-0100Z            cost=5 peak=True
+[OK] peak-02-085959Z          cost=5 peak=True
+[OK] peak-03-035959Z          cost=5 peak=True
+[OK] peak-04-040000Z          cost=3 peak=False
+[OK] peak-05-050000Z          cost=3 peak=False
+[OK] peak-06-055959Z          cost=3 peak=False
+[OK] peak-07-060000Z          cost=5 peak=True
+[OK] peak-08-095959Z          cost=5 peak=True
+[OK] peak-09-100000Z          cost=3 peak=False
+[OK] peak-10-sat0200Z         cost=3 peak=False
+[OK] arith-01-millions        cost=5020000 peak=True
+[OK] arith-02-rounding        cost=5 peak=True
+[OK] tz-01-sh-peak-utc-offpeak cost=5 peak=True
+[OK] tz-02-sh-offpeak-utc-peak cost=3 peak=False
+rows=14 mismatches=0
+
+COMMAND 2（内置变异自测）:
+  cd /d/DreamKeeper && python scripts/check-cost.py --self-test
+EXIT=0
+原始输出:
+{
+  "self_test": true,
+  "cases": [
+    {
+      "case": "baseline",
+      "expect_mismatches": 0,
+      "actual_mismatches": 0,
+      "expect_exit": 0,
+      "actual_exit": 0,
+      "ok": true,
+      "problems": []
+    },
+    {
+      "case": "mutation cost+1",
+      "expect_mismatches": 1,
+      "actual_mismatches": 1,
+      "expect_exit": 1,
+      "actual_exit": 1,
+      "ok": true,
+      "problems": [
+        "① cost 复算 5 != 行内 costMicroYuan 6（差 +1）"
+      ]
+    },
+    {
+      "case": "mutation isPeak flipped",
+      "expect_mismatches": 1,
+      "actual_mismatches": 1,
+      "expect_exit": 1,
+      "actual_exit": 1,
+      "ok": true,
+      "problems": [
+        "② isPeak 复算 True != 行内 isPeak False（createdAt=2026-10-30T09:00:00+08:00, Asia/Shanghai）"
+      ]
+    },
+    {
+      "case": "mutation snapshot cacheMiss+1",
+      "expect_mismatches": 1,
+      "actual_mismatches": 1,
+      "expect_exit": 1,
+      "actual_exit": 1,
+      "ok": true,
+      "problems": [
+        "① cost 复算 5020001 != 行内 costMicroYuan 5020000（差 -1）"
+      ]
+    },
+    {
+      "case": "mutation usage inconsistent",
+      "expect_mismatches": 1,
+      "actual_mismatches": 1,
+      "expect_exit": 1,
+      "actual_exit": 1,
+      "ok": true,
+      "problems": [
+        "③ usage.prompt_tokens=3 但 hit/miss/out 口径应为 2"
+      ]
+    },
+    {
+      "case": "unknown formulaVersion",
+      "expect_mismatches": 1,
+      "actual_mismatches": 1,
+      "expect_exit": 2,
+      "actual_exit": 2,
+      "ok": true,
+      "problems": [
+        "formulaVersion='cost-v2' 不在白名单 ['cost-v1']，无法复算"
+      ]
+    }
+  ]
+}
+rows=6 mismatches=0
+
+结论:
+  14 组向量全部 [OK]，rows=14 mismatches=0，exit 0；
+  --self-test 六条人造账目（1 条好账 + 成本+1 / isPeak 翻转 / 快照 cacheMiss+1 /
+  usage 不自洽 / 未知 formulaVersion 五类坏账）逐条得到预期 mismatches 与退出码，
+  self_test=true，rows=6 mismatches=0，exit 0。

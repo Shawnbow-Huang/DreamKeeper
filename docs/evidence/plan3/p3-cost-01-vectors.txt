@@ -1,0 +1,29 @@
+APK_SHA256=07ccc3a0c466afaa2402181da8797a38b1bcdee77b775896170b921bbc1cc67e（assembleDebug；APK 内 assets/pricing/deepseek.json = becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d）
+DEVICE_TIME=host-only 2026-10-30
+REPLAY=python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+
+CASE=Task 3 成本向量（先于实现提交的冻结输入）
+JSON=docs/evidence/plan3/p3-cost-01-vectors.json
+JSON_SHA256=cf8b2431a428dee15360cb0338d31f879569dcfd596cf7ad39dd23d7a764440e
+JSON_BYTES=9707
+JSON_LINES=209
+GIT_COMMIT=0218952
+GIT_BLOB=79de6a3040d7d669f6ecf224f15058f336be2562
+SCHEMA=dreamkeeper.p3.cost.vectors/v1
+VECTORS=14（10 组峰谷边界 + 2 组算术 + 2 组时区反事实）
+FORMULA_VERSION=cost-v1
+
+首三行说明:
+  APK_SHA256 是当前 assembleDebug 产物；本文件记录的是 JSON 资产本身，不依赖 APK。
+  向量 JSON 于实现之前单独提交（0218952），实现提交在其后（00f5e6a），顺序可用
+  `git log --format='%h %ci %s' -- docs/evidence/plan3/p3-cost-01-vectors.json` 复核。
+
+复算命令:
+  sha256sum docs/evidence/plan3/p3-cost-01-vectors.json
+  git show 0218952:docs/evidence/plan3/p3-cost-01-vectors.json | sha256sum   # 应与 JSON_SHA256 相同
+  python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+
+维护约定:
+  - JSON 固定 LF（.gitattributes），内容寻址（cardSha256/JSON_SHA256）不能随 autocrlf 改变字节；
+  - 改任何向量都必须同步跑闸门与单测，并更新本侧车的 JSON_SHA256；
+  - 向量只锁"输入 + 期望值 + 推导原文"，不含实现。

@@ -1,0 +1,49 @@
+APK_SHA256=07ccc3a0c466afaa2402181da8797a38b1bcdee77b775896170b921bbc1cc67e（实现后 :app:assembleDebug；APK 内 assets/pricing/deepseek.json 的 sha256 = becbdd149105561fdf10e2a4c778328ca174dd1ead99bb624511826363e7174d）
+DEVICE_TIME=host-only 2026-10-30
+REPLAY=cd android && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.CostCalculatorTest" --tests "com.dreamkeeper.llm.PricingTest" --console=plain
+
+CASE=Task 3 单测转绿（价卡解析 + 峰谷 + 整数微元成本）
+
+COMMAND（llm 两类，2026-10-30 host）:
+  cd android && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.CostCalculatorTest" --tests "com.dreamkeeper.llm.PricingTest" --console=plain
+RESULT: EXIT=0
+  > Task :app:compileDebugKotlin
+  > Task :app:testDebugUnitTest
+  BUILD SUCCESSFUL in 8s
+  34 actionable tasks: 7 executed, 27 up-to-date
+
+COMMAND（全量回归，同一次实现状态）:
+  cd android && export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" && ./gradlew :app:testDebugUnitTest --console=plain
+RESULT: EXIT=0
+  > Task :app:testDebugUnitTest
+  BUILD SUCCESSFUL in 13s
+  34 actionable tasks: 1 executed, 33 up-to-date
+
+XML 统计（python C:/Users/17383/AppData/Local/Temp/summarize_tests.py 读
+android/app/build/test-results/testDebugUnitTest/*.xml，UTF-8）:
+  classes=26 tests=284 failures=0 errors=0 skipped=0
+
+  新增两类（本次）:
+  com.dreamkeeper.llm.CostCalculatorTest    tests=11  failures=0 errors=0 skipped=0
+  com.dreamkeeper.llm.PricingTest           tests=11  failures=0 errors=0 skipped=0
+
+  回归基线（Task 2）：24 类 262 例，全部 0 失败；284 = 262 + 22，26 = 24 + 2。
+  其余 24 类的逐类行由上述命令输出（全文 classes/tests 已在此记录）。
+
+断言口径（为什么这 22 例能咬住实现）:
+- PricingTest 用内置期望常量钉解析结果：flash 四价 20000/1000000/4000000 与 10000/500000/2000000、
+  v4-pro 150000/4500000/13500000 与 75000/2250000/6750000；每 model×每字段 offPeak*2==peak；
+  cardSha256 黄金值常量 = becbdd14…（与资产字节 sha256 一致，改一个字节即红）。
+  三个元数据拒绝（currency/unit/provenance）与 offPeak 半价篡改都必须抛 IllegalArgumentException。
+  AssetPriceCardSource 走真实 AssetManager，结果必须等于直接 parse 资产字节。
+- CostCalculatorTest 读 docs/evidence/plan3/p3-cost-01-vectors.json 跑 14 组：microYuan/isPeak/
+  cardVersion/cardSha256 逐项相符；usage 自洽；10 组峰谷边界；2 组时区反事实（同一 Instant 在
+  Asia/Shanghai 与 UTC 峰谷相反）；TimeZone.setDefault(America/New_York) 后仍按上海；
+  未知 model 前置拒；effectiveFrom 16:00:00Z 前后差一秒翻转 CardNotApplicable/Ok；
+  Math.multiplyExact 溢出 → Priced.Overflow；4.65 微元 → 5（漏 +500_000 会得 4）；
+  两倍差 5,020,000 == 2×2,510,000 且全向量 delta ∈ -1..1（brief §0.8 的 -1..0 有 arith-02 反例，见 D263）。
+
+复算命令:
+  sha256sum android/app/src/main/assets/pricing/deepseek.json
+  unzip -p android/app/build/outputs/apk/debug/app-debug.apk assets/pricing/deepseek.json | sha256sum
+  python C:/Users/17383/AppData/Local/Temp/summarize_tests.py
