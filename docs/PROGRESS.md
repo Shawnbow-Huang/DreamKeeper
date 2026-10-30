@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 20:05 —— **Plan 2 完成 9/9：Task 1–9 全部验收（248 用例全绿）；端到端录音→追问→补录→详情播放全通，全库音频审计 GREEN；转录正路径待有中文离线包的设备验证；§14.2 已结案，§14.1 音频侧通、其余归 Plan 3/4**
+> 最后更新：2026-10-30 20:30 —— **Plan 2 完成 9/9（tag `plan2-done`）；Plan 3 任务书已落盘（10 个 Task），分支 `plan3-generation` 待开**
 
 ## 一、当前在做
 
@@ -49,6 +49,31 @@
 任务书：[plans/2026-10-30-audio-and-transcription.md](superpowers/plans/2026-10-30-audio-and-transcription.md) · 证据约定：[evidence/plan2/README.md](evidence/plan2/README.md) · 终审：[evidence/plan2/FINAL-REVIEW.md](evidence/plan2/FINAL-REVIEW.md)
 
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
+
+
+## 二·六、Plan 3（生成、成本、导出、对话改稿）待开工
+
+| 任务 | 状态 | 说明 |
+|---|---|---|
+| 1 接线：权限、依赖、设置页骨架 | ⬜ | `INTERNET` + debug 明文放行、OkHttp、`Settings` 路由、`AppContainer` 三个 lazy |
+| 2 Key 加密存储 | ⬜ | AES/GCM + Keystore，只存 base64 密文，日志零明文 |
+| 3 价卡与成本计算 | ⬜ | 资产 price card、峰谷判定、整数微元、`check-cost.py` 复算 |
+| 4 数据库 v2 迁移 | ⬜ | 四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest |
+| 5 LlmClient（OkHttp + org.json） | ⬜ | 顶层 thinking/effort、空 content 判失败、429 退避、取消 |
+| 6 提示词资产与 PromptRepository | ⬜ | Sync 到 build/gen、剥头、槽位、sha256_8 断言 |
+| 7 五闸门 Kotlin 移植 | ⬜ | 断言失败闸门集合、2-gram/PUNCT 照搬、T2 等值校验 |
+| 8 GenerationOrchestrator | ⬜ | T0–T3 失败链、单飞、每次尝试一行 llm_calls |
+| 9 对话改稿 + 多版本 | ⬜ | ASK 不建版 / REVISE 必建版、版本线、选最终稿 |
+| 10 导出与验收证据 | ⬜ | txt/docx/pdf、check-export、ACCEPTANCE §3d、终审 |
+
+任务书：[plans/2026-10-30-generation-and-cost.md](superpowers/plans/2026-10-30-generation-and-cost.md) · 分支 `plan3-generation`（从 `plan2-done` 的 `bb11fe2` 切出）
+
+**Plan 3 的目标**：用用户自己的 DeepSeek Key，「理顺」得到忠于原梦的原样稿（四级失败链 + 五闸门），
+「小说化」得到能读的小说稿（改动清单可查），不满意能对着稿子说人话让它改（ASK 先问 / REVISE 必留版），
+每一次尝试都按价卡快照记账（整数微元），两种文本都能导出 txt/docx/pdf 带走。
+
+**先修的前提**（专家实测）：仓库没有 OkHttp 也没有 kotlinx.serialization；manifest 没有 INTERNET；
+`check-near-white.ps1` 其实**有** `-MaxRatio`（Plan 2 的登记是错的）。
 
 ## 三、你提的需求（已收下，落点如下）
 
