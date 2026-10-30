@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 22:59（Task 7 验收通过：五闸门 15 条冻结向量 15/15、变异 7 红、全量 32 类 326 例绿）
+> 最后更新：2026-10-30 23:33（Task 8 验收通过：编排器 8 例、两处变异、全量 33 类 334 例绿；下一步 Task 9 改稿）
 
 ## 一、当前在做
 
@@ -51,7 +51,7 @@
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
 
 
-## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 7/10
+## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 8/10
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -62,7 +62,7 @@
 | 5 LlmClient（OkHttp + org.json） | ✅ 完成 | `05af3a2`：`ChatModels`/`LlmClient`/`DeepSeekClient`（派生超时、取消落 OkHttp Call、退避 1000×2 + `Retry-After`、usage 四字段、8 种错误分类）+ 8 例本地 `HttpServer` 单测（先红后绿 + 变异红）；全量 30 类/301 例绿（`p3-llm-0*`） |
 | 6 提示词资产与 PromptRepository | ✅ 完成 | `92ec146`：`syncPromptAssets` 构建期把 `prompts/*.md` 拷进 `assets/prompts/`（pricing 未被覆盖，sha 不变）、`PromptSpec` 9 槽（7 必填 + 2 选填）+ 2 标记（违规清单必带载荷）、`PromptRepository` 剥头 `## 输入`/剥尾变更记录/槽行连提示行整体替换/标记块插输入块后；9 例先红后绿 + 两处变异；Lead 补第 10 例（空串/纯空白，D308）后 10/10、全量 31 类/311 例绿（`p3-prompt-0*`） |
 | 7 五闸门 Kotlin 移植 | ✅ 完成 | `b4242b4`：`GateResult`/`FaithfulGates`（G1–G5 全算不短路、按码点复刻 `check-faithful.py`：25 码点空白、`\p{Nd}`、bigram/24 窗/±6 ctx、G4 跨场景、G5 防回绕）+ 15 条冻结向量 15/15 （plain JUnit + 手写 MiniJson）；变异 G1 恒空 → 7 红；全量 32 类/326 例绿（`p3-gates-0*`） |
-| 8 GenerationOrchestrator | 🔄 | 已按 §0.1–§0.11（D314–D322）重写并派工实施：T0–T3 失败链、单飞、每次尝试一行 llm_calls、成功一个事务写 novel_versions + dreams |
+| 8 GenerationOrchestrator | ✅ 完成 | `cd297d8`：T0–T3 失败链（T2 只认 `isConservativeOk`）、NOVEL 单次 JSON、单飞 `tryLock`、每次 HTTP 交换一行 `llm_calls`（失败行 cost=0/usageJson=null）、成功一个事务写 `novel_versions` + `dreams` 窄更新；8 例先红后绿 + 两处变异（2 红 / 1 红）；全量 33 类/334 例绿（`p3-gen-0*`）；UI 接线归 Task 9（D351/D352） |
 | 9 对话改稿 + 多版本 | ⬜ | ASK 不建版 / REVISE 必建版、版本线、选最终稿 |
 | 10 导出与验收证据 | ⬜ | txt/docx/pdf、check-export、ACCEPTANCE §3d、终审 |
 

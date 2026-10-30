@@ -619,7 +619,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   `commitSuccess` 旁补消息/改稿/选择三类方法）、`data/DreamRepository.kt`（`listVersions`/`listMessages`/`selectVersion`/
   `resolveFinalNovel` + `toDomain` 补 `novelSelectedVersion`）、`domain/Dream.kt`（加 `novelSelectedVersion: Int?`）、
   `ui/detail/ReviseSheet.kt`（新：输入条 + 6 快捷按钮 + 对话气泡）、`ui/detail/VersionStrip.kt`（新：`versionLabel` + 版本条）、
-  `ui/detail/DetailScreen.kt`（只改 `NovelTab` 与其调用点两处）、`ui/detail/DetailViewModel.kt`（对话/版本/选择状态与动作）、
+  `ui/detail/DetailScreen.kt`（只改 `NovelTab` 与其调用点、`DetailViewModel` 构造）、`ui/DreamKeeperRoot.kt`（只加一个 `orchestrator` 参数并传下去）、`MainActivity.kt`（只传 `container.orchestrator`，D352）、`ui/detail/DetailViewModel.kt`（对话/版本/选择状态与动作）、
   `test/.../llm/ReviseOrchestratorTest.kt`（新，8 例）、`test/.../ui/detail/VersionStripTest.kt`（新，2 例）、`docs/evidence/plan3/p3-revise-*`。
 
 - §0.1 事务与落点（D330）：REVISE 成功 = **一个** `db.withTransaction`：插 user 消息 → `novelVersionDao().insertWithNextVersion`
@@ -885,6 +885,16 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D342 | T10-5：导出正文统一取 `resolveFinalNovel`（selected ?: maxVersion），无小说稿退回 `faithfulText ?: rawTranscript` 且文件名带 `-raw` | 详情页 Task 9 已按此契约显示；导出若取 `dreams.novelText` 会导出「最新生成版」而不是用户选中的版本，与 D332 的已知偏差口径冲突 |
 | D343 | T10-6：A1–A21 与五闸门、三个校验脚本对**同一批**导出文件各跑一次，结果写进 FINAL-REVIEW 的同一张表 | 分开跑会出现「脚本绿但对象不是同一份文件」；同批跑才能让第三方只凭证据目录复现结论 |
 
+| D344 | T8-1：生成入口拆两个 `generateFaithful(dreamId)` / `generateNovel(dreamId)`，不合并单入口 | §0.11 #1「`llm_calls` 1 行」、#5「模型总调用数=3」、#8「4 次交换」只在两种生成独立调用时成立；合并会让一次忠实链多出一次 NOVEL 交换，与契约数字直接冲突 |
+| D345 | T8-2：`GenerationStore` 增加 `dream(dreamId): Dream?` 只读方法 | §0.4 的生成闸门与 §0.9「锁包住检查闸门」必须在锁内重新读行，缓存旧 Dream 会漏掉转写完成/并发删除 |
+| D346 | T8-3：§0.11 #5 拆成两个场景（T2 多一字符 + T2 等长换字），不是单纯「多一个字符」 | 原文场景在「T2 只比长度」变异下仍然不等值，变异杀不掉用例 5；补等长换字后变异必红（实测 1 failed） |
+| D347 | T8-4：忠实链 T0/T1/T2 成功也写 `novel_versions`（`origin="GENERATE"`、`novelText=忠实稿`、`changeLog=null`） | 「T0 原样稿真实入库」与 Task 9 的版本读路径都要有行；只写 `dreams.faithfulText` 会让版本线在忠实稿上断档（T3 不写版本，`version=null`） |
+| D348 | T8-5：NOVEL 复用 `"T0"` 作 `generation_jobs.stage`/`finalStage` 标签，提交时 `generationStage=null`（COALESCE 保留忠实链档位） | `generation_jobs`/`GenerationStage` 只有 T0–T3 四值，小说化是单次调用无档位语义；写 null 让 `dreams.generationStage` 仍表示「忠实整理走到哪一档」 |
+| D349 | T8-6：编排器构造追加 `model`、`apiKey: () -> String?`、`tagsFor: (dreamId) -> List<String>` | `ChatRequest.apiKey` 必填；NOVEL 的「标签 / 选填」槽要标签列表；`model` 要能切 `deepseek-v4-pro`（D264 口径），三者都不能藏在深里 |
+| D350 | T8-7：同档重试预算 `MAX_ATTEMPTS_PER_STAGE = 2`（首次 + 1 次重试，仅 `isRetryable`），与 `DeepSeekClient` 内部 4 次叠加，最坏 8 次交换/档 | §0.11 #3 要求「fake 客户端第一次抛 NETWORK、第二次成功」可观测，重试必须在编排层存在；生产里外层只在客户端耗尽 4 次后才触发，概率低。Task 10 的 `check-cost --db-copy` 按实际 `llm_calls` 行数统计，不会漏账 |
+| D351 | T8-8：`DetailViewModel.orchestrator` 默认 `null`，导航层未接线，生成入口当前没有 UI 触发点 | `MainActivity`/`DreamKeeperRoot` 不在 Task 8 白名单；强行接线会改导航契约。PENDING 到 Task 9（见 D352） |
+| D352 | T8-9/T9-1：Task 9 Files 增加 `ui/DreamKeeperRoot.kt`（只加 `orchestrator` 参数并传给 `DetailScreen`）与 `MainActivity.kt`（只传 `container.orchestrator`） | 生成/改稿入口必须能真点到，否则 Task 10 的 E2E 无法执行；这两处各只改一行传参，不碰导航结构 |
+
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
 ## 10. 自审记录
@@ -1011,3 +1021,23 @@ T3  不调用模型                                   → faithfulText = rawTran
   两真源未动：`git diff b4242b4^ b4242b4 -- scripts/check-faithful.py docs/evidence/plan3/faithful-gate-vectors.json` 为空。
 - PENDING（不阻断）：15 向量外 fuzz；`value/detail/advisory` 内容未断言；未接运行时、未出 APK（归 Task 8）。
 - 结论：**Task 7 验收通过**。
+
+### Task 8 验收（Lead，2026-10-30）
+
+- 交付：`cd297d8`（13 文件 +1869/−5，父 `7386f5f` 实为 `7386e5f`）：`llm/GenerationOrchestrator.kt`(658 行)、`llm/GenerationResult.kt`(60)、
+  `data/GenerationStore.kt`(111)、`data/db/DreamDao.kt`(+27 一条 COALESCE 窄 UPDATE)、`llm/Pricing.kt`(+4 `rawJson`)、
+  `di/AppContainer.kt`(+44)、`ui/detail/DetailScreen.kt`(+17 `novelChangeCount` JSON 分支)、`ui/detail/DetailViewModel.kt`(+63)、
+  `test/.../GenerationOrchestratorTest.kt`(551 行/8 例)、证据四件。
+- Lead 独立复跑：`--tests "com.dreamkeeper.llm.GenerationOrchestratorTest" --rerun-tasks` BUILD SUCCESSFUL 14s（8/8）；
+  全量 `--rerun-tasks` BUILD SUCCESSFUL 23s → XML **33 类 / 334 例 / 0 失败 / 0 错误 / 0 跳过**（与 Task 7 的 32/326 差 1 类 8 例，符合预期）。
+- 契约核对（逐行读码）：T0(token0.1)/T1(0.0+载荷)/T2(仅 `isConservativeOk`)/T3(不调模型) 与 §0.3 一致；`commitSuccess` 是**一个**
+  `db.withTransaction`（`insertWithNextVersion` + `updateNovelAfterGeneration`）；`DreamDao` 新语句只写 `novelText/novelChangeLog/generationStage`
+  且用 COALESCE（`null` 不覆盖）；失败行 `costMicroYuan=0`、`usageJson=null`、`formulaVersion=""`；`recordSuccess` 把
+  `ChatResponse.attempts` 逐条落行（含成功前的 429/传输错）；单飞用 `locks.getOrPut(dreamId){Mutex()}.tryLock()`，busy 不发请求；
+  `priceSnapshotJson = priceCard.rawJson` 原文入库；未调 `DreamRepository.save()`、未写 `novelSelectedVersion`、未改既有列/DAO 语句。
+- 变异：①删 T1 `PREVIOUS_VIOLATIONS` 注入 → 8 tests / 2 failed（#2、#3），恢复 8/8 绿；②T2 判据换成只比长度 → 8 tests / 1 failed（#5），
+  恢复 8/8 绿。原文在 `p3-gen-02-mutation.txt`。
+- 证据：`p3-gen-00-red.txt`（8 failed、全 `NotImplementedError`）、`01-green.txt`、`02-mutation.txt`、`03-full.txt`，首三行均 host-only 例外头。
+- PENDING（承接）：UI 接线（生成入口当前无触发点，归 Task 9，D351/D352）；真实 DeepSeek 网络/401/429/退避未跑；`check-cost.py` 失败行口径归 Task 10（D316/D337）；
+  单飞仅覆盖同进程；价卡峰谷边界分钟未测；`novelChangeCount` 坏 JSON 分支无用例。
+- 结论：**通过**（含上述 PENDING，均已在后续任务范围或计划偏差中登记）。
