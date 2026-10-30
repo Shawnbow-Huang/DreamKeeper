@@ -723,6 +723,23 @@ class AudioPlayback(private val scope: CoroutineScope) {
 
 ---
 
+### 0. 派工前修订（Lead 按三位专家预审裁定，**覆盖下文任何冲突**）
+
+0.1 **每份证据首三行固定**：`apk_sha256=<前 16 位>` / `device_date=<adb shell date 原文>` / `rerun=<完整命令>`（`docs/evidence/plan2/README.md:22-24`）。缺任一行，该份证据视为不合格。
+0.2 **十列表加第 11 列 `rem`**：`rem = (bytes-44) % 32`。`rem != 0` 时 `(bytes-44)/32` 只许写小数并在 `结论` 写「偏差」——**禁止四舍五入掩盖**（D91/D156）。
+0.3 **`bytes` 列必须是两次采样** `bytes(t1)/bytes(t2)`，且 `t1` 必须晚于 `isForeground=true` 出现（D166 实测起录晚约 200 ms；只采一次会把速率读成负值，属于假红）。
+0.4 **`Δms` 降为附注**，不作判据——头正确时 `ffprobe duration` 与 `(bytes-44)/32` 同源，等于用 A 验 A（循环论证）。头对不对以 `W2b` 按字节验（offset 4..8 == bytes-8、40..44 == bytes-44、`rem==0`、整 44 字节等于黄金 hex）；容器能不能解以 `ffmpeg -v warning` 的 stderr 为准，**只允许** `Guessed Channel Layout: mono` 一行（D192）。
+0.5 `RMS dBFS` 只记录、不作判据；`信号来源` 必须附宿主 `qemu` 命令行采样（本轮无 `-allow-host-audio`、无 `-audio`，见 README「模拟器灌零」节）；`结论` 取值域固定为 `合格 / PASS-ENV / 偏差` 三值，**模拟器静音输入只许 `PASS-ENV`**（D201、D145）。
+0.6 **9.3 构造方式重写**（原写法必然落空，D185）：`录 3 秒 → 松手 → 补录 2 秒（此刻 markOpen 已把两个长度字段写回 0xFFFFFFFF）→ 补录进行中 am force-stop → 重启 → 扫描回填 + 详情页时长正确`。理由：`rawAudioPath` 只在 DONE 之后才写库，「录制中 force-stop」根本没有行。证据首行写 `pre_state_by:` 说明这一态是怎么造出来的（D186）。
+0.7 **9.2 三路必须拆开跑**：A 路=已授权且正在录音时 `pm revoke`（11+ 会直接杀进程，此时「没崩」永远为真，测到的是新进程行为）；B 路=先 `revoke` 再点「说梦」。三路各自 before/after 四件套：`pidof com.dreamkeeper`、`dumpsys package com.dreamkeeper | RECORD_AUDIO`、`files/audio/` 文件数增量、`logcat -c` 之后的片段；三路共用同一次 `adb shell date`。
+0.8 `appops set com.dreamkeeper RECORD_AUDIO ignore` 这一路**只许写实测到的异常类名**（`UnsupportedOperationException` / `SecurityException` / 仍录到全零 三选一），结论写「待实测，不写判据」——README 明文规定，不许写成「应给出引导」。
+0.9 冷启动 `am start -W` ×3，阈值**写死 `TotalTime <= 2000 ms`**（Plan 1 实测 906–1654 ms 为依据），连 `capture-logcat.ps1 -Runs 3`，`FATAL EXCEPTION` 与 `ANR in com.dreamkeeper` 零命中。
+0.10 近白闸门口径改为「**除 SystemUI 图标 bbox 外为 0**」：判据 `nearwhite_total == in_icon_box` 且 `outside == 0`（D128、D149）。全图 `-MaxRatio 0` 在带通知图标的屏上必然判红，不许据此把证据判成失败。
+0.11 **全库 `rawAudioMs` 审计前置**：先 `am force-stop` + 一次冷启动让扫描跑完再枚举；`placeholder == true` 或仍在 open set 的文件输出 `SKIP-OPEN`、不进 diff（否则会拿 `0xFFFFFFFF` 算出约 1.3e8 ms 的假值）。判据 `(bytes-44)//32 == rawAudioMs`，**容差 0**。五态计数（`<44`、`==44`、奇数尾、有行无文件、有文件无行）之和必须等于 `files() ∪ audioRows()` 去重总数，不等即「枚举不全」。
+0.12 文档边界：`docs/evidence/plan1/ACCEPTANCE.md` **只许追加** `## 3b 音频证据表`，原有九列一个字都不许改。3b 表头下加两行说明：(a) design v1.5 的 §14 共 **8** 条（v1.4 插入「对话改稿」后编号后移，§14.8 属 Plan 3）；(b) §14.2 已按 v1.5 改口径——段间不补静音（D153），要证的是「电话前后的话都在且段内位置不变」。3b 之后再追加 `## 3c §14 状态更新（Plan 2 收尾）`，逐条只写「本轮结论 + 归属」：§14.1 Plan 4、§14.2 音频层已证/通话场景仍缺、§14.3 Plan 3（需 `check-faithful.py` 跑通）、§14.4 Plan 3、§14.5 Plan 4（需造数）、§14.6 Plan 3、§14.7 负向证据已有·真抓包 Plan 3、§14.8 Plan 3。
+0.13 分工：实现者只写 `docs/evidence/plan2/**` 与上述两处追加，**不 commit `docs/`**（D125：证据由 Lead commit）；看板、ledger、`plan2-done` tag、设计文档状态都由 Lead 做。
+0.14 偏差编号：Task 9 新增行接在 **Task 8 交回后确定的最后一个编号之后**（Task 1–7 已用到 D203，Task 8 的 T8-n 先入表），不复用、不跳号。
+
 ## Task 9：端到端验收与证据
 
 **Files**
