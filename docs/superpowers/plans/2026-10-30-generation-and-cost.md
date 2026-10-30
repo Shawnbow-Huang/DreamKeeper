@@ -990,10 +990,10 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D368 | T10-18：§0.6 步骤 8 增加「失败 → 重试仍失败 → 联网重试成功」三段，A22 一并验收 | happy path 下重试入口无证据；只测一次失败无法区分「重试没接上」与「重试接上但网络仍断」 |
 | D369 | T10-19：A14 大字体遮挡改为设备步骤 12（`font_scale 1.3` + 键盘 + 截图 `p3-e2e-10-fontscale.png`） | 原 A14 在 §0.6 无对应步骤，不可机器判定；加一步即可留证 |
 | D370 | T10-20：`llm/DeepSeekClient.kt` 只加一行每次尝试的 logcat 日志（`DKLLM attempt n=<i> status=<s> kind=<k>`），`failed=N` 用 logcat 计数做独立对账 | 同表自证（N == error 行数）不能证明「失败被观察到」；不加日志就没有第三方可读的失败次数真源 |
-| D371 | T10-21：设备 DB 三件齐拉 → 主机 rw 打开 `wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是入库证据**，三件合并前 bytes+sha 写 `p3-e2e-08-db-sidecar.txt` | 只拉 .db 会拿到 4096B 残缺快照（数据在 WAL），本地三件同目录能跑绿但第三方在证据上必 RED；合并后才满足「证据可独立复跑」 |
+| D371 | T10-21：设备 DB 三件齐拉 → 主机 rw 打开 `wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是入库证据**；`p3-e2e-08-db-sidecar.txt` 记三件合并前 bytes+sha、`DEVICE_DB_SHA256=`（合并前 .db）、`MERGED_SHA256=`（合并后 .db）、合并前后 bytes；check-export 前置断言 `--db` sha == `MERGED_SHA256` | 只拉 .db 会拿到 4096B 残缺快照（数据在 WAL），本地三件同目录能跑绿但第三方在证据上必 RED；sidecar 只记合并前 sha 会让 check-export 在正确产物上恒 RED（合并必然改写主库） |
 | D372 | T10-22：负向对照一律在 `.scratch/` 的副本上做，结束后校验原证据 sha 未变、副本 `cmp` 相同 | 直接改证据会污染已取证文件；`--db-copy` 以 ro 打开也改不了，原流程无法执行 |
 | D373 | T10-23：头部与文件名确定性——日期 Asia/Shanghai、标签 `tagId ASC` + `、`、title 换行压空格、「共 N 字」只算正文；`check-export --file-name` 断言文件名 == 推导名（含 `-v<n>`/`-raw`） | 时区/标签顺序/换行不钉死，exporter 与 checker 会各写一套（互红或一致地错）；不验文件名就无法证明导出的是选中版 |
-| D374 | T10-24：docx 段映射定死（正文空行也生成空 `w:p`，头部空行不单独成段），断言首段加粗 `<w:rPr><w:b/></w:rPr>`；pdf 补 `/BaseFont` 至少一处 | 不定义段映射会让「段数==期望行数」假绿/假红；`/Contents` 非空会被页脚恒真满足，加 `/BaseFont` 才有「文本绘制发生过」的代理 |
+| D374 | T10-24：docx 段映射定死（正文空行也生成空 `w:p`；头部第 4 行空行不单独成段，故**不进** docx 期望串，期望串 = 标题/日期/标签 + 正文），断言首段加粗 `<w:rPr><w:b/></w:rPr>`；pdf 补 `/BaseFont` 至少一处 | 不定义段映射会让「段数==期望行数」假绿/假红；头部空行若既不入段又留在期望串，字面实现必恒 RED；`/Contents` 非空会被页脚恒真满足 |
 | D375 | T10-25：§0.6 步骤 6 等 MediaStore `IS_PENDING` 清且 sha 稳定两次再 pull；每步当场抓 `adb shell date` 落 timeline；`adb logcat -d` 在 force-stop 后、重装/清空前抓全量 | MediaStore 未落盘会 pull 到半截文件；DEVICE_TIME 事后补会重演 Task 4 的「一批同值」；logcat 清了就再也拿不到 A15/A9 原文 |
 | D376 | T10-26：A5 的「txt/docx 设备可打开」开工前 5 分钟做查看器探针；PENDING 白名单只收环境限制，实现缺陷不许 PENDING | AOSP 镜像常常没有 txt/docx 查看器，当天才发现会让口径当场失效；PENDING 不设白名单会变成「红都记 PENDING」的后门 |
 
