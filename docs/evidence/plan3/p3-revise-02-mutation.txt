@@ -1,0 +1,332 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T15:48:38Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.ReviseOrchestratorTest" --tests "com.dreamkeeper.ui.detail.VersionStripTest" --rerun-tasks --console=plain
+
+=== 变异 1：selectVersion 只校验不落库（撤掉窄 UPDATE） ===
+变异点：android/app/src/main/java/com/dreamkeeper/data/GenerationStore.kt 的 RoomGenerationStore.selectVersion
+不再执行 `UPDATE dreams SET novelSelectedVersion = ? WHERE id = ?`，只保留「版本存在」校验。
+期望：用例 6 红；实际用例 6 与 7 都断言 DB 里的 novelSelectedVersion，因此 2 红（见偏差候选）。
+
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugRFile
+> Task :app:javaPreCompileDebug
+> Task :app:checkDebugAarMetadata
+> Task :app:compileDebugNavigationResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:148:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:149:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+> Task :app:testDebugUnitTest
+
+ReviseOrchestratorTest > 撤回改选上一版且不删版本行 FAILED
+    java.lang.AssertionError at ReviseOrchestratorTest.kt:225
+
+ReviseOrchestratorTest > 选择版本落库并让 resolveFinalNovel 指向它 FAILED
+    java.lang.AssertionError at ReviseOrchestratorTest.kt:210
+
+10 tests completed, 2 failed
+
+> Task :app:testDebugUnitTest FAILED
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testDebugUnitTest'.
+> There were failing tests. See the report at: file:///D:/DreamKeeper/android/app/build/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 21s
+35 actionable tasks: 35 executed
+--- mutation 1 result ---
+classes=2 tests=10 failures=2 errors=0 skipped=0
+FAILED 选择版本落库并让 resolveFinalNovel 指向它
+FAILED 撤回改选上一版且不删版本行
+
+=== 恢复 1：cp 回原文件后重跑 ===
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugRFile
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:javaPreCompileDebug
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:148:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:149:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :app:testDebugUnitTest
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 21s
+35 actionable tasks: 35 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+--- restore 1 result ---
+classes=2 tests=10 failures=0 errors=0 skipped=0
+PASSED 选择版本落库并让 resolveFinalNovel 指向它
+PASSED 撤回改选上一版且不删版本行
+
+=== 变异 2：ASK 分支改成建版 ===
+变异点：android/app/src/main/java/com/dreamkeeper/llm/ReviseOrchestrator.kt 的 revise() 里，
+`ACTION_ASK -> commitAsk(...)` 改为 `ACTION_ASK -> commitRevision(body = baseText)`，即反问也建版。
+期望：用例 1 红。
+
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugRFile
+> Task :app:compileDebugNavigationResources
+> Task :app:javaPreCompileDebug
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:148:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:149:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+> Task :app:testDebugUnitTest
+
+ReviseOrchestratorTest > ASK 只落两条消息、不建版、不动正文 FAILED
+    java.lang.AssertionError at ReviseOrchestratorTest.kt:74
+
+10 tests completed, 1 failed
+
+> Task :app:testDebugUnitTest FAILED
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testDebugUnitTest'.
+> There were failing tests. See the report at: file:///D:/DreamKeeper/android/app/build/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 21s
+35 actionable tasks: 35 executed
+--- mutation 2 result ---
+classes=2 tests=10 failures=1 errors=0 skipped=0
+FAILED ASK 只落两条消息、不建版、不动正文
+
+=== 恢复 2：cp 回原文件后重跑 ===
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugRFile
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:javaPreCompileDebug
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:148:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:149:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :app:testDebugUnitTest
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 21s
+35 actionable tasks: 35 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+--- restore 2 result ---
+classes=2 tests=10 failures=0 errors=0 skipped=0
+PASSED ASK 只落两条消息、不建版、不动正文

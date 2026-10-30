@@ -39,4 +39,6 @@ data class Dream(
     val transcriptStatus: String = "PENDING",
     val rawAudioPath: String? = null,
     val rawAudioMs: Long? = null,
+    /** 用户挑中的小说化版本号（`novel_versions.version`）；null = 没挑，详情/导出用最新版。 */
+    val novelSelectedVersion: Int? = null,
 )

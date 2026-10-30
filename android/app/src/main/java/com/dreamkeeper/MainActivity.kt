@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
+import com.dreamkeeper.llm.orchestrator
 import com.dreamkeeper.service.AndroidRecordingStarter
 import com.dreamkeeper.service.RecordingService
 import com.dreamkeeper.ui.DreamKeeperRoot
@@ -109,6 +110,8 @@ class MainActivity : ComponentActivity() {
                     onEntryConsumed = { pendingRecordEntry.value = null },
                     debugRecordError = debugRecordError,
                     initialSearchQuery = prefillSearch,
+                    // D352：Task 9 只加这一行传参；装配细节在 ReviseOrchestrator.kt 的容器扩展里。
+                    orchestrator = container.orchestrator,
                 )
             }
         }

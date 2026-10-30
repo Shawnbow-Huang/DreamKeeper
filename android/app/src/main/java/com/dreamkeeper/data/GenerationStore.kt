@@ -5,6 +5,7 @@ import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.DreamEntity
 import com.dreamkeeper.data.db.GenerationJobEntity
 import com.dreamkeeper.data.db.LlmCallEntity
+import com.dreamkeeper.data.db.NovelMessageEntity
 import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.domain.Dream
 
@@ -42,6 +43,40 @@ interface GenerationStore {
 
     /** 该梦已记账的 HTTP 交换数。 */
     suspend fun callCount(dreamId: String): Int
+
+    // ------------------------------------------------------------ Task 9 改稿
+
+    /** 版本线（新→旧），供改稿基座与版本条读取。 */
+    suspend fun versions(dreamId: String): List<NovelVersionEntity> = emptyList()
+
+    /** 对话消息（旧→新），供最近三轮与气泡读取。 */
+    suspend fun messages(dreamId: String): List<NovelMessageEntity> = emptyList()
+
+    /**
+     * 提交一次成功改稿：**一个事务**里插 user 消息 → 新版本 → 窄更新 `dreams`
+     * （novelText / novelVersion / novelChangeLog）→ 插 assistant 消息（versionId=新版本 id）。
+     */
+    suspend fun commitRevision(
+        dreamId: String,
+        userMessage: NovelMessageEntity,
+        assistantMessage: NovelMessageEntity,
+        draft: NovelVersionEntity,
+        changeLogJson: String,
+    ): NovelVersionEntity = throw UnsupportedOperationException("当前 Store 不支持改稿")
+
+    /** 提交一次 ASK：一个事务只插 user + assistant 两条消息，不建版、不动正文。 */
+    suspend fun commitAsk(
+        dreamId: String,
+        userMessage: NovelMessageEntity,
+        assistantMessage: NovelMessageEntity,
+    ) {
+        throw UnsupportedOperationException("当前 Store 不支持改稿")
+    }
+
+    /** 选择/撤回：只窄更新 `dreams.novelSelectedVersion`，校验该版本存在。 */
+    suspend fun selectVersion(dreamId: String, version: Int) {
+        throw UnsupportedOperationException("当前 Store 不支持选择版本")
+    }
 }
 
 /** Room 实现。所有多表写都在 `db.withTransaction` 里，避免「版本插了但 dreams 没更新」的半截状态。 */
@@ -89,6 +124,66 @@ class RoomGenerationStore(private val db: DreamDatabase) : GenerationStore {
     }
 
     override suspend fun callCount(dreamId: String): Int = db.llmCallDao().countByDream(dreamId)
+
+    override suspend fun versions(dreamId: String): List<NovelVersionEntity> =
+        db.novelVersionDao().listByDream(dreamId)
+
+    override suspend fun messages(dreamId: String): List<NovelMessageEntity> =
+        db.novelMessageDao().listByDream(dreamId)
+
+    override suspend fun commitRevision(
+        dreamId: String,
+        userMessage: NovelMessageEntity,
+        assistantMessage: NovelMessageEntity,
+        draft: NovelVersionEntity,
+        changeLogJson: String,
+    ): NovelVersionEntity = db.withTransaction {
+        val dream = requireNotNull(db.dreamDao().getById(dreamId)) { "dream 不存在：$dreamId" }
+        require(userMessage.dreamId == dreamId) { "user 消息的 dreamId 不一致" }
+        require(assistantMessage.dreamId == dreamId) { "assistant 消息的 dreamId 不一致" }
+        db.novelMessageDao().insert(userMessage)
+        // 版本号取「版本表最大值」与「dreams.novelVersion」的较大者 +1：真实写入两条线始终同步，
+        // 但历史种子/人工修库可能只有 dreams 侧有版本号，不能从 v1 重新数（§0.9 用例 2 期望 3→4）。
+        val next = maxOf(db.novelVersionDao().maxVersion(dreamId) ?: 0, dream.novelVersion) + 1
+        val row = draft.copy(version = next)
+        db.novelVersionDao().insert(row)
+        // §0.1 要求同时写 novelVersion；DreamDao 的唯一窄 UPDATE 不写这一列（Task 8 契约），
+        // 而 DreamDao/DreamDatabase 都在 Task 9 白名单外，所以这里在事务内用一条等价窄 SQL。
+        db.openHelper.writableDatabase.execSQL(
+            "UPDATE dreams SET novelText = ?, novelChangeLog = ?, novelVersion = ? WHERE id = ?",
+            arrayOf<Any?>(row.text, changeLogJson, row.version, dreamId),
+        )
+        db.novelMessageDao().insert(
+            assistantMessage.copy(versionId = row.id),
+        )
+        row
+    }
+
+    override suspend fun commitAsk(
+        dreamId: String,
+        userMessage: NovelMessageEntity,
+        assistantMessage: NovelMessageEntity,
+    ) {
+        db.withTransaction {
+            requireNotNull(db.dreamDao().getById(dreamId)) { "dream 不存在：$dreamId" }
+            require(userMessage.dreamId == dreamId) { "user 消息的 dreamId 不一致" }
+            require(assistantMessage.dreamId == dreamId) { "assistant 消息的 dreamId 不一致" }
+            db.novelMessageDao().insert(userMessage)
+            db.novelMessageDao().insert(assistantMessage)
+        }
+    }
+
+    override suspend fun selectVersion(dreamId: String, version: Int) {
+        db.withTransaction {
+            val exists = db.novelVersionDao().listByDream(dreamId).any { it.version == version }
+            require(exists) { "版本 v$version 不存在" }
+            // D336：选择/撤回只动 novelSelectedVersion 一列；DreamDao 在白名单外，用等价窄 SQL。
+            db.openHelper.writableDatabase.execSQL(
+                "UPDATE dreams SET novelSelectedVersion = ? WHERE id = ?",
+                arrayOf<Any?>(version, dreamId),
+            )
+        }
+    }
 }
 
 private fun DreamEntity.toDream() = Dream(
@@ -108,4 +203,5 @@ private fun DreamEntity.toDream() = Dream(
     transcriptStatus = transcriptStatus,
     rawAudioPath = rawAudioPath,
     rawAudioMs = rawAudioMs,
+    novelSelectedVersion = novelSelectedVersion,
 )

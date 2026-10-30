@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,9 +70,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.data.db.NovelMessageEntity
+import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.Tag
+import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.ErrorText
@@ -145,8 +149,18 @@ fun DetailScreen(
     repo: DreamRepository,
     audioStore: WavStore,
     onBack: () -> Unit,
+    orchestrator: ReviseOrchestrator? = null,
 ) {
-    val vm: DetailViewModel = viewModel { DetailViewModel(repo, dreamId, audioStore) }
+    val vm: DetailViewModel = viewModel {
+        DetailViewModel(
+            repo = repo,
+            dreamId = dreamId,
+            audioStore = audioStore,
+            // Task 8 的生成链也挂在同一个容器编排器上；没有容器时两处都为 null，详情页只读。
+            orchestrator = orchestrator?.generation,
+            revise = orchestrator,
+        )
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val snackbarHost = remember { SnackbarHostState() }
@@ -183,7 +197,17 @@ fun DetailScreen(
 
                             1 -> NovelTab(
                                 count = state.novelChangeCount,
-                                novelText = state.dream?.novelText,
+                                // §0.7：详情正文用最终稿（selected ?: maxVersion），不用 dreams.novelText。
+                                novelText = state.finalNovel?.novelText ?: state.dream?.novelText,
+                                versions = state.versions,
+                                messages = state.messages,
+                                selectedVersion = state.dream?.novelSelectedVersion,
+                                currentVersion = state.finalNovel?.version ?: state.dream?.novelVersion,
+                                revising = state.revising,
+                                reviseError = state.reviseError,
+                                revisionAck = state.revisionAck,
+                                onSend = vm::revise,
+                                onSelectVersion = vm::selectVersion,
                             )
 
                             2 -> TagsTab(tags = state.tags)
@@ -490,7 +514,28 @@ private fun BodyScroll(text: String, color: Color) {
 }
 
 @Composable
-private fun NovelTab(count: Int, novelText: String?) {
+private fun NovelTab(
+    count: Int,
+    novelText: String?,
+    versions: List<NovelVersionEntity>,
+    messages: List<NovelMessageEntity>,
+    selectedVersion: Int?,
+    currentVersion: Int?,
+    revising: Boolean,
+    reviseError: String?,
+    revisionAck: Int,
+    onSend: (String) -> Unit,
+    onSelectVersion: (Int) -> Unit,
+) {
+    var opinion by rememberSaveable { mutableStateOf("") }
+    // ASK 的助手气泡：只有 versionId==null 的 assistant 消息才是「没建版、只回话」的那条。
+    val askMessages = remember(messages) {
+        messages.filter { it.role == "ASSISTANT" && it.versionId == null }
+    }
+    val awaitingReply = messages.lastOrNull()?.let { it.role == "ASSISTANT" && it.versionId == null } == true
+    LaunchedEffect(revisionAck) {
+        if (revisionAck > 0) opinion = ""
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         // brief 0.7：N 从 tab 标题挪到内容顶部这一行；「补写 N 处」的字样仍与 D41 一致
         if (count > 0) {
@@ -501,11 +546,65 @@ private fun NovelTab(count: Int, novelText: String?) {
                 color = Ember,
             )
         }
-        if (novelText.isNullOrBlank()) {
-            BodyScroll(text = NOVEL_EMPTY, color = InkDim)
-        } else {
-            BodyScroll(text = novelText, color = Paper)
+        VersionStrip(
+            versions = versions,
+            messages = messages,
+            selectedVersion = selectedVersion,
+            currentVersion = currentVersion,
+            onSelect = onSelectVersion,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val body = novelText?.takeIf { it.isNotBlank() }
+            if (body == null) {
+                Text(text = NOVEL_EMPTY, style = MaterialTheme.typography.bodyLarge, color = InkDim)
+            } else {
+                body.split(Regex("\n+")).map { it.trim() }.filter { it.isNotEmpty() }.forEach { paragraph ->
+                    Text(
+                        text = paragraph,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Paper,
+                    )
+                }
+            }
+            askMessages.forEach { message ->
+                AskBubble(message.content)
+            }
         }
+        ReviseSheet(
+            value = opinion,
+            onValueChange = { opinion = it },
+            onSend = { onSend(opinion) },
+            sending = revising,
+            error = reviseError,
+            placeholder = if (awaitingReply) "回它一句" else "说说哪里想改…",
+        )
+    }
+}
+
+/** ASK 的助手气泡：无 vN 徽标、无版本芯片（§0.8）。 */
+@Composable
+private fun AskBubble(text: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NightRaised, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text(text = "助手", style = MaterialTheme.typography.labelSmall, color = Ember)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Paper,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

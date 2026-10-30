@@ -39,6 +39,7 @@ import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.ApiKeyStore
+import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.service.RecordingStarter
 import com.dreamkeeper.ui.calendar.CalendarScreen
@@ -90,6 +91,8 @@ fun DreamKeeperRoot(
     onEntryConsumed: () -> Unit,
     debugRecordError: String? = null,
     initialSearchQuery: String = "",
+    /** 生成 + 改稿门面（Task 9 / D352）；默认 null 让既有预览与测试无需装配。 */
+    orchestrator: ReviseOrchestrator? = null,
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -208,6 +211,7 @@ fun DreamKeeperRoot(
                     repo = repo,
                     audioStore = audioStore,
                     onBack = { nav.popBackStack() },
+                    orchestrator = orchestrator,
                 )
             }
             composable("record/{entry}") { backStackEntry ->

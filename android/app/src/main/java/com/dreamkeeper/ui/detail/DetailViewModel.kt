@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.data.FinalNovel
+import com.dreamkeeper.data.db.NovelMessageEntity
+import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.MediaAsset
 import com.dreamkeeper.domain.Tag
@@ -12,6 +15,7 @@ import com.dreamkeeper.llm.GenerationFailure
 import com.dreamkeeper.llm.GenerationKind
 import com.dreamkeeper.llm.GenerationOrchestrator
 import com.dreamkeeper.llm.GenerationStage
+import com.dreamkeeper.llm.ReviseOrchestrator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +40,14 @@ data class DetailUiState(
     val assets: List<MediaAsset> = emptyList(),
     val novelChangeCount: Int = 0,
     val loaded: Boolean = false,
+    /** 详情正文/导出的最终正文（§0.7：`selected ?: maxVersion`，不是 `dreams.novelText`）。 */
+    val finalNovel: FinalNovel? = null,
+    val versions: List<NovelVersionEntity> = emptyList(),
+    val messages: List<NovelMessageEntity> = emptyList(),
+    val revising: Boolean = false,
+    val reviseError: String? = null,
+    /** 每成功一轮 +1；NovelTab 用它清空输入框（失败时保留原文可重发，D330）。 */
+    val revisionAck: Int = 0,
 )
 
 /**
@@ -76,20 +88,41 @@ class DetailViewModel(
      * 知道怎么装配它们。
      */
     private val orchestrator: GenerationOrchestrator? = null,
+    /** 对话改稿入口（Task 9）。默认 null 同样只为不破既有两参单测；生产由根容器注入。 */
+    private val revise: ReviseOrchestrator? = null,
 ) : ViewModel() {
 
     private val dreamId: String = dreamId
 
+    /** 版本线/消息/最终稿不是 `Dream` 上的列，单独一条流；任何写操作后重读。 */
+    private data class Conversation(
+        val versions: List<NovelVersionEntity> = emptyList(),
+        val messages: List<NovelMessageEntity> = emptyList(),
+        val finalNovel: FinalNovel? = null,
+        val revising: Boolean = false,
+        val reviseError: String? = null,
+        val revisionAck: Int = 0,
+    )
+
+    private val conversation = MutableStateFlow(Conversation())
+
     val state: StateFlow<DetailUiState> = combine(
         repo.observe(dreamId),
         repo.observeTagsForDream(dreamId),
-    ) { dream, tags ->
+        conversation,
+    ) { dream, tags, convo ->
         DetailUiState(
             dream = dream,
             tags = tags,
             assets = emptyList(),
             novelChangeCount = novelChangeCount(dream?.novelChangeLog),
             loaded = true,
+            finalNovel = convo.finalNovel,
+            versions = convo.versions,
+            messages = convo.messages,
+            revising = convo.revising,
+            reviseError = convo.reviseError,
+            revisionAck = convo.revisionAck,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -106,6 +139,7 @@ class DetailViewModel(
     private var fixedByteMs: Long = Long.MIN_VALUE
 
     init {
+        viewModelScope.launch { refreshConversation() }
         val playback = playback
         if (playback != null) {
             // brief §0.12：字节是时长的唯一真源。repair 后解析出的时长与库里
@@ -169,6 +203,60 @@ class DetailViewModel(
                 is GenerationFailure.Protocol -> GenerationPhase.Failed(kind, failure.message)
             }
         }
+    }
+
+    // ------------------------------------------------------------ 对话改稿（Task 9）
+
+    /**
+     * 发一条意见：成功则重读版本线/消息并 +1 ack（UI 清空输入框）；
+     * 失败把原因留在 `reviseError`，输入框原文不动（D330）。
+     */
+    fun revise(opinion: String) {
+        val text = opinion.trim()
+        if (text.isEmpty()) return
+        val revise = revise ?: return
+        if (conversation.value.revising) return
+        conversation.value = conversation.value.copy(revising = true, reviseError = null)
+        viewModelScope.launch {
+            val result = revise.revise(dreamId, text)
+            refreshConversation()
+            val after = conversation.value
+            conversation.value = after.copy(
+                revising = false,
+                reviseError = result.failure?.let(::describeFailure),
+                revisionAck = if (result.failure == null) after.revisionAck + 1 else after.revisionAck,
+            )
+        }
+    }
+
+    /** 选中/撤回：只窄更新 `dreams.novelSelectedVersion`，不删任何版本行（D336）。 */
+    fun selectVersion(version: Int) {
+        viewModelScope.launch {
+            runCatching { repo.selectVersion(dreamId, version) }
+                .onFailure { e ->
+                    conversation.value = conversation.value.copy(
+                        reviseError = e.message ?: "选择版本失败",
+                    )
+                }
+            refreshConversation()
+        }
+    }
+
+    private suspend fun refreshConversation() {
+        val versions = runCatching { repo.listVersions(dreamId) }.getOrDefault(emptyList())
+        val messages = runCatching { repo.listMessages(dreamId) }.getOrDefault(emptyList())
+        val finalNovel = runCatching { repo.resolveFinalNovel(dreamId) }.getOrNull()
+        conversation.value = conversation.value.copy(
+            versions = versions,
+            messages = messages,
+            finalNovel = finalNovel,
+        )
+    }
+
+    private fun describeFailure(failure: GenerationFailure): String = when (failure) {
+        is GenerationFailure.Llm -> "模型调用失败（${failure.kind.name}）"
+        is GenerationFailure.Gate -> "闸门未过（${failure.failed.joinToString("、")}）：${failure.detail}"
+        is GenerationFailure.Protocol -> failure.message
     }
 
     override fun onCleared() {

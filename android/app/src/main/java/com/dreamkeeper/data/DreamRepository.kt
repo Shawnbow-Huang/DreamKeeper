@@ -5,6 +5,8 @@ import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.DreamEntity
 import com.dreamkeeper.data.db.DreamTagEntity
 import com.dreamkeeper.data.db.MediaAssetEntity
+import com.dreamkeeper.data.db.NovelMessageEntity
+import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.data.db.TagEntity
 import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
@@ -220,6 +222,42 @@ class DreamRepository(
      */
     suspend fun findById(id: String): Dream? = dreams.getById(id)?.let(::toDomain)
 
+    // ------------------------------------------------------------ Task 9 改稿读路径
+
+    /** 版本线（新→旧）。 */
+    suspend fun listVersions(dreamId: String): List<NovelVersionEntity> =
+        db.novelVersionDao().listByDream(dreamId)
+
+    /** 对话消息（旧→新）。 */
+    suspend fun listMessages(dreamId: String): List<NovelMessageEntity> =
+        db.novelMessageDao().listByDream(dreamId)
+
+    /** 选择/撤回：只窄更新 `dreams.novelSelectedVersion`（D336），不删版本行。 */
+    suspend fun selectVersion(dreamId: String, version: Int) {
+        RoomGenerationStore(db).selectVersion(dreamId, version)
+    }
+
+    /**
+     * 详情/导出用的最终正文：`selected ?: maxVersion`（D336）。
+     * 没有任何版本行时退回 `dreams.novelText`，再退回 `faithfulText/rawTranscript`。
+     */
+    suspend fun resolveFinalNovel(dreamId: String): FinalNovel? {
+        val dream = findById(dreamId) ?: return null
+        val versions = db.novelVersionDao().listByDream(dreamId)
+        if (versions.isEmpty()) {
+            val text = dream.novelText ?: dream.faithfulText ?: dream.rawTranscript
+            if (text.isBlank()) return null
+            return FinalNovel(version = dream.novelVersion, novelText = text, selected = false)
+        }
+        // listByDream 是 version DESC，first() 即 maxVersion。
+        val chosen = versions.firstOrNull { it.version == dream.novelSelectedVersion } ?: versions.first()
+        return FinalNovel(
+            version = chosen.version,
+            novelText = chosen.text,
+            selected = dream.novelSelectedVersion != null,
+        )
+    }
+
     /**
      * 自动转写的正文写回：CAS，返回 0 表示让位（用户先写了 / 时长已变）。
      *
@@ -359,6 +397,7 @@ class DreamRepository(
         transcriptStatus = e.transcriptStatus,
         rawAudioPath = e.rawAudioPath,
         rawAudioMs = e.rawAudioMs,
+        novelSelectedVersion = e.novelSelectedVersion,
     )
 
     private fun tagToDomain(e: TagEntity) = Tag(e.id, e.name, e.kind, e.source, e.evidenceText)
@@ -385,3 +424,10 @@ class DreamRepository(
         val PUNCTUATION_OR_SYMBOL = Regex("[\\p{P}\\p{S}]")
     }
 }
+
+/** [DreamRepository.resolveFinalNovel] 的返回值：版本号 + 该版正文 + 是否用户挑中（§0.7）。 */
+data class FinalNovel(
+    val version: Int,
+    val novelText: String,
+    val selected: Boolean,
+)
