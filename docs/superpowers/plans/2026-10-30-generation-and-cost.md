@@ -713,6 +713,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   `export/DocxExporter.kt`、`export/PdfExporter.kt`、`ui/detail/ExportSheet.kt`、`ui/detail/DetailViewModel.kt`（导出动作）、
   `ui/detail/DetailScreen.kt`（导出入口两处）、`data/DreamRepository.kt`（读 `resolveFinalNovel` 与选中版本）、
   `test/.../export/TxtExporterTest.kt`、`test/.../export/DocxExporterTest.kt`、`test/.../export/ExportNamingTest.kt`、
+  `llm/DeepSeekClient.kt`（D370：只加一行每次尝试的 logcat 日志，供 `failed=N` 独立对账）、
   `scripts/check-export.py`（新）、`scripts/check-cost.py`（D337/D366：必须支持 error 行；新增 `--require-rows` 硬门，
   输出 `failed=N` 与逐行 `[FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET` 格式）、
   `docs/evidence/plan3/p3-export-*`、`docs/evidence/plan3/p3-e2e-*`、`docs/evidence/plan1/ACCEPTANCE.md` 追加 `## 3d 生成与成本证据表`、
@@ -720,7 +721,9 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 - §0.1 导出内容（D342）：正文 = `resolveFinalNovel(dreamId)` 的 `novelText`（`selected ?: maxVersion`，与详情页/列表契约一致）；
   该梦没有小说稿 → 退回 `faithfulText ?: rawTranscript`，文件名带 `-raw` 后缀。头部元信息固定四行：
-  `# <dream.title>`、`<dreamDate yyyy-MM-dd HH:mm>`、`标签：a、b、c`（空则省略该行）、空行。**不用** `dreams.novelText`
+  `# <dream.title>`、`<dreamDate yyyy-MM-dd HH:mm>`、`标签：a、b、c`（空则省略该行）、空行。确定性口径（D373）：日期走
+  **Asia/Shanghai**（D258 先例）；标签按 `tagId ASC` 排列、`、` 连接；头部 title 的换行压成空格（文件名另走清洗）；
+  `共 N 字` 的 N 只算**正文**（`contentCharCount(正文)`，不含头部与 footer）。**不用** `dreams.novelText`
   （它永远是最新生成版，不是用户选中的那版）。
 
 - §0.2 三格式（D340/D341）：
@@ -742,15 +745,20 @@ T3  不调用模型                                   → faithfulText = rawTran
   这是 E2E 断言的锚。
 
 - §0.5 `scripts/check-export.py`（纯标准库，D357）：
-  - `--txt <f> --from-db <db> --dream-id <id>`：脚本按 `resolveFinalNovel(selected ?: maxVersion)` 从 DB 取正文、
-    按 §0.1 四行头 + 正文 + `\n共 <N> 字`（N == `contentCharCount`）自行推导期望串，与文件逐字节比对；
+  - 前置（两个子命令共用）：`--db` 的 sha256 必须等于 `p3-e2e-08-db-sidecar.txt` 里记的设备 sha；`PRAGMA integrity_check`
+    == ok、`user_version` == 2、表数 == 9、`novel_versions` 与 `llm_calls` 均非空（D357 的真正锚，防「DB 与导出一起错」）。
+  - `--txt <f> --file-name <name> --from-db <db> --dream-id <id>`：脚本按 `resolveFinalNovel(selected ?: maxVersion)` 取正文、
+    按 §0.1 推导期望串（含 `-v<n>`/`-raw` 文件名），与文件逐字节比对，并断言实际文件名 == 推导名；
     另断言无 BOM、`\r` 计数 0、footer 的 N 与按正文算出的 N 相等。`--expect-sha` 保留作辅助（只证明「没变」）。
   - `--docx <f> --from-db <db> --dream-id <id>`：zip 三件齐全、`word/document.xml` 可 `xml.etree` 解析；
     按 document 顺序把 `w:p` 归一为 `\n`、拼接 `w:t`（尊重 `xml:space="preserve"`），与 DB 推导串逐字相等；
-    首段 == `dream.title`（加粗 `w:b`）、段数 == 期望行数、无非法控制字符、`_rels` 关系完整。
+    首段 == `dream.title` 且首段 run 含 `<w:rPr><w:b/></w:rPr>`（唯一格式锚，必须断言）；段数 == 3（或 2）+ 正文行数
+    （正文空行也生成空 `w:p`，头部第 4 行空行不单独成段，D374）；无非法控制字符、`_rels` 关系完整。
   - `--pdf <f>`：`%PDF-` 在 byte 0、尾 200 字节内 `%%EOF`、`/Type /Pages` 存在且 `/Count` == `/Type /Page` 对象数、
-    每页 `/Contents` 非空、每页有 MediaBox、字节数 > 2KB、无 `/Encrypt`。**不做文本抽取断言**（流被压缩），也不做像素判定。
-  - `--mutation` 自查：改期望串一个字符 → 必 RED；删 docx 一个 `w:p` → 必 RED（防检查器恒绿）。
+    每页 `/Contents` 非空、每页有 MediaBox、全文至少一处 `/BaseFont`（证明文本绘制真的发生，`/Contents` 非空会被页脚恒真满足，
+    D374）、字节数 > 2KB、无 `/Encrypt`。**不做文本抽取断言**（流被压缩），也不做像素判定。
+  - `--mutation` 自查：先把原件复制到 `.scratch/` 再改（改期望串一个字符、删 docx 一个 `w:p`）→ 必 RED；结束恢复副本并与
+    原件 `cmp` 相同（D372：负向对照只在副本上做，不许污染已取证文件）。
   - 子命令统一 `RESULT: GREEN|RED` + 非零退出码，便于证据粘贴。
 
 - §0.6 端到端设备流程（真机/模拟器 emulator-5554，APK 用本次 `assembleDebug` 产物；D360/D361）：
@@ -763,33 +771,42 @@ T3  不调用模型                                   → faithfulText = rawTran
   4. 改稿一句（如「删掉最后一句」）→ 截新版本与对话气泡（`p3-e2e-03-revise.png`）；再发一句纯提问 → 截 ASK 气泡
      （`p3-e2e-04-ask.png`，版本数不变）。
   5. 选中 v2 → 截选中态与「当前 v2 · 已选中」（`p3-e2e-05-selected.png`）。
-  6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ 设备 `ls -l` + `sha256sum` → `adb pull /sdcard/Download/DreamKeeper/`
-     三件 → 主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）。
+  6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ 等 MediaStore `IS_PENDING` 清（`ls -l` 见 3 文件且 size>0、
+     间隔 2s 两次 `sha256sum` 稳定）→ 设备 `ls -l` + `sha256sum` → `adb pull /sdcard/Download/DreamKeeper/` 三件 →
+     主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；同时贴 `SELECT novelSelectedVersion FROM dreams`
+     与 `SELECT version FROM novel_versions WHERE dreamId=…` 原始行，证明文件名里的 `-v<n>` 就是选中版（D373）。
   7. 系统「文件」打开 txt/docx 截图；pdf 打开态记 PENDING（AOSP 无 viewer），`p3-e2e-07-pdf-open.png` 若拍到则单独说明、
      **排除**在 nearWhite=0 之外（D359）。
   8. 制造一次失败并验证重试：开飞行模式 → 点「小说化」→ 失败态截图（`p3-e2e-09-failed.png`）→ 点「重试」→ 仍失败
      （证明重试走的是同一入口，A23）→ 关飞行模式 → 再点「重试」→ 成功出新版本（截 `p3-e2e-09b-retry.png`）；这步保证 A7 的
-     `failed>=1` 有真实行可验，且重试路径有设备证据（D361/D368）。
-  9. `adb shell am force-stop com.dreamkeeper` → `run-as ls -l databases/`（db/wal/shm 三个大小原文）→
-     `cmd /c "... exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db > p3-e2e-08-db.db"`，`-wal/-shm` 只做本地核对、
-     不入库（D279 口径）；主机 sha256 == 设备 sha256 才继续。
+     `failed>=1` 有真实行可验，且重试路径有设备证据（D361/D368）。点完失败先等 toast/失败态**渲染落地**再截图；
+     该步结束时从 DB 现状确认 `novel_versions` 行数没增加（失败不建版），并在 step 9 拉库后复核。
+  9. `adb shell am force-stop com.dreamkeeper` → `run-as ls -l databases/`（db/wal/shm 三个大小 + 设备 `sha256sum` 原文）→
+     `cmd /c "... exec-out run-as com.dreamkeeper cat ..."` **三件齐拉**到 `.scratch/e2e-db/` → 主机 sha256 == 设备 sha256；
+     然后主机 `python3`（内置 sqlite3）以 **rw** 打开复制出的三件、`PRAGMA wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是
+     `p3-e2e-08-db.db` 证据**，三件的合并前 bytes+sha 写 `p3-e2e-08-db-sidecar.txt`（D371）；所有 check-cost / check-export /
+     负向对照都只在合并后的副本上跑（D279 的「wal/shm 不入库」仍成立，入的是合并产物与侧车哈希）。
  10. `check-cost.py --db-copy p3-e2e-08-db.db --require-rows` → 断言 `mismatches=0`、`failed=N`（N == `error IS NOT NULL`
-     行数且 >=1），每个 error 行 `cost==0 && usageJson IS NULL`，逐行 `[FAILED]` 原文入库；再做负向对照：临时把一行 error 的
-     `costMicroYuan` 改成 1 → 必须 RED。
- 11. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令（含 `--mutation`）+ `scripts/check-faithful.py --input --output`
+     行数且 >=1），每个 error 行 `cost==0 && usageJson IS NULL`，逐行 `[FAILED]` 原文入库；`failed` 的独立来源 =
+     `adb logcat -d | grep DKLLM | grep -c " kind="`（D370 的那行日志），两者必须相等；
+     负向对照：**复制** `p3-e2e-08-db.db` 到 `.scratch/`、把一行 error 的 `costMicroYuan` 改成 1 → 必须 RED → 结束校验原证据
+     sha256 未变、副本 `cmp` 原文入库（D372）。
+ 11. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令（含 `--mutation`，结束恢复 + `cmp` 原件）+ `scripts/check-faithful.py --input --output`
      （A1–A21 与生成相关项）+ `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 扫除 pdf-open 外的全部截图。
  12. 大字体与键盘：`adb shell settings put system font_scale 1.3` → 打开有小说稿的梦 → 点输入框弹键盘 → 截图
      `p3-e2e-10-fontscale.png`（输入条不被遮挡）→ `font_scale 1.0` 恢复；A14 以该图 + 目视结论为准（D369）。
- 13. 每份证据的 `DEVICE_TIME` 必须落在该步骤的事件窗口内（不许一批同值，Task 4 教训）；截图同名 txt 带 `PNG_SHA256` 与
+ 13. 时间线与日志顺序：每步执行时当场 `adb shell date` 落 `p3-e2e-00-timeline.txt`（步骤号 / 设备时间 / 主机时间），
+     DEVICE_TIME 必须与该步窗口吻合（不许一批同值，Task 4 教训）；`adb logcat -d` 全量原文在 force-stop 之后、任何重装/清空
+     之前抓一次（A15 的 `FATAL EXCEPTION` 计数与 A9 的 Key 命中 0 都从这份原文算）。截图同名 txt 带 `PNG_SHA256` 与
      `nearWhite=0 ratio=0.0000%` 原文。
 
 - §0.7 验收清单（每项一行结论 + 证据文件）：A1 生成链路（T0 原样稿真实入库）；A2 五闸门全绿批次（T2/T3 降级链以 `GenerationOrchestratorTest` #6/#7 的 JVM 证据补充，设备只走 happy path，D367）；A3 版本线/选中/撤回；
-  A4 ASK 不建版；A5 txt/docx 设备可打开 + pdf 结构 GREEN + pdf 打开态 PENDING（D359）；A6 成本复算 `mismatches=0` + `failed=N`；A7 失败行记账（`error`/`cost==0`/`usageJson NULL`，`failed>=1`，由飞行模式步骤制造，D361）；
+  A4 ASK 不建版；A5 txt/docx 设备可打开（开工前先做 5 分钟查看器探针，打不开按同形制登记 PENDING，D376）+ pdf 结构 GREEN + pdf 打开态 PENDING（D359）；A6 成本复算 `mismatches=0` + `failed=N`；A7 失败行记账（`error`/`cost==0`/`usageJson NULL`，`failed>=1`，由飞行模式步骤制造，D361）；
   A8 提示词指纹与三件 sha 一致；A9 Key 只在 Keystore：本轮**手工**在设置页输入 Key（禁用 `dk_debug_save_key`/adb 注入），证据目录与 REPLAY 中 Key 命中 0
   （`grep -r` 原文），截图不含 Key 输入框（D365）；A10 无新依赖（`libs.versions.toml` 未增）；
   A11 表数 9 / `user_version=2` 不被 Task 10 改动；A12 列表页仍显示原样稿（D332 知情）；A13 导出文件名清洗；A14 大字体下输入条不被键盘遮挡（§0.6 步骤 12 的设备截图 `p3-e2e-10-fontscale.png`，D369）；
   A15 全程无崩溃（logcat `FATAL EXCEPTION` 计数 0）；A16 证据头三行齐全且 sha 可复算；A17 复跑命令逐条可执行（JVM/sha 类逐字节复现；E2E 类写「同步骤产生新证据且断言全绿」，D362）；
-  A18 PENDING 清单与理由；A19 计划 §9 偏差全部有 D 号；A20 看板 10/10 与验收段；A21 FINAL-REVIEW 结论可被第三方复现；A22 生成入口可点且失败可重试（Task 9b 证据 + §0.6 步骤 8）；
+  A18 PENDING 清单与理由（白名单只收环境限制：无查看器 / 无麦克风 / 无网络代理；**实现缺陷一律 RED，不许 PENDING**，D376）；A19 计划 §9 偏差全部有 D 号；A20 看板 10/10 与验收段；A21 FINAL-REVIEW 结论可被第三方复现；A22 生成入口可点且失败可重试（Task 9b 证据 + §0.6 步骤 8）；
   A23 降级/兜底链有可查证据（T2/T3 走 JVM，`generation_jobs.stage` 与 `llm_calls` 行数对得上；STT 若未验则进 PENDING 白名单）。
 
 - §0.8 `docs/evidence/plan3/FINAL-REVIEW.md` 结构固定六节：结论（Plan 3 是否可交付）→ 交付物与提交链 → 证据索引（文件 ↔ 断言）→
@@ -797,7 +814,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 - Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **39 类 / 359 例** 0 失败
   （347 + 12；347 见 Task 9b）；设备端三格式文件全部 `check-export.py` GREEN；`check-cost.py --db-copy` `mismatches=0` 且 `failed=N`；
-  截图全部 `nearWhite=0`；`FINAL-REVIEW.md` 六节齐全、A1–A21 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
+  截图 `nearWhite=0`（`p3-e2e-07-pdf-open.png` 若拍到则按 D359 排除）；`FINAL-REVIEW.md` 六节齐全、A1–A21 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
 
 ## 9. 偏差登记（从 D218 起）
 
@@ -963,6 +980,13 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D367 | T10-17：T2/T3 降级链以 JVM 用例（`GenerationOrchestratorTest` #6/#7）为证据，设备只走 happy path；A22/A23 明确入口可点与兜底证据口径 | 设备上强制 T2 需要可控坏模型返回，E2E 不引入假 client；JVM 已覆盖判据（`isConservativeOk`、T3 不调模型） |
 | D368 | T10-18：§0.6 步骤 8 增加「失败 → 重试仍失败 → 联网重试成功」三段，A22 一并验收 | happy path 下重试入口无证据；只测一次失败无法区分「重试没接上」与「重试接上但网络仍断」 |
 | D369 | T10-19：A14 大字体遮挡改为设备步骤 12（`font_scale 1.3` + 键盘 + 截图 `p3-e2e-10-fontscale.png`） | 原 A14 在 §0.6 无对应步骤，不可机器判定；加一步即可留证 |
+| D370 | T10-20：`llm/DeepSeekClient.kt` 只加一行每次尝试的 logcat 日志（`DKLLM attempt n=<i> status=<s> kind=<k>`），`failed=N` 用 logcat 计数做独立对账 | 同表自证（N == error 行数）不能证明「失败被观察到」；不加日志就没有第三方可读的失败次数真源 |
+| D371 | T10-21：设备 DB 三件齐拉 → 主机 rw 打开 `wal_checkpoint(TRUNCATE)` 合并 → **合并后的 .db 才是入库证据**，三件合并前 bytes+sha 写 `p3-e2e-08-db-sidecar.txt` | 只拉 .db 会拿到 4096B 残缺快照（数据在 WAL），本地三件同目录能跑绿但第三方在证据上必 RED；合并后才满足「证据可独立复跑」 |
+| D372 | T10-22：负向对照一律在 `.scratch/` 的副本上做，结束后校验原证据 sha 未变、副本 `cmp` 相同 | 直接改证据会污染已取证文件；`--db-copy` 以 ro 打开也改不了，原流程无法执行 |
+| D373 | T10-23：头部与文件名确定性——日期 Asia/Shanghai、标签 `tagId ASC` + `、`、title 换行压空格、「共 N 字」只算正文；`check-export --file-name` 断言文件名 == 推导名（含 `-v<n>`/`-raw`） | 时区/标签顺序/换行不钉死，exporter 与 checker 会各写一套（互红或一致地错）；不验文件名就无法证明导出的是选中版 |
+| D374 | T10-24：docx 段映射定死（正文空行也生成空 `w:p`，头部空行不单独成段），断言首段加粗 `<w:rPr><w:b/></w:rPr>`；pdf 补 `/BaseFont` 至少一处 | 不定义段映射会让「段数==期望行数」假绿/假红；`/Contents` 非空会被页脚恒真满足，加 `/BaseFont` 才有「文本绘制发生过」的代理 |
+| D375 | T10-25：§0.6 步骤 6 等 MediaStore `IS_PENDING` 清且 sha 稳定两次再 pull；每步当场抓 `adb shell date` 落 timeline；`adb logcat -d` 在 force-stop 后、重装/清空前抓全量 | MediaStore 未落盘会 pull 到半截文件；DEVICE_TIME 事后补会重演 Task 4 的「一批同值」；logcat 清了就再也拿不到 A15/A9 原文 |
+| D376 | T10-26：A5 的「txt/docx 设备可打开」开工前 5 分钟做查看器探针；PENDING 白名单只收环境限制，实现缺陷不许 PENDING | AOSP 镜像常常没有 txt/docx 查看器，当天才发现会让口径当场失效；PENDING 不设白名单会变成「红都记 PENDING」的后门 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
