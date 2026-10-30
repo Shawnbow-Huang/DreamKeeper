@@ -710,6 +710,16 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D160 | 夜间可读性与对比度：正文若用 `Paper` 16.73:1 整屏最亮面积过大、`Line` 边框 1.40:1 等于无边界、倒计时用 Paper 太亮 | 正文 `#B8C1CF`（11.11:1）、倒计时 `Ember`（6.72:1）、按钮边界 `InkDim`（6.68:1）、主钮 `EmberDeep`+`Paper`（6.02:1）；进页 `fadeIn(120ms)`，收起落 `Night` 底页 | 计划 Task 5 §0 第 11 条 |
 | D161 | 设计 §11 要「自动熄屏」与「设置里可关」，但应用没有 `DEVICE_POWER` 权限、本轮也没有设置页 | 本轮做法：`window.screenBrightness = 0.01f`（离开恢复）、不持 `KEEP_SCREEN_ON`；「可关」无落点 → 固定为开，待 Plan 4 设置页 | 计划 Task 5 §0 第 12 条、设计 §11 |
 | D162 | 30 秒窗口缺无障碍与证据判据（倒计时加 liveRegion 会每秒播报、把人吵醒） | 麦克风 `heightIn(min=88.dp)`、三个可点节点带 `contentDescription`、倒计时 `contentDescription="还剩 N 秒"` 但不加 liveRegion；证据卡 YAVG ≤32、近白 `-TopOffset 100`、uiautomator 三节点 bounds 高 ≥132px | 计划 Task 5 §0 第 13–14 条 |
+| D163 | §0-14 的字面谓词「`clickable="true"` 且 `content-desc` 非空」在本机恒为 0：API 37 的 Compose 把 `clickable` 与 `content-desc` 拆成两个同 bounds 的节点 | 改用等价且更强的几何关联判据：`clickable=true` 节点恰好 3 个（高 294/231/147px，全 ≥132），每个在**完全相同的 bounds** 上都有非空 `content-desc` | `docs/evidence/plan2/p2-followup-uiautomator.xml`、`p2-followup-index.md` |
+| D164 | 未按计划 5.4b 显式调 `RecorderCore.rebase()` | 每次 take 都新建 `RecorderCore`，其 `run()` 自己把 `baseBytes` 设为 `sink.bytesWritten()`（已有 PCM 字节），`deficit` 恒从 0 起算——追加场景不存在「按松手前空档补静音」的膨胀。`rebase()` 保留给同一 core 跨暂停（Plan 4） | `audio/RecorderCore.kt`、`service/RecordingService.kt` |
+| D165 | 录屏裁掉了进页前 5.6s：原片 208 帧里唯一 >32 的帧（YAVG 32.01 @0.57s）属于**录音页**「0:02 正在保存」的亮字 | "进页→收起"段单独裁出（126 帧，max 30.01、无 ≥48 帧）；原片留在 `.tmp-evidence/` 不入库，判据只在追问页区间上生效 | `docs/evidence/plan2/p2-followup-04.mp4` |
+| D166 | 追加实测量 1900ms（按压 2080ms），落在 2000±100 内但贴下界 | 起录 ≈+200ms、停录 ≈−180ms；`stat2`（按住 1.10s）已写 900ms 可交叉印证这 200ms 是服务启动延迟、不是丢字节。验收阈值沿用 ±100，不为此放宽 | `docs/evidence/plan2/p2-followup-bytes-append.txt` |
+| D167 | `FollowUpUiState` 保留了 `visible`（§0-10 字段表没有它） | `loaded` 防「进页即收起」，`visible` 驱动 `AnimatedVisibility` 与收起后 120ms 再出栈，二者分工明确，不算多余状态 | `ui/record/RecordUiState.kt` |
+| D168 | `#B8C1CF` 未加进 `ui/theme/Color.kt`（该文件不在本任务允许清单） | 在 `FollowUpScreen.kt` 内以私有 `FollowUpBody` 定义并注明出处；下次动主题时再上收 | `ui/followup/FollowUpScreen.kt` |
+| D169 | 屏幕亮度固定为 0.01f、没有「设置里可关」 | §0-12 已预告：无设置页，本阶段固定开；Plan 4 设置页落地后再给开关 | 计划 Task 5 §0-12 |
+| D170 | 收起后 `popBackStack()` 回日历（不是回详情页） | followup 入栈时 record 已被 `popUpTo(inclusive)` 清掉，pop 即回日历；pop 失败再 `navigate(日历)` 兜底 | `ui/followup/FollowUpViewModel.kt` |
+| D171 | 120s 上限提示用内联中文「单段最长 120 秒，已替你保存」 | 全仓库同类文案均为内联，本阶段不抽 `strings.xml`（国际化不在范围内） | `ui/followup/FollowUpScreen.kt` |
+| D172 | `onTimeout` 后不写 `rawTranscript` 文本（计划 5.1 要求「rawTranscript 非空」被 §0-5 覆盖） | 只置 `transcriptStatus="PENDING"` 与 `rawAudioMs`；`FollowUpViewModelTest` 显式断言原文未被改动——文本由 Task 7 的 STT 写 | `ui/followup/FollowUpViewModel.kt`、Task 7 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
