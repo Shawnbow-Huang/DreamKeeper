@@ -649,6 +649,12 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D305 | T7-1：Task 7 向量口径修正为「11 例（9 红 + 2 绿，与 `--self-test` 一致）+ 2 条 revise 边界 + 2 条已知误报 = 15 条」，真源 `docs/evidence/plan3/faithful-gate-vectors.json`（`source_sha256=a3d84acbc2b49e33`，由 Python 直接生成后冻结）；旧稿「11 条变异 + 2 条边界」=13 与 `--self-test` 不符 | 实测 `python scripts/check-faithful.py --self-test` 共 11 例（2 绿 9 红）；旧稿数词向量「一层→三层」与脚本 :354-355 的「一楼→三楼」不符，「一下/七点」在脚本中无执行向量，现补成 G1 必红的两条锁定用例 |
 | D306 | T7-2：Task 7 API 写死 `check(input, output, mode)` + `GateReport.failed: Set<Gate>` + `contentChars`/`isConservativeOk` 的落点与签名 | 旧 Files 没有 `mode`（G2 revise 1.15 与 Task 9「G2/G3 对当前版本」都要用），也没写 `Gate`/`GateReport`/两个纯函数的落点；Task 8 的 T2 等值与违规清单注入依赖这些签名 |
 | D307 | T7-3：Task 7 端口语义与测试形态——Unicode 空白显式集合、`\p{Nd}`、码点下标、G4 子串去重、G5 回绕保护、plain JUnit + Gradle `inputs.file` 防假绿 | 实测 Java 默认 `\s` 不匹配 U+3000/U+00A0/U+001C、`\d` 不匹配全角３，`String.length` 按 UTF-16 会切开代理对；纯函数无 Android 依赖，20 个 Robolectric 类都是因为碰 Android/org.json，本测试不需要 |
+| D308 | T6-2：派工书第 10 条用例（必填槽空串/纯空白抛 IAE）在实施者启动后才补入契约，交付实为 9 例；Lead 在验收时补第 10 条（`PromptRepositoryTest` 第 6b 节），红由变异提供：`isBlank()`→`isEmpty()` 时该例红 `expected java.lang.IllegalArgumentException to be thrown, but nothing was thrown` | 实测契约收紧晚于 subagent 启动（subagent 无法被 `send_message` 寻址，只能靠文件），交付 9/9 红绿可信但缺 §0.4 空值覆盖；补测后 targeted 10/10、全量 311 绿（`p3-prompt-05-empty-required.txt`） |
+| D309 | T6-3：`processDebugAssets` 在 AGP 9.5 不存在（`Cannot locate tasks that match ':app:processDebugAssets'`），资产证据改用 `:app:mergeDebugAssets :app:assembleDebug --rerun-tasks` | 实测报错原文见 `p3-prompt-03-apk-assets.txt`；判定标准不变（解包看 `assets/prompts/*` + pricing sha） |
+| D310 | T6-4：`assets/prompts/` 打进全部 10 个 md（含 CHANGELOG/README/旧版 `novel.v1`、`faithful_cleanup.v1`），非只三件，包体 +约 93KB | 计划 §5 原文即 Sync `prompts/*.md`，未筛是照计划执行；运行期只按 `PromptSpec.assetPath` 读三件，旧版文件不被引用，收窄只需在 Sync 加 include（P2，不阻断） |
+| D311 | T6-5：§0.1「fail fast」与 D285 的取舍落地为「先 `Log.w` 再抛 `IllegalStateException`，不写库」 | 两条要求不冲突：D285 要求漂移可观测（logcat），§0.1 要求启动即失败（抛异常）；两者串行执行，未回退成静默 |
+| D312 | T6-6：派工书「30 类 / 310 例」类数笔误，实际 31 类 / 310 例（新增 1 个测试类） | 实测 XML `classes=31 tests=310`；新增测试类必然 +1 类，310 = 301 + 9 |
+| D313 | T6-7：Sync 接线试错未留在代码里——`addGeneratedSourceDirectory` 编译错（`Inapplicable candidate(s): var destinationDir: File`）、Provider 入 `assets.srcDir` 被 AGP 拒（`You cannot add Provider instances to the Android SourceSet API.`），最终 `File` + `preBuild` 依赖 | 实测报错原文见 `task-6-report.md` 与 `android/app/build.gradle.kts` 注释；两版方案都不可行，留注释避免后来者重踩 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
@@ -729,3 +735,27 @@ T3  不调用模型                                   → faithfulText = rawTran
 - PENDING（D297–D303）：真实 API 联调、403/5xx/普通 IOException 重试、`Retry-After` 日期形式、`readTimeout`、
   jitter 随机性；`latencyMs` 口径与「解析失败是否单独占一行」在 Task 8 记账时确认。
 - 结论：**Task 5 验收通过**。
+
+---
+
+### Task 6 验收（Lead，2026-10-30）
+
+- 交付：`92ec146`（10 文件：`android/app/build.gradle.kts` +21 行 `syncPromptAssets`/`assets.srcDir`/`preBuild`，
+  `llm/PromptSpec.kt` 110 行，`llm/PromptRepository.kt` 227 行，`PromptRepositoryTest.kt` 259 行 9 例，
+  `prompts/README.md`，证据 `p3-prompt-00-red`/`01-green`/`02-mutation`/`03-apk-assets`/`04-full`）
+  + Lead 验收补测第 10 例（`p3-prompt-05-empty-required.txt`）。
+- Lead 独立复跑：`--tests "com.dreamkeeper.llm.PromptRepositoryTest" --rerun-tasks` → BUILD SUCCESSFUL 15s（补测后 **10/10**）；
+  全量 `--rerun-tasks` → BUILD SUCCESSFUL 24s，XML **31 类 / 311 例 / 0 失败 / 0 错误 / 0 跳过**。
+- 白名单核对：`git show --stat 92ec146` = 10 文件；`git diff 9f4367d 92ec146 -- prompts/` 只有 `README.md`（三份提示词本体零改动）；
+  `android/gradle/libs.versions.toml` diff 空；未碰 `data/ ui/ service/ audio/ stt/ llm/` 既有文件、`docs/superpowers`、`scripts`、`AndroidManifest.xml`。
+- 资产落包（Lead 解包复核）：`app-debug.apk` 13352646 B sha256 `3e7e1e7f…2929`；
+  `assets/pricing/deepseek.json` 678 B sha256 `becbdd14…174d`（未被覆盖）；
+  `assets/prompts/faithful.v2.md` sha256 `5b9702ee…2f57`、`novel.v2.md` `f189dad8…84e2`、`novel_revise.v1.md` `2ebba630…9a13`，与真源一致；
+  另含 7 个非运行期 md（D310，P2）。
+- 渲染契约：9 槽（7 必填 + 2 选填，`【待理顺转写】` allowEmpty）、剥头到 `## 输入`、剥尾到「变更记录」EOF、
+  槽行 + `<…>` 提示行整体替换、标记块插在输入块闭合围栏之后、`【上一版违规清单】` 必须带载荷、指纹漂移先 `Log.w` 再抛（D311）。
+- 变异（三处，各自恢复后复绿）：删剥尾循环 → 用例 3 红；`carriesPayload` 退化成纯开关 → 用例 8 红；
+  Lead 补测的 `isBlank()`→`isEmpty()` → 用例 10 红（原文 `p3-prompt-05` 第 3 节）。
+- PENDING（不阻断）：D309（`processDebugAssets` 在 AGP 9.5 不存在，改用 `mergeDebugAssets`）、D310（多打 7 个 md，约 +93KB）、
+  D312（类数笔误）、D313（Sync 接线两种失败方案留注释）；真实 API 与设备侧行为归 Task 8/10。
+- 结论：**Task 6 验收通过**。

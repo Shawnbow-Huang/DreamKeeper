@@ -190,6 +190,33 @@ class PromptRepositoryTest {
         assertTrue(empty.startsWith("## 输入"))
     }
 
+    // ---------- 6b 必填槽的空值（D308，Lead 验收补测） ----------
+
+    @Test
+    fun `必填槽传空串或纯空白也抛 IllegalArgumentException`() {
+        for (spec in PromptSpecs.ALL) {
+            val full = sampleSlots(spec.promptId)
+            for (slot in spec.slots.filter { it.required && !it.allowEmpty }) {
+                for (blank in listOf("", "   ", "\u3000")) {
+                    val bad = full.toMutableMap().apply { put(slot.name, blank) }
+                    val error = assertThrows(IllegalArgumentException::class.java) {
+                        repo.render(spec, bad)
+                    }
+                    assertTrue(
+                        "${spec.promptId}/${slot.name} 传「$blank」应抛错，实际：${error.message}",
+                        error.message.orEmpty().contains("【${slot.name}】"),
+                    )
+                }
+            }
+        }
+        // 例外：【待理顺转写】allowEmpty=true，空串与空白都放行（§0.4），渲染后不得残留槽位。
+        for (blank in listOf("", "   ")) {
+            val text = repo.render(PromptSpecs.FAITHFUL, mapOf("待理顺转写" to blank)).text
+            assertFalse("空转写仍残留槽位：$blank", text.contains("【待理顺转写】"))
+            assertTrue(text.startsWith("## 输入"))
+        }
+    }
+
     // ---------- 7 只做标点开关 ----------
 
     @Test

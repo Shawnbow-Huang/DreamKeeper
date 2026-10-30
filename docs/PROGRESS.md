@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 22:58（Task 5 验收通过：8/8 用例 + 全量 301 例绿，专家复核闭环）
+> 最后更新：2026-10-30 22:42（Task 6 验收通过：提示词三件随构建进 APK、渲染契约 10/10 用例 + 全量 311 例绿）
 
 ## 一、当前在做
 
@@ -51,7 +51,7 @@
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
 
 
-## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 5/10
+## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 6/10
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -60,7 +60,7 @@
 | 3 价卡与成本计算 | ✅ 完成 | 资产 price card、峰谷判定、整数微元、`check-cost.py` 复算 |
 | 4 数据库 v2 迁移 | ✅ 完成 | `c800a87`+`d681247`+`b2054ba`：四张新表 + dreams 两列 + `2.json` 入库 + MigrationTest + `check-migrate.py`；升级前 DbBackup 快照；设备实证 5→9 表、20→22 列逐列全等、降级必崩有原文（`p3-mig-0*`）；收尾补 `DbBackupTest` 4 例（D292） |
 | 5 LlmClient（OkHttp + org.json） | ✅ 完成 | `05af3a2`：`ChatModels`/`LlmClient`/`DeepSeekClient`（派生超时、取消落 OkHttp Call、退避 1000×2 + `Retry-After`、usage 四字段、8 种错误分类）+ 8 例本地 `HttpServer` 单测（先红后绿 + 变异红）；全量 30 类/301 例绿（`p3-llm-0*`） |
-| 6 提示词资产与 PromptRepository | ⬜ | Sync 到 build/gen、剥头、槽位、sha256_8 断言 |
+| 6 提示词资产与 PromptRepository | ✅ 完成 | `92ec146`：`syncPromptAssets` 构建期把 `prompts/*.md` 拷进 `assets/prompts/`（pricing 未被覆盖，sha 不变）、`PromptSpec` 9 槽（7 必填 + 2 选填）+ 2 标记（违规清单必带载荷）、`PromptRepository` 剥头 `## 输入`/剥尾变更记录/槽行连提示行整体替换/标记块插输入块后；9 例先红后绿 + 两处变异；Lead 补第 10 例（空串/纯空白，D308）后 10/10、全量 31 类/311 例绿（`p3-prompt-0*`） |
 | 7 五闸门 Kotlin 移植 | ⬜ | 断言失败闸门集合、2-gram/PUNCT 照搬、T2 等值校验 |
 | 8 GenerationOrchestrator | ⬜ | T0–T3 失败链、单飞、每次尝试一行 llm_calls |
 | 9 对话改稿 + 多版本 | ⬜ | ASK 不建版 / REVISE 必建版、版本线、选最终稿 |

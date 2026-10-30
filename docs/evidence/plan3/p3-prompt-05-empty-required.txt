@@ -1,0 +1,60 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T14:41:35Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.PromptRepositoryTest" --rerun-tasks --console=plain
+
+# ==== 验收补测：必填槽空值语义（D308，Lead，2026-10-30）====
+# 背景：派工书在实施者启动后才把用例数从 9 改成 10（§0.4 要求「必填槽传空串/纯空白也抛」）。
+# 实施者交付 9 例；本文件是 Lead 在验收时补的第 10 条用例的红绿证据。
+# 改动仅在测试文件；被测代码（PromptRepository.kt）一字未改（git diff 为空）。
+
+## 1. 新增用例（PromptRepositoryTest.kt 第 6b 节）
+fun `必填槽传空串或纯空白也抛 IllegalArgumentException`() {
+    for (spec in PromptSpecs.ALL) {
+        val full = sampleSlots(spec.promptId)
+        for (slot in spec.slots.filter { it.required && !it.allowEmpty }) {
+            for (blank in listOf("", "   ", "\u3000")) {
+                val bad = full.toMutableMap().apply { put(slot.name, blank) }
+                val error = assertThrows(IllegalArgumentException::class.java) {
+                    repo.render(spec, bad)
+                }
+                assertTrue(error.message.orEmpty().contains("【${slot.name}】"))
+            }
+        }
+    }
+    // 例外：【待理顺转写】allowEmpty=true，空串与空白都放行（§0.4）。
+    for (blank in listOf("", "   ")) {
+        val text = repo.render(PromptSpecs.FAITHFUL, mapOf("待理顺转写" to blank)).text
+        assertFalse(text.contains("【待理顺转写】"))
+        assertTrue(text.startsWith("## 输入"))
+    }
+}
+
+## 2. 先绿（实现已满足 §0.4，故本用例直接绿；红由下面的变异制造）
+$ cd /d/DreamKeeper/android && ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.llm.PromptRepositoryTest" --rerun-tasks
+BUILD SUCCESSFUL in 15s
+XML: tests="10" failures="0" errors="0"
+（10 条用例全 PASS：原 9 条 + 本文件新增 1 条）
+
+## 3. 变异（把 PromptRepository.kt:141 的判空从 isBlank 弱化成 isEmpty）
+- 变异：`slot.required && !slot.allowEmpty && value.isBlank() ->` 改为 `value.isEmpty() ->`
+- 复跑：
+PromptRepositoryTest > 必填槽传空串或纯空白也抛 IllegalArgumentException FAILED
+java.lang.AssertionError: expected java.lang.IllegalArgumentException to be thrown, but nothing was thrown
+10 tests completed, 1 failed
+BUILD FAILED in 14s
+（只有新增用例红；说明它确实钉住了「纯空白也算空」这条语义，不是空转）
+
+## 4. 恢复后复绿（逐字节恢复，git diff 为空）
+BUILD SUCCESSFUL in 14s
+XML: tests="10" failures="0" errors="0"
+
+## 5. 全量（新增用例后，期望 311）
+$ ./gradlew :app:testDebugUnitTest --rerun-tasks
+BUILD SUCCESSFUL in 24s
+XML 汇总（逐个 testcase XML 累加）：classes=31 tests=311 failures=0 errors=0 skipped=0
+（Task 6 交付时为 31 类 / 310 例；+1 = 311）
+
+## 6. 读法
+- 本文件只证明「必填槽空值语义」和「10 条用例全绿」「全量 311 绿」；
+- 不证明 APK 资产落包（见 p3-prompt-03-apk-assets.txt）与真机行为；
+- 第 10 条用例无「先红」阶段，红由变异提供（第 3 节），已在计划 §9 D308 中如实登记。
