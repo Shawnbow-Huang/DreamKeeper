@@ -1,0 +1,5 @@
+# 价卡是内容寻址资产：cardSha256 = sha256(rawBytes)，换行符不能随 checkout 变化。
+# 本机 core.autocrlf=true（来自 DSH 自带 gitconfig，仓库无 .gitattributes 时 fresh clone
+# 会把文本转 CRLF），会让资产 sha 与测试里的黄金常量不符，因此这两类 JSON 固定 LF。
+android/app/src/main/assets/pricing/*.json text eol=lf
+docs/evidence/plan3/*.json text eol=lf
