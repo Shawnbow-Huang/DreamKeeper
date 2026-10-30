@@ -425,15 +425,44 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 5 LlmClient（OkHttp + org.json）
 
+> **0.1–0.10（Lead 派工前修订，2026-10-30；D286 起登记）**
+>
+> 0.1 **可注入是硬要求**：生产仍用单例 `OkHttpClient`，但 `DeepSeekClient` 的构造参数必须能注入
+> `baseUrl`（默认 `https://api.deepseek.com/`）、`callTimeoutMs`、`readTimeoutMs`、`client`、`sleeper: (Long) -> Unit`、
+> `clock: () -> Long`、`jitter: () -> Long`、`RetryPolicy`。测试全部指向 `http://127.0.0.1:<port>/`，否则「超时取消」按 180s 不可测。
+> 0.2 **重试留在 client 内，但每次尝试必须可记账**：`ChatResponse.attempts: List<Attempt>`（`attemptNo/httpStatus/latencyMs/errorKind`），
+> 失败时 `LlmException.attempts` 同样带全。Task 8 要「每尝试一行 `llm_calls`、成本行数==尝试次数」，client 不暴露 attempts 就必然返工。
+> 0.3 **usage 四字段**：`promptCacheHitTokens/promptCacheMissTokens/completionTokens/reasoningTokens`（`Pricing.kt` 的 hit/miss/out 需要），
+> 另带 `totalTokens`；`ChatResponse` 还要有 `requestId`、`httpStatus`、`latencyMs`、`finishReason`。
+> 0.4 **取消语义**：`suspendCancellableCoroutine` + `invokeOnCancellation { call.cancel() }`；`CancellationException` **一律 rethrow**
+> （retry/parse 的 catch 不许把它包成 `LlmException`）；响应体 `use {}` 关闭；cancel 后不得再 resume。
+> 0.5 **错误模型**：`LlmException(kind, httpStatus, requestId, attempts, cause)`，
+> `kind ∈ {NETWORK, TIMEOUT, RATE_LIMIT, SERVER, AUTH, BAD_REQUEST, EMPTY_CONTENT, INVALID_JSON}`，`isRetryable = RATE_LIMIT|SERVER|NETWORK|TIMEOUT`。
+> 0.6 **显式 import**：`com.sun.net.httpserver.HttpServer/HttpExchange` 与 `okhttp3.Request/Response` 不许通配。
+> 两边都有 `Request`，通配导入直接编译失败（已复现）。
+> 0.7 **测试框架**：`@RunWith(RobolectricTestRunner::class)` + `@Config(sdk=[34])`——纯 JUnit 下 `org.json` 是 android.jar stub（"not mocked"）；
+> 网络用例用 `runBlocking`，不用虚拟时间（OkHttp 真 IO 在虚拟时间下不可控）。
+> 0.8 **wire 格式**：`thinking={"type":"enabled"|"disabled"}`、`reasoning_effort` 只在 enabled 时发（low/high/max）且为顶层字段；
+> enabled 时**不发 `temperature`**（API 会忽略，发了只会误导日志）；`response_format={"type":"json_object"}` 仅 `jsonMode=true`。
+> 0.9 **边界**：本任务不写库、不改 schema、不碰 `prompts/`；API Key 由调用方传入，日志只许 `sk-…后四位`。
+> 0.10 **退避**：基线 1000ms × 2、上限 30000ms、`Retry-After` 优先；测试注入 sleeper 与 jitter=0，禁止真实 sleep。
+
 - Files：`llm/LlmClient.kt`（接口 `suspend fun chat(req: ChatRequest): ChatResponse`）、`llm/DeepSeekClient.kt`、
-  `llm/ChatModels.kt`（`ChatRequest(model, messages, thinking, effort, temperature, jsonMode)`、`ChatResponse(content, reasoning, usage)`）、
+  `llm/ChatModels.kt`（`ChatRequest(model, messages, thinking, effort, temperature, jsonMode, apiKey)`、`ChatMessage(role, content)`、
+  `Usage(...)`、`Attempt(...)`、`ChatResponse(content, reasoning, usage, requestId, httpStatus, latencyMs, finishReason, attempts)`、`LlmException(...)`）、
   `test/.../DeepSeekClientTest.kt`（用 `com.sun.net.httpserver.HttpServer` 起本地服务）。
+- Interfaces：
+  `interface LlmClient { suspend fun chat(req: ChatRequest): ChatResponse }`；
+  `class DeepSeekClient(client: OkHttpClient, baseUrl: String, callTimeoutMs: Long, readTimeoutMs: Long, sleeper: (Long) -> Unit, clock: () -> Long, jitter: () -> Long, retry: RetryPolicy) : LlmClient`。
 - 要点：`OkHttpClient` 单例、`callTimeout(300s)`、`readTimeout(180s)`；取消用 `suspendCancellableCoroutine` +
   `invokeOnCancellation { call.cancel() }`；`thinking` 与 `reasoning_effort` 是**顶层字段**；`response_format: {type:"json_object"}`；
   **`content` 为空或非 JSON 一律判失败**（服务端会把非法 JSON 换成空格但 `finish_reason` 仍是 `stop`）；
   429/5xx 指数退避 3 次、尊重 `Retry-After`，时钟与 jitter 可注入。
-- Steps：先写 6 个服务端用例（200 正常、空 content、非 JSON、429×3 后成功、401 不重试、超时取消），红 → 实现 → 绿。
-- Expected：401 只发 1 次请求；429 共 4 次尝试且间隔递增；取消后服务端收到连接断开。
+- Steps：先写 7 条服务端用例（200 正常 + 请求体逐字段断言、空 content、非 JSON、429×3 后成功、401 不重试、超时/取消、
+  `Retry-After` 优先），红 → 实现 → 绿；再补 1 条变异（把 `CancellationException` 吞成 `LlmException`，取消用例必须红）。
+- Expected：401 只发 1 次请求；429 共 4 次尝试且间隔 1000/2000/4000 ms（sleeper 收到的序列逐项相等）；`Retry-After` 覆盖指数退避；
+  空 content 与非 JSON 都抛 `EMPTY_CONTENT`/`INVALID_JSON`；**取消的断言在客户端侧**：`call.isCanceled()` 为 true 且
+  `CancellationException` 原样透传——「服务端收到连接断开」不可观测（探针实测 `SERVER_DISCONNECTS=0`），不作断言。
 
 ### Task 6 提示词资产与 PromptRepository
 
@@ -557,6 +586,9 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D283 | T4-17：新增 `scripts/check-schema-verbatim.py` 与 `p3-mig-07/08`，把「全量 28 类/289 例」与「SQL 逐字 6/6+8/8」从被忽略日志搬进仓库 | 落在 `.scratch/` 的结论在 clean checkout 无法复现；复跑 `python scripts/check-schema-verbatim.py`（A 6/6、B 8/8、C 全 True） |
 | D284 | T6-1：`.gitattributes` 增 `prompts/*.md text eol=lf`（超出 Task 6 Files 白名单） | 仓库 `core.autocrlf=true`；实测 fresh clone 后三份提示词 sha256 从 `5b9702ee/f189dad8/2ebba630` 变成 `9bfb94b9/663bc09d/28685592`（CRLF 291/332/314 行），Task 6 的哈希断言必炸 |
 | D285 | T6-2：作废 §5「`prompt_versions` 记账」这半句 | 与 D267 及 `DreamDatabase.kt:15`（提示词以文件为唯一真源）冲突；漂移只打 logcat WARN，不写库 |
+| D286 | T5-1：`DeepSeekClient` 的 `baseUrl`/`callTimeoutMs`/`readTimeoutMs`/`client`/`sleeper`/`clock`/`jitter`/`RetryPolicy` 全部构造注入；`ChatResponse` 增 `attempts`（每次尝试一条） | 不注入则测试指不到本地 HttpServer，「超时取消」按 180s 不可测；不出 attempts 则 Task 8 的「每尝试一行 `llm_calls`、成本行数==尝试次数」无法落地（重试留在 client 内是计划原意） |
+| D287 | T5-2：取消断言语义改为客户端侧（`call.isCanceled()` + `CancellationException` 透传）；删掉「服务端收到连接断开」 | 探针实测 `SERVER_DISCONNECTS=0`：OkHttp 的取消在客户端就断了，服务端 side 不可观测，原 Expected 写了一条永远无法断言的话 |
+| D288 | T5-3：`DeepSeekClientTest` 必须 `@RunWith(RobolectricTestRunner::class)` + `@Config(sdk=[34])`，且 `okhttp3.*`/`com.sun.net.httpserver.*` 显式 import | 纯 JUnit 下 `org.json` 是 android.jar stub（"not mocked"）；两边都有 `Request`，通配导入编译失败（已复现） |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 

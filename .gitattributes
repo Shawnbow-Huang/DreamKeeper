@@ -3,3 +3,7 @@
 # 会把文本转 CRLF），会让资产 sha 与测试里的黄金常量不符，因此这两类 JSON 固定 LF。
 android/app/src/main/assets/pricing/*.json text eol=lf
 docs/evidence/plan3/*.json text eol=lf
+
+# 提示词以文件 sha256 为唯一真源（D267/D285）：Task 6 的哈希断言必须在 fresh clone 里也成立。
+# 实测 core.autocrlf=true 且无此规则时，clone 出来的三份 md 会变 CRLF，sha256 全漂移（D284）。
+prompts/*.md text eol=lf
