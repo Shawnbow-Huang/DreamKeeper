@@ -80,6 +80,14 @@ class RecordViewModel(
     /** 同一次 take 的 DONE 只处理一次；新 take 的 dreamId 不同，不会误吞。 */
     private var handledDoneFor: String? = null
 
+    /**
+     * 本 VM 亲眼见过 RECORDING/FINISHING 的 take。
+     *
+     * 重入录音页会新建 VM 而 session 仍停在 DONE（D148）：那种 VM 可以补写路径/时长，
+     * 但不能把用户弹去 FollowUp。只有真正参与过这次录音的 VM 才发 `savedDreamId`。
+     */
+    private var sawTakeInProgress: String? = null
+
     /** FINISHING 卡死的 5s 看门狗（service 被系统杀掉时 session 不会再到 DONE）。 */
     private var watchdog: Job? = null
 
@@ -197,24 +205,56 @@ class RecordViewModel(
                 handledDoneFor = dreamId
                 watchdog?.cancel()
                 if (snapshot.elapsedMs > 0L) {
-                    // 重入录音页会新建 VM，而 session 仍停在 DONE：同一个 take 不能再存一遍，
-                    // 也不能再发 savedDreamId 把用户弹去 FollowUp（偏差 D148）。
-                    if (!alreadyPersisted(dreamId)) saveDraft(snapshot)
+                    // 行已存在不等于「这段 take 已经落好」：启动扫描可能先把文件恢复成草稿，
+                    // 指针与时长仍是旧的/空的（§0-4）。这里改成窄更新，绝不再整行 save；
+                    // 但「重入页」只补数据、不导航（D148，见 sawTakeInProgress）。
+                    persistTake(snapshot, existing = alreadyPersisted(dreamId))
                 } else {
                     dropEmptyTake(dreamId)
                 }
             }
             RecordingPhase.IDLE -> {
                 handledDoneFor = null
+                sawTakeInProgress = null
                 watchdog?.cancel()
             }
             RecordingPhase.ERROR -> watchdog?.cancel()
-            RecordingPhase.RECORDING, RecordingPhase.FINISHING -> Unit
+            RecordingPhase.RECORDING, RecordingPhase.FINISHING -> {
+                sawTakeInProgress = snapshot.dreamId ?: sawTakeInProgress
+            }
         }
     }
 
     private suspend fun alreadyPersisted(dreamId: String): Boolean =
         runCatching { repository.observe(dreamId).first() != null }.getOrDefault(false)
+
+    /**
+     * DONE 落库：行不存在就整条写草稿；行已存在就只补 `rawAudioPath`/`rawAudioMs`。
+     *
+     * 「行已存在」有两种来源：重入页（D148）与启动扫描恢复的草稿（§0-3）。前者不许导航，
+     * 后者若发生在本 VM 录音期间，说明扫描抢先插了行——本 VM 仍要照常跳到 FollowUp。
+     */
+    private fun persistTake(snapshot: RecordingSnapshot, existing: Boolean) {
+        if (!existing) {
+            saveDraft(snapshot)
+            return
+        }
+        val dreamId = snapshot.dreamId ?: return
+        val filePath = snapshot.filePath ?: return
+        viewModelScope.launch {
+            runCatching { repository.attachAudio(dreamId, filePath, snapshot.elapsedMs) }
+                .onSuccess {
+                    if (sawTakeInProgress == dreamId && !overlay.value.ignoreSaved) {
+                        overlay.update { it.copy(savedDreamId = dreamId) }
+                    }
+                }
+                .onFailure { error ->
+                    overlay.update {
+                        it.copy(localError = "录音保存失败：${error.message ?: "未知错误"}")
+                    }
+                }
+        }
+    }
 
     private fun saveDraft(snapshot: RecordingSnapshot) {
         val dreamId = snapshot.dreamId ?: return

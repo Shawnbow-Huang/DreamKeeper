@@ -1,6 +1,8 @@
 package com.dreamkeeper.di
 
 import android.content.Context
+import android.os.Build
+import com.dreamkeeper.audio.AudioScan
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
@@ -50,6 +52,24 @@ class AppContainer(context: Context) {
      * 详情页（Task 8）读，都从这里拿同一个 `rootDir`。
      */
     val audioStore: WavStore by lazy { WavStore(File(appContext.filesDir, "audio")) }
+
+    /**
+     * 启动兜底扫描（Task 6）：进程被杀后修占位头、找回孤儿录音、清掉指向已删文件的指针。
+     *
+     * 只碰文件系统与窄更新，不读大文本；由 [DreamKeeperApp] 在 IO 线程跑，且必须排在
+     * 种子数据之后（§0-10：先插草稿会让 `count() == 0` 的种子判断永远失败）。
+     */
+    val audioScan: AudioScan by lazy { AudioScan(audioStore, repository) }
+
+    /**
+     * 是否在 `Application.onCreate` 里跑启动扫描。
+     *
+     * 原计划用 `BuildConfig` 门闩，但 Task 6 的改动清单**禁止**改 `build.gradle.kts`，
+     * 所以改成运行期识别 Robolectric：单测每个用例都会执行 `onCreate`，无条件扫描会把
+     * 真实 `filesDir` 的 IO 混进既有 194 个用例；生产 debug/release 都照常扫描。
+     */
+    val audioScanOnStart: Boolean
+        get() = Build.FINGERPRINT != "robolectric" && Build.MODEL != "robolectric"
 
     /**
      * 录音状态的唯一真相：前台服务写、录音页（Task 4）只读。
