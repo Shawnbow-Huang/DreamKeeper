@@ -1,7 +1,7 @@
 # DreamKeeper · 梦境记录 App 设计文档
 
 - 日期：2026-10-29
-- 状态：已批准（v1.2，2026-10-30）
+- 状态：已批准（v1.4，2026-10-30）
 - 阶段：第一阶段（纯文字记录）
 - 平台：Android（Kotlin + Jetpack Compose）
 
@@ -80,7 +80,7 @@ DreamRecord
 ├── rawAudio       录音文件（本机私有目录，永不上传）
 ├── rawTranscript  STT 原始文字（不可变，第一手证据）
 ├── faithfulText   原样稿（由 rawTranscript 派生，受 diff 约束）
-├── novelText      小说稿（可多版本、可重生成，带改动清单）
+├── novelText      小说稿（当前选中的版本；历史版本并存、可回退，带改动清单）
 └── mediaAssets    预留：插画 / 视频
 ```
 
@@ -103,8 +103,9 @@ DreamRecord(
   transcriptStatus: String, // PENDING | OK | FAILED，默认 OK
   faithfulText: String?,    // 原样稿
   faithfulEditedByUser: Boolean,
-  novelText: String?,       // 小说稿（当前版本）
-  novelVersion: Int,        // 每次生成 +1
+  novelText: String?,       // 小说稿（当前选中的版本）
+  novelVersion: Int,        // 每次生成或改稿 +1
+  novelSelectedVersion: Int?, // 用户挑中的版本号；null = 未挑（列表与导出用最新版）
   novelChangeLog: String?,  // JSON：模型自列的补写清单
   novelEditedByUser: Boolean,
   mood: String?,            // 单一主情绪，可选
@@ -123,20 +124,46 @@ DreamTag(dreamId, tagId, confidence?)
 MediaAsset(id, dreamId, type, path, prompt, model, status, createdAt)
   type = IMAGE | VIDEO   // v1 无写入方，仅建表 + 详情页占位
 
-// 下面两张表 Plan 1 不建：建表与 DAO 归 Plan 3，届时 v1→v2 有 schema 基线可验。
+// 下面四张表 Plan 1 不建：建表与 DAO 归 Plan 3，届时 v1→v2 有 schema 基线可验。
 // 字段保留在此作为 Plan 3 的建表依据，不是「已经建好的表」。
 GenerationJob(
-  id, dreamId, kind,      // FAITHFUL_CLEANUP | NOVEL | TAGGING | TITLE | CHANGELOG
+  id, dreamId, kind,      // FAITHFUL_CLEANUP | NOVEL | NOVEL_REVISE | TAGGING | TITLE
   status,                 // PENDING | RUNNING | OK | FAILED | CANCELLED
-  provider, model, promptVersion,
+  provider, model, promptId, promptVersion, promptHash,
   tokensIn, tokensOut, error, createdAt   // createdAt：epoch 毫秒
 )
 
-// Plan 3 建。提示词正文不进库：唯一真源是 prompts/ 下的文件（版本 = 文件名 + sha256，见 §7.1），
-// 这张表只存版本指针，A/B 与回滚都回到文件。
-PromptVersion(id, kind, version, promptHash, createdAt)
+// 小说化的多版本：多版本并存，用户挑一个当最终稿（§6.3）
+NovelVersion(
+  id, dreamId, version,   // 版本号从 1 递增
+  text,                   // 该版全文（正文只存这里，别处只存指针）
+  changeLogJson,          // [{type, detail, quote}]，与 §6.2 同构
+  origin,                 // GENERATE | REVISE
+  promptId, promptVersion, promptHash,
+  createdAt
+)
 
-AppSettings(provider, baseUrl, model, apiKeyAlias, sttEngine, nightBehavior, ...)
+// 对话改稿的消息流（§6.3）。assistant 消息只存"这一轮干了什么"的一句话摘要，
+// 正文永远在 NovelVersion 里，避免同一段文字存两份。
+NovelMessage(
+  id, dreamId, role,      // USER | ASSISTANT
+  content,
+  versionId,              // 产出新版本时指向该版本；反问/拒绝时为 null
+  createdAt
+)
+
+// 成本计量（§9）：一次调用一行，金额用整数微元，避免浮点误差
+LlmCall(
+  id, dreamId, kind,      // FAITHFUL | NOVEL | REVISE | TAGGING | TITLE
+  model, reasoningEffort, // OFF | LOW | HIGH | MAX
+  cacheHitTokens, cacheMissTokens, outputTokens,
+  isPeak,                 // 是否落在高峰时段（北京时间工作日 9–12、14–18）
+  priceSnapshotJson,      // 当时单价快照：调价后历史账目不能跟着变
+  costMicroYuan,          // 整数微元（1 元 = 1_000_000）
+  latencyMs, error, createdAt
+)
+
+AppSettings(provider, baseUrl, model, reasoningEffort, apiKeyAlias, sttEngine, nightBehavior, ...)
 ```
 
 设计说明：
@@ -147,33 +174,50 @@ AppSettings(provider, baseUrl, model, apiKeyAlias, sttEngine, nightBehavior, ...
 - 软删除 + 回收站：误删一条梦是灾难级事故。
 - `ownerId` 只留字段不建 UI（见决策表附注）。
 - **时间戳一律 `Long`（epoch 毫秒）**：`createdAt` / `updatedAt` / `deletedAt` 以及将来的生成、素材时间戳都不用 `Instant`——省一层 `TypeConverter`，SQLite 里可直接比较与排序。
-- **`generation_jobs` / `prompt_versions` 不在 Plan 1 建**：两张表连同 DAO 归 **Plan 3**，届时 v1→v2 有真实 schema 基线可验；Plan 1 只落迁移基建（`exportSchema` + 基线 schema）。提示词**以文件为唯一真源**，版本 = 文件名 + 文件内容 sha256（见 §7.1）。
+- **生成相关的四张表（`generation_jobs` / `novel_versions` / `novel_messages` / `llm_calls`）不在 Plan 1 建**：连同 DAO 归 **Plan 3**，届时 v1→v2 有真实 schema 基线可验；Plan 1 只落迁移基建（`exportSchema` + 基线 schema）。
+- **提示词不建表**：唯一真源是 `prompts/` 下的文件，版本 = 文件名 + 内容 sha256（见 §7.1），数据库只存 `promptId` / `promptVersion` / `promptHash` 三个指针。
+- **金额用整数微元**（`costMicroYuan`），不用 `Double`：0.1 + 0.2 在浮点里不等于 0.3，账单不能这么算。
+- **单价快照写进每次调用**：官方调价后，历史账目不能跟着变。
 
 ---
 
-## 6. 两条生成链路
+## 6. 三条生成链路
 
-### 6.1 原样记录（默认零 LLM）
+### 6.1 原样记录（理顺：调模型，但不许创作）
 
-因为选的是「只断句分段」，而系统 STT 本来就带标点，所以**默认路径根本不调大模型**：STT 输出直接作为 `faithfulText`。
+**模式一永远是「STT 转写 → 大模型理顺」**，不再有"零 LLM 默认路径"。理由：录音里的口水和断句必须有人替他理顺，否则那不是记录，是语音备忘。
 
-只有一种情况调模型：口述极乱、无标点、大量重复时，走 `FAITHFUL_CLEANUP`。
+**它只做四类事**：
 
-**硬校验（这条是安全底线，必须实现）**：
+1. 删口头噪声：语气词（呃 / 啊 / 那个 / 就是说 / 然后然后）、纯重复、说一半改口的前件、无意义停顿；
+2. 断句与分段：补标点、按语义分段、保留原有的空行与节奏；
+3. 顺着场景硬切词分段：「后来切换到了教室里」「画面一转」「画面再一转」——这些词**必须原样保留**，它们是梦里换场的唯一线索；
+4. 清理输入垃圾：`[em]e400636[/em]` 这类表情残留、多余空格、转写乱码——改动记一条「清理格式」。
 
-```
-diff(rawTranscript, faithfulText) 的每一个改动必须是：
-  ① 插入标点
-  ② 插入换行/空白
-  ③ 删除纯重复口癖（"就是就是就是" → "就是"）
-任何新增实词、任何改写、任何顺序调整 → 判定违规 → 自动回退为 rawTranscript 原文，并记录一次违规
-```
+**它禁止做的事（一条都不许）**：
 
-评测集里量化「违规次数」，目标 **0**。
+- 补因果（"因为我怕，所以…"）、解释荒诞（"也许是睡姿造成的"）、补描写、补心理推测；
+- 改语序、换用词、把别扭的句子改成通顺的句子 —— **别扭是梦的一部分**；
+- 合并、删减、移动任何事件，或调整先后顺序；
+- 删括号里的自我吐槽（"（我好像并没有这么做，有点傻orz）"）与旁白（"（可能因为是我的梦所以上帝视角哈哈哈哈）"）——这是用户原话的一部分；
+- 给人物命名、给场景命名、加小标题。
+
+改错别字要克制：只在明显是听写错误时改（「嚯」→「喝」），并记一条「修字」。
+
+**失败处理链（三级，必须实现）**：
+
+1. 第一次：温度 0.1 正常理顺 → 跑 `scripts/check-faithful.py` 五个闸门；
+2. 不过 → 第二次：温度降到 **0.0**，把**具体违规项**写回提示词（"上一版你新增了『像被什么托着』、把『按不到一楼』改成『按不到楼层键』，这次一条都不许出现"）；
+3. 还不过 → **保守版**：只做标点与分段、一个字不改，页面标一行「这段系统退回了保守处理」；
+4. 连保守版都产不出来 → 直接展示 `rawTranscript` 原文，并提示「这条建议你手动改一下」。
+
+原始转写永远在"原样"页留一个可点开的入口（「看原始转写」），所以降级不会丢东西。
+
+**为什么不用字符 diff 做死判定**：人自己校对时也会修笔误、也会把「我"嚯"了一身」改成「我喝了一声」。闸门只盯**专名 / 数量 / 颜色 / 方位**这类硬指标与覆盖率，不做逐字符比死——过严会把正当的理顺判成违规，过松则等于没闸门。
 
 ### 6.2 小说化润色
 
-输入：`rawTranscript`（不是 faithfulText，避免误差叠加）+ 可选历史风格样本。
+输入：`faithfulText`（理顺后的流水账；为空时回退 `rawTranscript`）+ 可选历史风格样本。理由是用户原话：小说化要「以流水账为底本补因果、世界观、描写、人称」，底本越干净，演绎越可控。
 输出：JSON `{ title, body, changeLog: [{type, detail, quote}], mood }`。
 
 `changeLog` 每条的 `quote` **必须是原样稿里的精确子串，4–40 字**；界面用 `rawTranscript.indexOf(quote)` 定位并高亮**首个**匹配，**不引入字符偏移**（偏移会在原样稿被编辑后全部错位，而子串是自校验的：找不到就不高亮，而不是高亮错行）。tab 标题里的 N = `changeLog` **数组长度**。
@@ -184,7 +228,23 @@ diff(rawTranscript, faithfulText) 的每一个改动必须是：
 2. 小说稿页头标注「有演绎」。
 3. 每条小说稿附**改动清单**：模型自己列出新增的人物、对白、情节、感官细节。
 4. tab 标题写「小说化 · 补写 6 处」，点开小字进逐段对照（按 `quote` 定位，模型补的部分高亮）。**「补写 N 处」这几个字是 UI 契约**——`novelTabLabel` 靠正则 `补写\s*(\d+)\s*处` 决定是否显示逐段对照入口，改成「改写」「润色」会让入口静默消失。
-5. 不满意 → 一键重生成，旧版本进历史。
+5. 不满意 → 一键重生成，或直接用 §6.3 的对话改稿。
+
+### 6.3 对话改稿（小说化之后）
+
+小说稿下面常驻一条输入框：「哪里不对，说说看」。用户说一句，模型改一版；不满意再说，再改。
+
+**三条硬原则**：
+
+1. **最小改动，不重写全文**。改稿输出与旧稿的长度比必须 ≤ 115%，否则一次"改个结尾"会把全文风格洗掉。
+2. **歧义先问，不猜着改**。用户说「结尾不好」时，模型要么只改结尾，要么返回一句反问（「是说太说教，还是整段不要？」）并且**这一轮不产出新版本**。猜错一次，后面会越改越远。
+3. **每版必留、必可撤回**。每次改稿写一行 `NovelVersion`，旧版永久保留；界面上是版本线（`v2 · 按你说的删了那两段描写 · 改动 3 处`），点「撤回」回上一版。
+
+**继承小说化的全部契约**：不许借改稿新增人物关系、换结局、新增关键事件、解释隐喻；改完同样跑 G1–G5 与 21 条 AI 味规则；不过就按 §6.1 的同一条失败链处理（温度 0 重试一次并附违规清单 → 仍不过则**保留旧版**并说明哪条没过）。
+
+**多版本并存 + 挑选最终稿**：`novel_versions` 保留全部版本；`dreams.novelSelectedVersion` 记住用户挑中的那一版（`null` = 未挑）。列表、导出、分享都用挑中的那版；没挑则用最新版。标题栏显示「当前 v2 · 已选中」。
+
+**快捷按钮**（手机上打长句太累）：太文绉绉 / 细节太多 / 结尾太说教 / 人称不对 / 多点环境 / 少点形容 —— 点一下填入输入框，可再编辑。
 
 ---
 
@@ -194,24 +254,25 @@ diff(rawTranscript, faithfulText) 的每一个改动必须是：
 
 ```
 prompts/
-├── novel.v1.md           角色 → 事实契约 → 风格契约 → 输出格式(JSON)
-├── faithful_cleanup.v1.md
-├── tagging.v1.md
-├── title.v1.md
-└── changelog.v1.md
+├── faithful.v2.md        理顺：角色 → 可删白名单 → 禁改清单 → 输出格式
+├── novel.v2.md           小说化：角色 → 事实契约 → 风格契约(A1–A21) → JSON
+├── novel_revise.v1.md    对话改稿：最小改动 + 歧义先问 + 继承事实契约
+├── tagging.v1.md         （Plan 3）
+└── title.v1.md           （Plan 3）
 ```
 
 - 进 `assets/prompts/`，带版本号；改动即新增版本，旧版本保留。
 - **文件是唯一真源**：版本 = 文件名里的版本号 + 文件内容 sha256；数据库只存版本指针（`promptId` / `promptVersion` / `promptHash`），**不存提示词正文**（`prompt_versions` 表归 Plan 3，见 §5）。改提示词就是一次 git diff，不是一次 SQL。
 - **禁止把提示词硬编码在 Kotlin 字符串里**（改不了、测不了、回滚不了）。
-- 参数：`novel` temperature 0.9、`tagging` 0.2、`cleanup` 0.1。
+- 参数：见 §9 的档位表（`faithful` 0.1、重试降到 0.0；`novel` 0.9 + 思考 high；`revise` 0.3；`tagging` / `title` 0.2）。
+- 版本策略：`v1.x` 内允许「只加键、不改既有键」的增量（如加 `quote`），破坏既有键才升 v2；旧版本文件永久保留，`prompts/CHANGELOG.md` 记 sha256_8。
 
 ### 7.2 去 AI 味：当作工程问题，不当作审美问题
 
 四层机制：
 
 **① 契约层**
-- 原样记录：**禁止任何创作**，连"补一个合理的词"都不行。
+- 原样记录（理顺）：**允许删口水、补标点、分段、清理垃圾字符**，除此以外禁止任何创作——连"补一个合理的词"都不行。契约与三级失败链见 §6.1。
 - 小说化：**允许**重组顺序、补场景描写、补心理活动、补对话；**禁止**新增人物关系、新增或替换结局、新增关键事件、解释梦的隐喻、把跳跃处"讲圆"。
   判定口径：把 AI 补的部分全部删掉，读者仍能认出"这就是那个梦"。
 
@@ -241,6 +302,9 @@ prompts/
 3. **下限基线**：只在"读不读得通"上与用户例子比，判据是"不更差"，不是"像不像它"。
 
 计数型硬指标（**编造次数**、**原样整理违规次数**）保留、**目标 0**、各自一票否决；分母是"本轮实际跑了几条"，不再绑定 20 条样本。真实样本由用户随手提供，样本不足时不许下结论，但不许伪造，也不许因此停住开发。
+
+5. **分层审稿（参照社区 skill 的做法）**：改稿不自检"再读一遍"，而是按层定位——结构（事件顺序有没有被悄悄动过）、句法（声部是否一致、有没有三段一样长）、校对（错字、标点）。每层只修这一层的问题，避免一次大改把结构问题与错别字搅在一起。
+   另加一步「读者复述测试」：把 AI 补的部分删掉后，只看剩下的事件能否复述出骨架——能，才算没把梦讲丢；不能，说明这次演绎伤到了本体。
 
 
 
@@ -291,13 +355,26 @@ prompts/
 
 ## 9. LLM 接入层
 
-- 统一接口 `LlmClient.chat(messages, schema) -> JsonObject`。
-- 适配器：OpenAI 兼容（DeepSeek / Kimi / 通义 / 本地 Ollama）、Anthropic、Gemini。
-- 用户填：baseUrl + apiKey + model name。
-- 结构化输出优先用 JSON mode / 函数调用；模型不支持时用"输出以 ```json 开头"的降级提示 + 解析兜底。
-- 失败策略：指数退避重试 3 次 → 标记 `FAILED` 并保留重试入口。**绝不静默丢弃生成请求。**
-- 成本可见：每次生成记录 tokens，设置页显示本月用量（自算，不联网）。
-- **费用由用户自付**：App 不转售、不代理、不加价；设置页首次填写 Key 时明说"消耗的是你自己账号的额度"。
+**只接 DeepSeek 官方**（用户决策：暂时单厂商）。仍然保留一层薄抽象 `LlmClient.chat(messages, schema) -> JsonObject`，将来加第二家 = 加一个 adapter 文件，不动调用方。
+
+- 端点：`POST https://api.deepseek.com/chat/completions`，OpenAI 兼容格式。
+- 模型：默认 **`deepseek-flash`**（用户决策：全程默认 flash，理由是目前 flash 各方面超过 v4-pro 且更便宜）；`deepseek-v4-pro` 仍列在下拉里作备选，不推荐。
+- 思考控制：`thinking: {type: enabled|disabled}` + `reasoning_effort: low|high|max`。`medium` 等会被服务端映射成 high，是假中间档，界面里不提供。
+- **思考开着时 `temperature` / `presence_penalty` / `frequency_penalty` 被服务端忽略**（不报错，只是不生效）——设置页必须写这句话，否则用户以为调温没反应。
+- 默认档位（设置页改全局，详情页 48dp 小按钮改单条）：
+
+  | 用途 | 模型 | 思考 | 温度 |
+  |---|---|---|---|
+  | 理顺（§6.1） | flash | 关 | 0.1；重试降到 0.0 |
+  | 小说化（§6.2） | flash | **开 high**（可调 max） | 0.9（仅思考关闭时生效） |
+  | 对话改稿（§6.3） | flash | 开 low | 0.3 |
+  | 标签 / 标题（后台） | flash | 关 | 0.2 |
+
+- 结构化输出：`response_format: {type: "json_object"}` + 提示词里给 JSON 样例；解析失败按一次失败计入重试链，**不许静默用原文顶替**。
+- 失败策略：网络 / 5xx / 429 走指数退避重试 3 次 → 标记 `FAILED` 并保留重试入口。**绝不静默丢弃生成请求。**
+- 成本：每次调用写一行 `llm_calls`（§5），含缓存命中/未命中 token、输出 token、是否高峰、**当时单价快照**、整数微元金额。价格做成一张表 + 一处 `updatedAt`，官方改价只改表不改逻辑。峰谷口径：北京时间工作日 09:00–12:00、14:00–18:00 为高峰，其余为低谷（参考 `dsh-cost-meter` 的做法）。
+- 成本可见：详情页顶部一行「这条花了 ≈0.03 元」；设置页「用量」按天 / 按模型汇总，可一键清空。
+- **费用由用户自付**：App 不转售、不代理、不加价；设置页首次填 Key 时明说"消耗的是你自己账号的额度"。Key 存 Keystore，不进日志、不进备份、不打进截图证据。
 
 ## 10. 隐私与安全
 
@@ -393,8 +470,9 @@ DreamKeeper/
 
 - [ ] 从点亮屏幕到开始录音 ≤ 3 步，≤ 3 秒。
 - [ ] 录音过程中接电话/切后台/锁屏，音频不丢。**判据（可执行，不是感觉）**：电话前后说的内容在文件里**连续**（第 N 分钟的话仍在第 N 分钟的位置），通话期间是**等长静音**（补零，见 §8.1-6）；文件是能正常打开、时长与 `rawAudioMs` 一致的 WAV。
-- [ ] 原样稿：`scripts/check-faithful.py` 五个闸门全绿（G1 新增专名/数量/颜色/方位 = 0；G2 长度比 ≤ 110%；G3 关键名词动词覆盖 ≥ 95%；G4 跨场景因果连接词 = 0；G5 不确定词保留 = 100%），且原样整理违规次数 = 0。分母是"本轮实际跑了几条"，不绑定 20 条样本。
+- [ ] 原样稿：`scripts/check-faithful.py` 五个闸门全绿（G1 新增专名/数量/颜色/方位 = 0；G2 长度比 ≤ 110%；G3 关键名词动词覆盖 ≥ 95%；G4 跨场景因果连接词 = 0；G5 不确定词保留 = 100%），且原样整理违规次数 = 0。分母是"本轮实际跑了几条"，不绑定 20 条样本。违反时按 §6.1 的三级失败链处理：最终给用户看到的要么是全绿稿、要么是保守版、要么是原始转写——**不存在"带着违规的稿子"**。
 - [ ] 小说化：编造次数 = 0（一票否决）；盲评偏好里用户选"新版"或"持平"；不设 1–5 分绝对评分，也不要求"像人写的 ≥8/10"（没有标准答案时该判据不可复现）。
+- [ ] 对话改稿：连续 3 轮修改后 `novel_versions` 至少有 4 个版本且都能切回；每轮输出/输入长度比 ≤ 115%；用户挑中的那一版（`novelSelectedVersion`）在列表与导出里生效；歧义意见至少有一轮走「先问不改」。
 - [ ] 1000 条记录下，日历与列表滚动不掉帧（基准机：本机模拟器 + 一台真机）。**Plan 1 不做，Plan 2 开工前补测**（Plan 1 只有 4 条种子，测不出滚动性能）。
 - [ ] 飞行模式下：可录音、可本地转写、小说化进队列并在恢复网络后自动完成。
 - [ ] 抓包验证：全程无音频外传。
@@ -420,3 +498,4 @@ DreamKeeper/
 | v1.1 | 2026-10-30 | 回写执行期已做出的 6 类决定：SDK 37 与测试策略（JUnit4 + Robolectric + 截图人眼读，删 Turbine / Roborazzi）（D1、D2）；偏好存储 `SharedPreferences`、不引 DataStore（D30，原 U1）；时间戳统一 `Long`、不用 `Instant`（D7）；`generation_jobs` / `prompt_versions` 归 Plan 3、提示词以 `prompts/` 文件为唯一真源（D5、D6）；验收口径先 10 条后 20 条、千条性能归 Plan 2（D8、D9）；`VideoClient` 归 Plan 3（D31，原 U2）。正文状态改为已批准 |
 | v1.2 | 2026-10-30 | 第三轮修订（计划 D34–D42）：§13 补 `Navigation-Compose` 技术选型行（D34，版本以 `libs.versions.toml` 为唯一口径）；§6.2 `changeLog` 加 `quote` 字段、「补写 N 处」定为 UI 契约（D41）；§8.1 补 WAV 头 `0xFFFFFFFF` 占位与「松手 + 启动扫描都要回填」、补第 6 条焦点被抢补零与 `rawAudioMs = (字节数-44)/32`（D40-G1/G2），§14.2 判据改成「内容连续 + 等长静音」；§7.2 ④ 三项评分统一 1–5 分并加「原样整理违规次数」计数列（D42）；§13.1 验证闭环改为走 `scripts/` 下的三个脚本、并写明禁用裸 `adb exec-out screencap` 的理由 |
 | v1.3 | 2026-10-30 | 评价体系改造（用户裁定）：删掉「用户例子=金标」与 1–5 分绝对评分，改为**规则闸门 + 盲评偏好 + 下限基线**；§7.2 ④ 与 §14.3 同步改写；真实样本 0 条不再阻塞开发与验收（D81） |
+| v1.4 | 2026-10-30 | 第四轮修订（用户四条决策落地）：§6.1 改为「模式一也调 LLM」的理顺契约 + 三级失败链（重试 0.0 → 保守版 → 原文）；§6.2 输入改 `faithfulText`；新增 §6.3 对话改稿（最小改动 / 歧义先问 / 多版本 + 挑选最终稿）；§5 增 `novel_versions` / `novel_messages` / `llm_calls` 三表与金额整数微元；§7 提示词升 v2 三件套并加「分层审稿 + 读者复述」；§9 收敛为 DeepSeek 官方单厂商、flash 默认、思考档与温度失效说明、成本快照；§14 增对话改稿验收、原样稿三级失败链口径 |
