@@ -64,7 +64,10 @@ DIRECTION_WORDS = [
 
 MEASURE = "个次条根层楼岁点分米人只块栋间道扇截群遍下天年号步声口"
 CN_NUM = "一二三四五六七八九十百千万两半几"
-CN_NUM_RE = re.compile("[%s]+(?:%s)" % (CN_NUM, MEASURE))
+# 数词 + 量词（三遍 / 七点 / 一楼）。量词必须放进字符类：
+# 写成 "[%s]+(?:%s)" 时 (?:…) 匹配的是"这几个字连在一起"的字面串，永远命不中，
+# 等于单字数词对 G1 完全不可见（语料子 agent 2026-10-30 实测发现）。
+CN_NUM_RE = re.compile("[%s]+[%s]" % (CN_NUM, MEASURE))
 # 多位中文数词（三十 / 十五 / 一百 / 三十一）：单字数词太常见，只认 ≥2 字的，专抓"数字被改"
 CN_NUM_MULTI_RE = re.compile("[%s]{2,}" % CN_NUM)
 ARABIC_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
@@ -267,11 +270,27 @@ def gate_g4(input_text, output_text):
     }
 
 
+NEG_PREFIX = "不没未别莫"
+
+
+def count_uncertain(text, w):
+    """数不确定词，但排除否定式里的假阳性：「不可能 / 没问题 / 未确定」不讲不确定。"""
+    n = 0
+    start = 0
+    while True:
+        i = text.find(w, start)
+        if i < 0:
+            return n
+        if i == 0 or text[i - 1] not in NEG_PREFIX:
+            n += 1
+        start = i + len(w)
+
+
 def gate_g5(input_text, output_text):
-    inp = multiset([w for w in UNCERTAIN if w in input_text for _ in range(input_text.count(w))])
+    inp = multiset([w for w in UNCERTAIN if w in input_text for _ in range(count_uncertain(input_text, w))])
     bad = []
     for w in UNCERTAIN:
-        need, got = input_text.count(w), output_text.count(w)
+        need, got = count_uncertain(input_text, w), count_uncertain(output_text, w)
         if need and got < need:
             bad.append("「%s」原文 %d 处，输出只剩 %d 处" % (w, need, got))
     return {
@@ -331,6 +350,9 @@ def _self_test():
 
     dense = "".join(ch for ch in good if ch not in PUNCT)
     cases.append(("G2 只加标点、正文不变（合法操作，必须绿）", dense, good, True))
+
+    cases.append(("G1 改单字数词（一楼→三楼；旧版正则是死的，看不见）", src,
+                  good.replace("按不到一楼", "按不到三楼"), False))
 
     cases.append(("G2 长度膨胀", src,
                   good + "我还能感觉到电梯井深处有一阵风，从脚底一直吹到后颈，像有人在耳边呼气。", False))
