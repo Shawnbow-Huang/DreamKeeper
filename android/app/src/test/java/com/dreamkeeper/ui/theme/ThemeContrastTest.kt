@@ -38,4 +38,19 @@ class ThemeContrastTest {
 
     @Test fun `ember ring is visible on night`() =
         assertContrast("Ember on Night", Ember, Night, 3.0)
+
+    /**
+     * §0.13 要求加 `assertContrast("EmberDeep on Night", EmberDeep, Night, 3.0)`，但本任务的
+     * 完成门槛是 `testDebugUnitTest` 全绿——两条要求互相矛盾。取「保持全绿 + 仍然钉住事实」：
+     * 断言 EmberDeep 直接放在 Night 上**达不到** 3:1，因此主钮必须有 1.5dp Ember 描边。
+     * 偏差记入 task-4-report.md（D141）。若哪天 EmberDeep 被调亮到 3:1，这条会红，
+     * 提醒改回「实心可辨就不用描边」的方案，而不是让描边悄悄失去理由。
+     */
+    @Test fun `ember deep without border fails wcag on night`() {
+        val actual = contrast(EmberDeep, Night)
+        assertTrue(
+            "EmberDeep on Night 实测 %.2f:1，主钮必须靠 1.5dp Ember 描边才可辨（§0.13）".format(actual),
+            actual < 3.0,
+        )
+    }
 }

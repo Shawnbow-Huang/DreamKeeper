@@ -24,7 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -36,8 +35,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.TagDao
+import com.dreamkeeper.service.RecordingSession
+import com.dreamkeeper.service.RecordingStarter
 import com.dreamkeeper.ui.calendar.CalendarScreen
 import com.dreamkeeper.ui.calendar.CalendarViewModel
 import com.dreamkeeper.ui.day.DayScreen
@@ -47,6 +49,9 @@ import com.dreamkeeper.ui.library.LibraryScreen
 import com.dreamkeeper.ui.library.LibraryViewModel
 import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.nav.DreamRoute
+import com.dreamkeeper.ui.nav.RecordEntry
+import com.dreamkeeper.ui.record.RecordScreen
+import com.dreamkeeper.ui.record.RecordViewModel
 import com.dreamkeeper.ui.search.SearchScreen
 import com.dreamkeeper.ui.tags.TagsScreen
 import com.dreamkeeper.ui.tags.TagsViewModel
@@ -56,7 +61,6 @@ import com.dreamkeeper.ui.theme.Night
 import com.dreamkeeper.ui.theme.NightRaised
 import com.dreamkeeper.ui.theme.Paper
 import java.time.LocalDate
-import kotlinx.coroutines.launch
 
 /**
  * 根界面：唯一的导航真源（brief Step 5）。
@@ -69,6 +73,16 @@ fun DreamKeeperRoot(
     repo: DreamRepository,
     layoutPrefs: LayoutPrefs,
     tagDao: TagDao,
+    session: RecordingSession,
+    audioStore: WavStore,
+    starter: RecordingStarter,
+    hasPermission: () -> Boolean,
+    hasAskedOnce: () -> Boolean,
+    permissionEpoch: Int,
+    onRequestPermission: () -> Unit,
+    recordEntry: RecordEntry?,
+    onEntryConsumed: () -> Unit,
+    debugRecordError: String? = null,
     initialSearchQuery: String = "",
 ) {
     val nav = rememberNavController()
@@ -76,10 +90,7 @@ fun DreamKeeperRoot(
     val current = entry?.destination?.route
     val showBottomBar = current == DreamRoute.Calendar.route || current == DreamRoute.Library.route
 
-    // 日历「说梦」现在还没有录音页，点了必须给一句人话（brief §0.12）。
-    // Snackbar 放在根 Scaffold：它是全局唯一的提示位，任何页面都能用。
     val snackbarHost = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     // debug 钩子（D67）：带 `dk_prefill_search` 冷启动时直接落到搜索页。
     // 只有 MainActivity 在 BuildConfig.DEBUG 下才会传非空值；这里不判断 DEBUG，免得 release 里多一份逻辑。
@@ -87,6 +98,14 @@ fun DreamKeeperRoot(
         if (initialSearchQuery.isNotBlank()) {
             nav.navigate(DreamRoute.Search.route) { launchSingleTop = true }
         }
+    }
+
+    // intent → RecordEntry 一次性事件（§0.3）：通知点回 / 锁屏磁贴 / 快捷方式都从这里进录音页。
+    // 消费之后 MainActivity 把 recordEntry 置 null，避免旋转/进程恢复再跳一次。
+    LaunchedEffect(recordEntry) {
+        val target = recordEntry ?: return@LaunchedEffect
+        nav.navigate(DreamRoute.Record(target).route) { launchSingleTop = true }
+        onEntryConsumed()
     }
 
     Scaffold(
@@ -130,8 +149,8 @@ fun DreamKeeperRoot(
                     // 把 date.toString() 当 dreamId 传给详情，详情按 id 查库必然查不到 → 必空白。
                     onDayClick = { date -> nav.navigate(DreamRoute.Day(date.toString()).route) },
                     onSearch = { nav.navigate(DreamRoute.Search.route) },
-                    // 录音页属于 Plan 2；这一句是 brief §0.12 要求的过渡提示，不是占位注释
-                    onRecord = { scope.launch { snackbarHost.showSnackbar("录音还没做，之后会有") } },
+                    // 首页「说梦」是 HOME_BUTTON 入口（§0.3）：直接进录音页，不再弹「录音还没做」
+                    onRecord = { nav.navigate(DreamRoute.Record(RecordEntry.HOME_BUTTON).route) },
                 )
             }
             composable("day/{dateIso}") { backStackEntry ->
@@ -178,8 +197,36 @@ fun DreamKeeperRoot(
                     onBack = { nav.popBackStack() },
                 )
             }
-            composable("record/{entry}") { /* Plan 2：RecordScreen */ }
-            composable("followup/{dreamId}") { /* Plan 2：FollowUpScreen */ }
+            composable("record/{entry}") { backStackEntry ->
+                val rawEntry = backStackEntry.arguments?.getString("entry")
+                RecordScreen(
+                    entry = RecordViewModel.parseEntry(rawEntry),
+                    repository = repo,
+                    session = session,
+                    audioStore = audioStore,
+                    starter = starter,
+                    hasPermission = hasPermission,
+                    hasAskedOnce = hasAskedOnce,
+                    permissionEpoch = permissionEpoch,
+                    onRequestPermission = onRequestPermission,
+                    onBackHome = {
+                        // 错误卡 / 中断横幅的出口：把录音页从栈里弹掉，回日历
+                        nav.navigate(DreamRoute.Calendar.route) {
+                            popUpTo(DreamRoute.Calendar.route) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateFollowUp = { dreamId ->
+                        // §0.12：录音页自己出栈，返回键不会回到一个已经结束的 take
+                        nav.navigate(DreamRoute.FollowUp(dreamId).route) {
+                            popUpTo("record/{entry}") { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    debugError = debugRecordError,
+                )
+            }
+            composable("followup/{dreamId}") { /* Plan 2 Task 5：FollowUpScreen */ }
         }
     }
 }

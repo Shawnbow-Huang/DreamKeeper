@@ -1,15 +1,47 @@
 package com.dreamkeeper
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.core.content.ContextCompat
+import com.dreamkeeper.service.AndroidRecordingStarter
+import com.dreamkeeper.service.RecordingService
 import com.dreamkeeper.ui.DreamKeeperRoot
+import com.dreamkeeper.ui.nav.RecordEntry
+import com.dreamkeeper.ui.record.RecordViewModel
 import com.dreamkeeper.ui.theme.DreamKeeperTheme
 
 class MainActivity : ComponentActivity() {
+
+    /** 每次 RESUMED / 授权回调递增，让录音页 VM 重算权限三态（§0.4）。 */
+    private val micPermissionEpoch = mutableIntStateOf(0)
+
+    /** intent 里的 RecordEntry 是**一次性**事件：导航后由 DreamKeeperRoot 回调置 null。 */
+    private val pendingRecordEntry = mutableStateOf<RecordEntry?>(null)
+
+    /**
+     * 必须在 STARTED 之前注册：字段初始化发生在构造期，早于 onCreate。
+     * 用 RequestPermission 而非 RequestMultiplePermissions——本任务只要 RECORD_AUDIO
+     * （POST_NOTIFICATIONS 被关不拦录音，只在屏内提示）。
+     */
+    private val requestMicPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        micPermissionEpoch.intValue++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // targetSdk 37 强制 edge-to-edge：themes.xml 里的 statusBarColor/navigationBarColor 是空操作，
         // 系统栏必须在这里显式声明深色 + 透明，再由下面的 Compose 背景铺满系统栏区域。
@@ -26,19 +58,103 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
+        // 只有首次创建才消费启动 intent（§4.4）：旋转/进程恢复不能再跳一次录音页。
+        // 没有 entry extra 时保持 null，正常冷启动仍落在日历。
+        if (savedInstanceState == null) {
+            pendingRecordEntry.value = intent
+                ?.getStringExtra(RecordingService.EXTRA_ENTRY)
+                ?.let { RecordViewModel.parseEntry(it) }
+            applyLockScreenFlags(pendingRecordEntry.value)
+        }
+        // ENOSPC 在模拟器上没法真实触发；DEBUG 下允许用 `--es dk_record_error ...`
+        // 把错误容器渲染出来拍证据（report 里记偏差 D142）。
+        val debugRecordError = if (BuildConfig.DEBUG) {
+            intent?.getStringExtra("dk_record_error")
+        } else {
+            null
+        }
+
         // Activity 只做一件事：把根界面接进主题
         setContent {
             DreamKeeperTheme {
                 val container = (application as DreamKeeperApp).container
+                // Activity 是可见的 Context：startForegroundService 才带前台豁免；
+                // 同一个实例跨旋转复用，避免每次重组都新建一个 starter。
+                val starter = remember { AndroidRecordingStarter(this) }
                 DreamKeeperRoot(
                     repo = container.repository,
                     // 排布偏好也由容器给：界面不自己 getSharedPreferences（否则换个 Context 就丢配置）
                     layoutPrefs = container.layoutPrefs,
                     // 标签页的重命名/删除走 DAO；合并仍在仓库层（要动关联表，必须事务）
                     tagDao = container.tagDao,
+                    session = container.recordingSession,
+                    audioStore = container.audioStore,
+                    starter = starter,
+                    // 每次现查，不缓存（§4.4）：用户可能在设置里刚关掉权限
+                    hasPermission = {
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                            PackageManager.PERMISSION_GRANTED
+                    },
+                    hasAskedOnce = { hasAskedMicOnce() },
+                    permissionEpoch = micPermissionEpoch.intValue,
+                    onRequestPermission = {
+                        markAskedMicOnce()
+                        requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    recordEntry = pendingRecordEntry.value,
+                    onEntryConsumed = { pendingRecordEntry.value = null },
+                    debugRecordError = debugRecordError,
                     initialSearchQuery = prefillSearch,
                 )
             }
         }
+    }
+
+    /** singleTop 复用同一个 Activity：通知点回 / 锁屏磁贴走这里，不再 create 新实例。 */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val entry = intent
+            .getStringExtra(RecordingService.EXTRA_ENTRY)
+            ?.let { RecordViewModel.parseEntry(it) }
+        pendingRecordEntry.value = entry
+        applyLockScreenFlags(entry)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 用户可能从「去设置」回来；每次 RESUMED 让 VM 重查一次（§0.4）
+        micPermissionEpoch.intValue++
+    }
+
+    /**
+     * 锁屏直达只在 LOCK_TILE / NOTIFICATION 两个入口打开（§4.4）：
+     * 普通首页按钮不应该在锁屏上亮屏，那是打扰。
+     */
+    private fun applyLockScreenFlags(entry: RecordEntry?) {
+        val locked = entry == RecordEntry.LOCK_TILE || entry == RecordEntry.NOTIFICATION
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(locked)
+            setTurnScreenOn(locked)
+        } else {
+            val flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            if (locked) window.addFlags(flags) else window.clearFlags(flags)
+        }
+    }
+
+    private fun hasAskedMicOnce(): Boolean =
+        getSharedPreferences(RECORD_PREFS, MODE_PRIVATE).getBoolean(KEY_MIC_ASKED, false)
+
+    private fun markAskedMicOnce() {
+        getSharedPreferences(RECORD_PREFS, MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_MIC_ASKED, true)
+            .apply()
+    }
+
+    private companion object {
+        const val RECORD_PREFS = "record"
+        const val KEY_MIC_ASKED = "mic_asked_once"
     }
 }
