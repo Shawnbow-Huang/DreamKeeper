@@ -1,0 +1,31 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:59:20Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --console=plain
+
+# p3-export-03 全量单元测试（Task 10 Step 5；--rerun-tasks 真跑）
+# 期望：39 类 / 362 例 / 0 失败（Task 9b 基线 36 类 350 例 + 本次导出 3 类 12 例）。
+
+命令（原样）：
+  cd /d/DreamKeeper/android
+  JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --rerun-tasks --console=plain
+
+输出（原样）：
+  > Task :app:testDebugUnitTest
+  BUILD SUCCESSFUL in 31s
+
+XML 聚合命令（仓库根，读取 android/app/build/test-results/testDebugUnitTest/TEST-*.xml）：
+  python - <<'PY'
+  import glob, xml.etree.ElementTree as ET
+  classes = tests = failures = errors = 0
+  for f in glob.glob('android/app/build/test-results/testDebugUnitTest/TEST-*.xml'):
+      r = ET.parse(f).getroot()
+      classes += 1
+      tests += int(r.get('tests', 0)); failures += int(r.get('failures', 0)); errors += int(r.get('errors', 0))
+  print('classes=%d tests=%d failures=%d errors=%d' % (classes, tests, failures, errors))
+  PY
+
+聚合输出（原样）：
+  classes=39 tests=362 failures=0 errors=0 skipped=0
+
+→ 39 类 / 362 例 / 0 失败，与计划 Expected 一致。
+原始日志：/d/DreamKeeper/.scratch/full-export-4.log（构建缓存目录，不入库）。

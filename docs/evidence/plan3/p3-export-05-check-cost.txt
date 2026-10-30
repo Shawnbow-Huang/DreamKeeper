@@ -1,0 +1,29 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:59:20Z
+REPLAY=cd /d/DreamKeeper && python scripts/check-cost.py --self-test && python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+
+# p3-export-05 check-cost.py D337/D366 改造自测（host-only）
+# Phase B 将用合并后的真实库追加：python scripts/check-cost.py --db-copy p3-e2e-08-db.db --require-rows
+# （期望 mismatches=0、failed=N>=1、每个 error 行 cost=0/usage NULL、逐行 [FAILED]）。
+
+命令 1：python scripts/check-cost.py --self-test
+输出（D366 用例与总计，原样节选）：
+[SELF-TEST] failed row (cost=0/usage=NULL) 通过 → OK
+[SELF-TEST] failed row cost=1 报错 → OK
+[SELF-TEST] failed row usage 非 NULL 报错 → OK
+[SELF-TEST] --require-rows 空表报错 → OK
+[SELF-TEST] --require-rows 非空表不报错 → OK
+rows=6 mismatches=0
+
+命令 2：python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
+输出（原样节选）：
+[OK] peak-01-0100Z            cost=5 peak=True
+[OK] peak-02-085959Z          cost=5 peak=True
+[OK] peak-03-035959Z          cost=5 peak=True
+[OK] peak-04-040000Z          cost=3 peak=False
+...
+[OK] tz-02-sh-offpeak-utc-peak cost=3 peak=False
+rows=14 mismatches=0 failed=0
+
+D366 改造点：--require-rows 空表硬门（空表不许假绿，exit 1）；error 行免五断言、改为断言 cost==0 且 usageJson IS NULL；
+输出 failed=N 与逐行 [FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET；成功行仍跑全部五断言。

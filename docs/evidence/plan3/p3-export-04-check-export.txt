@@ -1,0 +1,30 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:59:20Z
+REPLAY=cd /d/DreamKeeper && python scripts/check-export.py --self-test
+
+# p3-export-04 check-export.py 离线自测（D357/D358/D372/D374）
+# Phase A：fixture 库上验证三格式 GREEN + 变异 RED + 错 sha 前置 RED；
+# Phase B 将用设备导出的真实 txt/docx/pdf 再跑 --txt/--docx/--pdf 三子命令并追加到 p3-e2e-06/07。
+
+命令：python scripts/check-export.py --self-test
+
+输出（原样）：
+[SELF-TEST] fixture dream-1/txt → GREEN（期望 GREEN）
+[MUTATION] 改正文/期望串一个字符 → RED（符合预期）
+[MUTATION] CRLF 换行 → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（7ed674d6a2781ff2e8f7e694c22526f138c81e64f3bf40100b51d4212075b3a3）
+[SELF-TEST] fixture dream-1/docx → GREEN（期望 GREEN）
+[MUTATION] 删 docx 一个 w:p → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（c45396705285432013249269c6f45f55b2791798a6d54275c34a35a7f457bb9f）
+[SELF-TEST] fixture dream-2/txt → GREEN（期望 GREEN）
+[MUTATION] 改正文/期望串一个字符 → RED（符合预期）
+[MUTATION] CRLF 换行 → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（3c7936b67c4a727092433aa2708093d139e45f9aa8d7308dc57eb6c5da4e5d0c）
+[SELF-TEST] fixture dream-2/docx → GREEN（期望 GREEN）
+[MUTATION] 删 docx 一个 w:p → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（269ab2296d259649570c845b4c27a73d9218551737de4fcc161ea4336f9923b9）
+[SELF-TEST] fixture PDF → GREEN（期望 GREEN）
+[MUTATION] PDF 尾部追加垃圾（破坏 %%EOF） → RED（符合预期）
+[MUTATION] 原件 sha256 未变：是（2ff8faf5c5d9599f2053a7b261f9d19b3f1a03913bc039936eef919c34fe45b4）
+[SELF-TEST] 错 sha 的 DB → RED（符合预期）
+RESULT: GREEN

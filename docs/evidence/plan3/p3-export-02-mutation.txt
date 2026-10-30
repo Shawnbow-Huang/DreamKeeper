@@ -1,0 +1,31 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:59:20Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --tests "com.dreamkeeper.export.*" --console=plain
+
+# p3-export-02 三处变异（Task 10 Step 3；每处先改→跑→恢复）
+
+公共命令：
+  cd /d/DreamKeeper/android
+  JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --tests "com.dreamkeeper.export.*" --console=plain
+
+变异 1：删 txt footer
+  改动：TxtExporter.kt 的 render 中删除 append("
+共 ").append(document.charCount).append(" 字")
+  结果：TxtExporterTest 4 tests completed, 3 failed
+        （完整导出串是头部四行加正文加共N字 / 标签为空时整行省略 /
+          多行正文的空行原样保留且共N字只算正文内容字符 三例红；BOM+CR 那例不依赖 footer 仍绿）
+        BUILD FAILED in 4s
+  恢复后：导出包 12/12 绿（见 p3-export-01）
+
+变异 2：docx 首段去加粗
+  改动：DocxExporter.kt 的 paragraph() 里 val runProps = ""（去掉 <w:rPr><w:b/></w:rPr>）
+  结果：DocxExporterTest 4 tests completed, 1 failed（首段是加粗的标题段）；BUILD FAILED in 4s
+  恢复后：导出包 12/12 绿
+
+变异 3：文件名去掉 -v<n>
+  改动：Exporter.kt 的 ExportNaming.fileName 中 else 分支由 "-v$version" 改为 ""（无稿仍保留 -raw）
+  结果：ExportNamingTest 4 tests completed, 1 failed（有稿带版本号无稿带raw）；BUILD FAILED in 4s
+  恢复后：导出包 12/12 绿
+
+三处变异各自至少 1 红，且恢复后复绿——断言不是空转。
+原始日志：/d/DreamKeeper/.scratch/mut1.log、mut2.log、mut3.log；恢复后复绿：.scratch/green-export-2.log（构建缓存目录，不入库）。

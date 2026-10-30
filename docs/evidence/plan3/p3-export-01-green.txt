@@ -1,0 +1,21 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:59:20Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --tests "com.dreamkeeper.export.*" --console=plain
+
+# p3-export-01 导出包复绿（Task 10 Step 2；--rerun-tasks 真跑，不是缓存 UP-TO-DATE）
+
+命令（原样）：
+  cd /d/DreamKeeper/android
+  JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --tests "com.dreamkeeper.export.*" --rerun-tasks --console=plain
+
+输出（原样）：
+  > Task :app:testDebugUnitTest
+  BUILD SUCCESSFUL in 15s
+
+测试结果 XML（android/app/build/test-results/testDebugUnitTest/，原样）：
+  com.dreamkeeper.export.TxtExporterTest   tests="4" failures="0" errors="0"
+  com.dreamkeeper.export.DocxExporterTest  tests="4" failures="0" errors="0"
+  com.dreamkeeper.export.ExportNamingTest  tests="4" failures="0" errors="0"
+  → 导出包 12/12 绿；相对 p3-export-00 的 8 failed 全部转绿。
+
+原始日志：/d/DreamKeeper/.scratch/green-export-2.log（构建缓存目录，不入库）。

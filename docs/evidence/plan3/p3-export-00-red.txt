@@ -1,0 +1,33 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:59:20Z
+REPLAY=cd /d/DreamKeeper/android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --tests "com.dreamkeeper.export.*" --console=plain
+RED_BASELINE=12 tests completed, 8 failed（TxtExporterTest 4/4 红、DocxExporterTest 4/4 红；ExportNamingTest 4/4 绿）
+
+# p3-export-00 红基线（Task 10 Steps 1–2）
+
+场景：先落可编译空壳——TxtExporter.render 返回空串、DocxExporter.render / PdfExporter.render 返回 ByteArray(0)，
+再跑导出包测试，证明断言真的会红（不是先写实现再补测试的假红）。
+
+命令（原样）：
+  cd /d/DreamKeeper/android
+  JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew testDebugUnitTest --tests "com.dreamkeeper.export.*" --console=plain
+
+输出（原样，含全部失败行）：
+  > Task :app:testDebugUnitTest FAILED
+  DocxExporterTest > 首段是加粗的标题段 FAILED
+  DocxExporterTest > 段数等于头部段数加正文行数且空行生成空段 FAILED
+  DocxExporterTest > XML 转义且剔除非法控制字符与孤立代理项 FAILED
+  DocxExporterTest > 压缩包只含三件套且 document xml 可解析 FAILED
+  TxtExporterTest > 完整导出串是头部四行加正文加共N字 FAILED
+  TxtExporterTest > 标签为空时整行省略 FAILED
+  TxtExporterTest > 多行正文的空行原样保留且共N字只算正文内容字符 FAILED
+  TxtExporterTest > 输出无 BOM 且正文的 CR 被归一为 LF FAILED
+  12 tests completed, 8 failed
+  BUILD FAILED in 4s
+
+为什么是 8/12 而不是 12/12：
+ExportNamingTest 的命名/日期口径（D373）在空壳阶段已随 Exporter.kt 一起落盘，这 4 例当时即绿。
+为不伪造红基线，如实记录 8/12，并用 p3-export-02 的变异 3（文件名去掉 -v<n>）证明 ExportNamingTest
+确实可红——可证伪性由变异覆盖，而不是人为回退已写对的实现。
+
+红基线原始日志：/d/DreamKeeper/.scratch/red-export.log（构建缓存目录，不入库）。
