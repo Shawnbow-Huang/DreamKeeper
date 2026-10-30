@@ -179,14 +179,87 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 2 Key 加密存储
 
-- Files：`data/security/ApiKeyStore.kt`（接口 + `KeystoreApiKeyStore` + `FakeApiKeyStore`）、
-  `data/security/KeystoreCipher.kt`、`test/.../ApiKeyStoreTest.kt`、`ui/settings/SettingsViewModel.kt`。
-- Interfaces：`interface ApiKeyStore { fun load(): String?; fun save(key: String); fun clear() }`；
-  `KeystoreCipher`：AES/GCM/NoPadding，密钥别名叫 `dreamkeeper.api.key`，**不设** `setUserAuthenticationRequired`，
-  存 `iv + ciphertext` 两段 base64 到 `SharedPreferences("settings")`。
-- Steps：红（无实现）→ 实现 → 绿；用例：写读回环、清空、脏数据不崩返回 null、**日志不出现明文**（挂一个
-  记录 `Log.*` 的测试替身断言无 Key 子串）。
-- Expected：`prefs` 里只有 base64 密文；`adb logcat` 过滤 Key 前缀零命中。
+> 0. 派工前修订（Lead 按 Mobile App Builder / Evidence Collector 预审裁定，覆盖下文任何冲突）
+>
+> **0.1 `KeystoreCipher` 必须是接口**（`interface KeystoreCipher { fun encrypt(plain: String): String; fun decrypt(packed: String): String? }`），
+> 实现 `AndroidKeystoreCipher` 走真 Keystore；测试用 `FakeCipher`。理由：Robolectric 的 shadows/robolectric jar 里
+> **没有任何 KeyStore/KeyGenerator/Cipher shadow，也搜不到 `AndroidKeyStore` 字符串**（预审实测 jar 静态核对），
+> 真 Keystore 在 JVM 上必抛 `KeyStoreException`。接口化之后 `KeystoreApiKeyStore` 的 base64、持久化、容错全部可在 JVM 测。
+>
+> **0.2 存一个字符串，不存两个 pref**：`iv‖ct` 用 `Base64.encodeToString(..., NO_WRAP)` 拼成一个值，键名 `api_key_packed`，
+> 用 `edit().putString(...).commit()` **一次落盘**（同 `LayoutPrefs.kt:33-35` 的教训：`apply()` 后立刻 `force-stop` 会丢）。
+> 加密时**不要**传 `GCMParameterSpec`，让 Keystore 生成随机 IV，再用 `cipher.iv` 取出后拼进同一个字符串。
+>
+> **0.3 KeyGenParameterSpec**：别名 `dreamkeeper.api.key`（**不改名、不加版本号**，改名等于让老用户静默丢 Key）；
+> `PURPOSE_ENCRYPT or PURPOSE_DECRYPT` + `setBlockModes(GCM)` + `setEncryptionPaddings(NONE)` + `setKeySize(256)`；
+> **不设** `setUserAuthenticationRequired`（Task 8 的生成跑在 `generationScope`，用户不在场会抛 `UserNotAuthenticatedException`，
+> 这是明示取舍）；**不关** `setRandomizedEncryptionRequired`。
+>
+> **0.4 解密失败一律当未配置**：`AEADBadTagException` / `GeneralSecurityException` / `UnrecoverableKeyException` /
+> `ProviderException` / `IllegalArgumentException`（坏 base64）全部捕获 → 删别名、清 pref、返回 `null`，不崩不弹。
+>
+> **0.5 `save()` 要防「换 Key 后旧密文残留」**：每次 `save` 整体覆盖（新 IV、新密文），并有一条断言：
+> 保存两次后 prefs 里只有一个值，且第二次的密文能解出第二个 Key、解不出第一个。
+>
+> **0.6 输入处理**：`save()` 内部 `trim()`（尾随换行是最高频真实故障）；空串等价 `clear()`；
+> 长度 < 20 或不是 `sk-` 开头 → 只做**软提示**（`state.warning`），**不阻止保存**（DeepSeek 之外的兼容 Key 不该被拦）。
+>
+> **0.7 本任务不发任何网络请求**：可用性校验留 Task 5（`max_tokens=1` 打一发）。设置页文案写成「已保存（还没验证）」，
+> 不许写「已验证」。
+>
+> **0.8 接线四处一个都不能少**（预审给的 文件:行号）：
+> `di/AppContainer.kt` 加 `val apiKeyStore: ApiKeyStore by lazy { KeystoreApiKeyStore(AndroidKeystoreCipher(), appContext.getSharedPreferences("settings", MODE_PRIVATE)) }`（放在 `generationScope` 附近，用 `:51` 的 `appContext`）；
+> `ui/DreamKeeperRoot.kt:75-90` 签名加 `apiKeyStore: ApiKeyStore`，`:198` 的 `viewModel { SettingsViewModel() }` 改成传入；
+> `MainActivity.kt:84-108` 照 `:87` 补 `apiKeyStore = container.apiKeyStore`；
+> `ui/settings/SettingsViewModel.kt:15` 构造函数接 `(apiKeyStore: ApiKeyStore, io: CoroutineDispatcher = Dispatchers.IO)`，
+> `:17-20` 的 UiState 扩成 `keyConfigured / maskedKey / draft / warning / error / busy`，`load()` 走 `viewModelScope + io`。
+>
+> **0.9 `SettingsScreen` 要改**：`SettingsScreen.kt:111-127` 的 KeyCard 从两态扩成三态（未配置 / 已配置显示掩码 `sk-…abcd` / 编辑中）；
+> 加 `OutlinedTextField`（`PasswordVisualTransformation`，48dp 高）+「保存」「清除」两个按钮；`:56` 的「保存与校验还没做」文案删掉换成真实状态；
+> 不用 `Icons.*`（D225）。
+>
+> **0.10 `FakeApiKeyStore` 放 test 源集**（放 main 等于给发布包塞测试桩）。
+>
+> **0.11 仓库没有 androidTest 源集，也不许为本任务加**（`androidx.test` 依赖 + 新源集成本大于收益）。
+> 为了拿到 prefs/logcat 的**实物证据**，允许加一个 **`BuildConfig.DEBUG` 门闩的临时写入口**：
+> `MainActivity` 处理 intent extra `dk_debug_save_key` / `dk_debug_clear_key`（只在该 `if (BuildConfig.DEBUG)` 块里调 `container.apiKeyStore`），
+> 并把这段 diff 另存 `docs/evidence/plan3/p3-key-00-harness.patch`；**验收后不要求还原**（它是 debug-only），
+> 但必须有一条断言：`grep -c dk_debug_save_key app-release-unsigned.apk` = 0（release 包里不存在该字符串）。
+>
+> **0.12 证据 5+1 份，命名 `p3-key-0N-*`**，每份首三行 `APK_SHA256= / DEVICE_TIME= / REPLAY=`：
+> `p3-key-00-red.txt`（TDD 红）、`p3-key-01-roundtrip.txt`（写读回环 + 掩码 + 清空）、
+> `p3-key-02-prefs.txt`（`run-as … cat //data/data/com.dreamkeeper/shared_prefs/settings.xml`：只有 base64、无 needle）、
+> `p3-key-03-logcat.log`（保存前后全量 logcat，`grep -c $NEEDLE` = 0）、
+> `p3-key-04-backup.txt`（`aapt2 … | grep allowBackup` = `false`；`dumpsys package com.dreamkeeper | grep ALLOW_BACKUP` 空）、
+> 可选 `p3-key-05-configured.png` + 同名 `.txt`（`PNG_SHA256=`）。
+>
+> **0.13 证据必须带正对照，否则同义反复**：每个「0 命中」都要配同一 needle 的「≥1 命中」对照——
+> 扫描 `grep -rl $NEEDLE` 同时跑一遍 `grep -rl CARDS`（应命中 `layout_prefs.xml`）；
+> logcat 对照用 `adb shell log -t QAPROBE $NEEDLE` 应 grep 到；
+> 「无明文」必须与「有密文」在**同一份 xml、同一次 cat** 里同时成立；
+> 再 `am force-stop` → 重进 → `keyConfigured=true`，把密文证成可解密的真密文。
+>
+> **0.14 单测里的「日志无明文」必须注入 logger 替身**（JVM 的 `Log.*` 未 mock 会抛异常，开了 `returnDefaultValues` 则恒真）：
+> 先断言替身收到 ≥1 条，再断言其中不含 needle。
+>
+> **0.15 不碰 manifest**：`AndroidManifest.xml:16` 已是 `allowBackup="false"`，本轮不加 `dataExtractionRules`；
+> D2D/云备份在模拟器上无法触发，写「未验证」。
+
+- Files：`data/security/ApiKeyStore.kt`（`interface ApiKeyStore` + `KeystoreApiKeyStore`）、`data/security/KeystoreCipher.kt`（接口 + `AndroidKeystoreCipher`）、
+  `test/.../data/security/ApiKeyStoreTest.kt`（含 `FakeCipher`、`FakeApiKeyStore`）、`ui/settings/SettingsViewModel.kt`、`ui/settings/SettingsScreen.kt`、
+  `di/AppContainer.kt`、`ui/DreamKeeperRoot.kt`、`MainActivity.kt`、`AndroidManifest.xml`（**只加** `android:allowBackup` 已有则不动 → 预期不改）。
+- Interfaces：
+  `interface ApiKeyStore { fun load(): String?; fun save(key: String); fun clear() }`
+  `interface KeystoreCipher { fun encrypt(plain: String): String; fun decrypt(packed: String): String? }`
+  `class KeystoreApiKeyStore(cipher: KeystoreCipher, prefs: SharedPreferences) : ApiKeyStore`
+- Steps：
+  1. 红：写 `ApiKeyStoreTest`（回环 / 清空 / 坏 base64 → null / cipher 抛 AEADBadTag → null 且清残留 / 只有 iv 没 ct → null / `prefs.all` 无明文 / 换 Key 覆盖 / 掩码格式），跑红并把输出存 `p3-key-00-red.txt`。
+  2. 实现 `KeystoreCipher` 接口 + `AndroidKeystoreCipher` + `KeystoreApiKeyStore`，绿。
+  3. 接线四处（0.8）+ 设置页三态（0.9）+ debug 写入口（0.11）。
+  4. 变异验证两条：① `save()` 改成明文写 prefs → 必须红；② 坏 base64 分支改成 `throw` → 必须红。
+  5. 设备侧取证（0.12/0.13）→ 5+1 份证据。
+- Expected：`prefs` 只有 `Base64(iv‖ct)` 一个值；全目录 `grep` needle = 0 且 CARDS 对照 = 1；logcat needle = 0 且 QAPROBE 对照 ≥1；
+  `allowBackup=false`；force-stop 重启后 `keyConfigured=true`；release APK 里 `dk_debug_save_key` 计数 0；全量用例绿。
 
 ### Task 3 价卡与成本计算
 
@@ -290,6 +363,14 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D234 | T1-12：实现基线是 `34b13d2`，不是派工书写的 `0706f31` | `34b13d2` 只在 `0706f31` 之上改了 `docs/PROGRESS.md`（+2/−2），无代码差异 |
 | D235 | T1-13：截图没有同名 `.txt` 侧车 | 本任务白名单只列了 png。**Lead 补**：`p3-settings-01-idle.txt` 已按 README 要求补上绑定信息（PNG sha256 / APK sha256 / 设备与时间 / 复跑命令） |
 | D236 | T1-14：证据提交 `652ebba` 触及 `docs/**` | **Lead 裁定**：保留。`docs/evidence/**` 是证据的合法落点；「禁改 `docs/**`」指的是计划与设计正文 |
+| D237 | T2-1：`KeystoreCipher` 由具体类改成接口 | Robolectric 无任何 Keystore/Cipher shadow、无 `AndroidKeyStore` provider，接口化才能 JVM 测基类逻辑（预审 jar 静态核对） |
+| D238 | T2-2：Files 补 `AppContainer`/`DreamKeeperRoot`/`MainActivity`/`SettingsScreen`，UiState 扩成 6 字段 | 原任务书只列 4 个文件，接线缺失会编译失败或 VM 拿不到依赖 |
+| D239 | T2-3：加 `BuildConfig.DEBUG` 门闩的 `dk_debug_save_key` / `dk_debug_clear_key` 写入口 | 仓库无 androidTest 源集；没有写入口就拿不到 prefs/logcat 实物证据。debug-only，另附 `p3-key-00-harness.patch`，release 包断言该字符串计数 0 |
+| D240 | T2-4：IV 与密文合成**一个** `api_key_packed` 字符串并 `commit()` 落盘 | 两个 pref key 会有「只写了一半」的中间态；`apply()` 后立刻 force-stop 会丢（`LayoutPrefs.kt:33-35` 同因） |
+| D241 | T2-5：`save()` 软校验 `sk-` 前缀与长度，只给 warning 不拦保存 | 只支持 DeepSeek 官方但 Key 格式会演进；硬拦会把合法 Key 挡在门外 |
+| D242 | T2-6：本任务不发网络请求，「已验证」文案禁止出现 | 可用性校验属 Task 5（`max_tokens=1`）；本任务无法区分「Key 对但被限流」与「Key 错」 |
+| D243 | T2-7：不碰 manifest、不加 `dataExtractionRules` | `:16` 已 `allowBackup=false`；D2D/云备份在模拟器无法触发，改 manifest 只会引入未验证变更 |
+| D244 | T2-8：证据 5+1 份且每个「0 命中」必须配正对照（CARDS / QAPROBE） | 没有正对照时「过滤器坏了」与「真的没有」不可区分，等于同义反复 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
