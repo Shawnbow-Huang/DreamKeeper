@@ -371,6 +371,14 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D242 | T2-6：本任务不发网络请求，「已验证」文案禁止出现 | 可用性校验属 Task 5（`max_tokens=1`）；本任务无法区分「Key 对但被限流」与「Key 错」 |
 | D243 | T2-7：不碰 manifest、不加 `dataExtractionRules` | `:16` 已 `allowBackup=false`；D2D/云备份在模拟器无法触发，改 manifest 只会引入未验证变更 |
 | D244 | T2-8：证据 5+1 份且每个「0 命中」必须配正对照（CARDS / QAPROBE） | 没有正对照时「过滤器坏了」与「真的没有」不可区分，等于同义反复 |
+| D245 | T2-9：证据改走 UI 真路径（`printf … \| adb shell "cat > /data/local/tmp/dk_key.txt"` → `input text "$(cat …)"`） | 实测 `am start --es dk_debug_save_key <key>` 会把 Key 写进 **adbd 自己的** logcat（`I adbd: adbd service requested '…am start … sk-…'`），「全量 logcat needle=0」永远不成立。改走 UI 后顺带证明 `SettingsViewModel`/`SettingsScreen` 真实链路；harness 保留并入库可复跑 |
+| D246 | T2-10：多产出 `p3-key-06-release.txt` | release 负向是派工要求「必须自己跑」的项，单独成文件让 01–05 专指设备五证 |
+| D247 | T2-11：`grep -c dk_debug_save_key app-release.apk` 对 zip 恒 0，属弱证据 | 补 dex 级 `unzip -p … classes*.dex \| grep -c` = 0，并用 debug `classes8.dex` = 1 做正对照；要更强需开 minify（本任务不开） |
+| D248 | T2-12：输入框用 `heightIn(min = 48.dp)` 而非 `height(48.dp)` | 固定高度在大字体/多行会截断；实测输入框 147px（56dp）、按钮 126px（48dp） |
+| D249 | T2-13：设置页保存空输入给 `error="先输入 Key 再保存"`，不静默 clear | 「空串 = clear」是 store 层语义（已实现且有用例）；UI 上误点保存就清掉已配置的 Key 是危险交互 |
+| D250 | T2-14：`save()` 成功后清空 `draft`，`load()` 不把明文写进任何状态 | 明文只活在输入框草稿里；`maskedKey` 只存掩码。4 份 UI dump 里 needle=0 |
+| D251 | T2-15：证据头 `DEVICE_TIME` 取证据窗口内时刻，非秒级单调时间戳 | 设备时钟与主机一致（CST）；`capture-screen.ps1` 不输出时间戳。该字段只用于「证据何时取」，不影响内容复现 |
+| D252 | T2-16：首拍带输入法的截图在 `-MaxRatio 0` 下命中 2/69120 采样点（0.003%） | 键盘是系统 UI，不属于 App 主题；`input keyevent 4` 收起 IME 后重拍，四张全部 `nearWhite=0`；首版已删 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
@@ -391,3 +399,15 @@ T3  不调用模型                                   → faithfulText = rawTran
 - 装机（emulator-5554）：`TotalTime 2567 ms`；设置入口 `uiautomator` bounds **126×126 px**；截图 `p3-settings-01-idle.png` 近白 `nearWhite=0/69,120`；`FATAL EXCEPTION`/`ANR in com.dreamkeeper` 0 命中。
 - 变异验证：`Settings.route` 改成 `"calendar"` → `DreamRouteTest` 3 条红；改回即绿（实施者执行，Lead 认可其方法）。
 - 结论：**Task 1 验收通过**。未证事项按 D229（未发真实请求）保留，等 Task 5 假服务器。
+
+---
+
+### Task 2 验收（Lead，2026-10-30）
+
+- 交付：`19bb3d6`（8 文件 +700/−19）+ `6f188e1`（证据 15 件）；`AndroidManifest.xml` **零改动**（`git show --name-only` 计数 0）。
+- Lead 独立复跑：全量 **24 测试类 / 262 用例 / 0 失败 / 0 错误**（XML 统计，基线 251 + `ApiKeyStoreTest` 11）。
+- 我读证据核对：`settings.xml` 只有一个 `<string name="api_key_packed">`，base64 80 字符（12B IV + 31B ct + 16B tag），明文 needle 计数 0；全目录扫描 `CARDS` 正对照命中 `layout_prefs.xml`（证明扫描器不哑）。
+- release APK（`9aa8a8a9…`）`classes*.dex` 里 `dk_debug_save_key`/`dk_debug_clear_key` 计数 **0**，debug `classes8.dex` 计数 1（正对照成立）。
+- 截图 `p3-key-05-configured.png`：设置页显示 `已保存（还没验证）` + 掩码 `sk-…3056`；四张截图近白 `nearWhite=0`。
+- D245 是本轮最有价值的发现：**`am start --es` 传敏感值会把明文写进 adbd 的 logcat**——以后所有「传 Key / 传口令」的证据脚本都不许走 intent extra。
+- 结论：**Task 2 验收通过**。未验证项按报告 §4 保留（真机 TEE、`bmgr` 真跑、切进程原子性、非 ASCII Key、联网校验属 Task 5）。
