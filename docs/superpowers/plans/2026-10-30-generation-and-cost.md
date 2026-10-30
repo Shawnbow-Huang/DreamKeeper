@@ -783,7 +783,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   5. 选中 v2 → 截选中态与「当前 v2 · 已选中」（`p3-e2e-05-selected.png`）。
   6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ 等 MediaStore `IS_PENDING` 清（`ls -l` 见 3 文件且 size>0、
      间隔 2s 两次 `sha256sum` 稳定）→ 设备 `ls -l` + `sha256sum` → `adb pull /sdcard/Download/DreamKeeper/` 三件 →
-    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件原样存入 `docs/evidence/plan3/`（保留原文件名，另记 `EXPORT_SHA256=`（按入库 blob 的 LF 字节计），第三方只凭仓库即可复跑 check-export）；`EXPORT_SHA256=` 逐文件写在 `p3-e2e-06-export.txt` 里（不在原件内），并注明按入库 blob 的 LF 字节计（D378：导出原件豁免证据命名/头三行约定）。
+    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件**原样**存入 `docs/evidence/plan3/`（保留原文件名）；`EXPORT_SHA256=` 逐文件写在 `p3-e2e-06-export.txt`（不在原件内），按入库 blob 的 LF 字节计；第三方只凭仓库即可复跑 check-export（D378：导出原件豁免证据命名/头三行）。
     同时贴 `SELECT novelSelectedVersion FROM dreams` 与 `SELECT version FROM novel_versions WHERE dreamId=…` 原始行，证明文件名里的 `-v<n>` 就是选中版（D373）。
   7. 系统「文件」打开 txt/docx 截图；pdf 打开态记 PENDING（AOSP 无 viewer），`p3-e2e-07-pdf-open.png` 若拍到则单独说明、
      **排除**在 nearWhite=0 之外（D359）。
