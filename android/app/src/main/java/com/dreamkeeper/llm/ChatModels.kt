@@ -45,6 +45,11 @@ data class ChatRequest(
     val temperature: Double? = null,
     val jsonMode: Boolean = false,
     val apiKey: String,
+    /**
+     * D392：调用链标记（FAITHFUL / NOVEL / REVISE），**只给 DKLLM 日志用，绝不进请求体**。
+     * 失败对账靠它把 logcat 的 failed 行限制在生成链（改稿不记账，D387）。
+     */
+    val kind: String = "",
 ) {
     override fun toString(): String =
         "ChatRequest(model=$model, messages=${messages.size} 条, thinking=$thinking, " +

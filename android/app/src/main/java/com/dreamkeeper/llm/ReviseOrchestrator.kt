@@ -255,6 +255,7 @@ class ReviseOrchestrator(
             temperature = temperature,
             jsonMode = true,
             apiKey = apiKey(),
+            kind = "REVISE",
         )
         return try {
             val response = llm.chat(request)

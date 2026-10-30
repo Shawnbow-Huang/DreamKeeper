@@ -5,6 +5,7 @@
 用法：
   python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json
   python scripts/check-cost.py --db-copy path/to/dream.db          # sqlite3 只读
+  python scripts/check-cost.py --db-copy path/to/dream.db --require-rows  # 空表即红（D366）
   python scripts/check-cost.py --self-test                         # 变异自测
   python scripts/check-cost.py --vectors ... --json                # 机器可读
 
@@ -218,6 +219,15 @@ def _usage_problems(usage, hit, miss, out):
 def row_problems(row):
     """返回 (problems, unknown_formula)。每行独立检查，不短路。"""
     problems = []
+    if row.get("failed"):
+        # D366/D316：失败行（llm_calls.error 非 NULL）豁免 ①～⑤，改断言
+        # costMicroYuan==0 且 usageJson IS NULL；其余列允许为空（四 token 列本就 NULL）。
+        if row["cost"] != 0:
+            problems.append("失败行 costMicroYuan 应为 0，实际 %r" % (row["cost"],))
+        if row["usage"] is not None:
+            problems.append("失败行 usageJson 应为 NULL，实际有 usage：%r" % (row["usage"],))
+        return problems, False
+
     unknown_formula = row["formula_version"] not in FORMULA_VERSIONS
     if unknown_formula:
         problems.append("formulaVersion=%r 不在白名单 %s，无法复算"
@@ -277,10 +287,22 @@ def summarize(rows, details, mismatches, unknown):
         print("[MISMATCH] %-24s (%s)" % (row_id, source))
         for p in problems:
             print("           - %s" % p)
+    failed_rows = [row for row in rows if row.get("failed")]
     for row in rows:
-        if not any(d[0] == row["id"] for d in details):
+        if row.get("failed"):
+            # D366：失败行单独一行输出，httpStatus 照抄行内值（可能为 NULL），
+            # cost/usage 必须分别是 0 / NULL。
+            print("[FAILED] %s %s cost=%s usage=%s" % (
+                row.get("http_status") if row.get("http_status") is not None else "none",
+                row.get("error") or "UNKNOWN",
+                row["cost"],
+                "NULL" if row["usage"] is None else "SET",
+            ))
+        elif not any(d[0] == row["id"] for d in details):
             print("[OK] %-24s cost=%s peak=%s" % (row["id"], row["cost"], row["is_peak"]))
-    print("rows=%d mismatches=%d" % (len(rows), mismatches))
+    # failed=N 是 §0.6 步骤 10 的对账口径：必须等于 error 行数，且与 logcat DKLLM
+    # status=failed 的生成链条数相等（D392）。
+    print("rows=%d mismatches=%d failed=%d" % (len(rows), mismatches, len(failed_rows)))
     if unknown:
         return 2
     return 1 if mismatches else 0
@@ -393,12 +415,20 @@ def load_db_copy(path):
             return rec[name]
 
         snapshot = need("priceSnapshotJson")
-        if snapshot is None:
-            raise InputError("%s.priceSnapshotJson 为 NULL（历史账目必须自带快照）" % where)
-        try:
-            snapshot_obj = json.loads(snapshot) if isinstance(snapshot, str) else snapshot
-        except ValueError as e:
-            raise InputError("%s.priceSnapshotJson 不是合法 JSON：%s" % (where, e))
+        error_value = rec["error"] if "error" in keys else None
+        failed = error_value is not None
+        http_status = rec["httpStatus"] if "httpStatus" in keys else None
+        if snapshot is None and failed:
+            # D366：失败行豁免 ①～⑤，不要求快照可复算；D316 虽照写快照，这里仍允许 NULL。
+            card = None
+        else:
+            if snapshot is None:
+                raise InputError("%s.priceSnapshotJson 为 NULL（历史账目必须自带快照）" % where)
+            try:
+                snapshot_obj = json.loads(snapshot) if isinstance(snapshot, str) else snapshot
+            except ValueError as e:
+                raise InputError("%s.priceSnapshotJson 不是合法 JSON：%s" % (where, e))
+            card = parse_card(snapshot_obj, "%s.priceSnapshotJson" % where)
         usage_raw = need("usageJson")
         try:
             usage = json.loads(usage_raw) if isinstance(usage_raw, str) else usage_raw
@@ -417,12 +447,22 @@ def load_db_copy(path):
             "is_peak": bool(need("isPeak")),
             "usage": usage,
             "formula_version": need("formulaVersion"),
-            "card": parse_card(snapshot_obj, "%s.priceSnapshotJson" % where),
+            "card": card,
+            "failed": failed,
+            "http_status": http_status,
+            "error": error_value,
         })
     return rows
 
 
 # ---------------------------------------------------------------- 自测
+
+def require_rows_problem(rows):
+    """--require-rows 的空表硬门（D366）：返回问题文案，非空表返回 None。"""
+    if not rows:
+        return "llm_calls 0 行（--require-rows 要求至少 1 行）"
+    return None
+
 
 def _canaries():
     """六条人造账目：一条好账 + 五类坏账（含三条实现/数据变异）。"""
@@ -498,7 +538,30 @@ def self_test():
             "ok": ok,
             "problems": [p for _, _, ps in details for p in ps],
         })
-    print(json.dumps({"self_test": bad == 0, "cases": cases},
+
+    # D366 自测：失败行豁免 + cost/usage 硬断言 + --require-rows 空表硬门。
+    failed_ok = {
+        "id": "failed-ok", "source": "self-test", "failed": True,
+        "http_status": None, "error": "NETWORK",
+        "cost": 0, "usage": None, "is_peak": False,
+        "formula_version": "", "card": None, "at": None, "model": "deepseek-flash",
+        "hit": None, "miss": None, "out": None,
+    }
+    failed_cost = dict(failed_ok, cost=1)
+    failed_usage = dict(failed_ok, usage={"prompt_tokens": 1})
+    d366_checks = [
+        ("failed row (cost=0/usage=NULL) 通过", not row_problems(failed_ok)[0]),
+        ("failed row cost=1 报错", bool(row_problems(failed_cost)[0])),
+        ("failed row usage 非 NULL 报错", bool(row_problems(failed_usage)[0])),
+        ("--require-rows 空表报错", require_rows_problem([]) is not None),
+        ("--require-rows 非空表不报错", require_rows_problem([failed_ok]) is None),
+    ]
+    for name, ok in d366_checks:
+        bad += 0 if ok else 1
+        print("[SELF-TEST] %s → %s" % (name, "OK" if ok else "FAILED"))
+
+    print(json.dumps({"self_test": bad == 0, "cases": cases,
+                      "d366": [{"case": name, "ok": ok} for name, ok in d366_checks]},
                      ensure_ascii=False, indent=2))
     print("rows=%d mismatches=%d" % (rows_seen, bad))
     return 0 if bad == 0 else 1
@@ -518,8 +581,13 @@ def main(argv):
     ap.add_argument("--db-copy", metavar="DB", help="校验库副本（sqlite3 只读）")
     ap.add_argument("--self-test", dest="self_test", action="store_true",
                     help="内置变异自测")
+    ap.add_argument("--require-rows", dest="require_rows", action="store_true",
+                    help="--db-copy 专用：llm_calls 至少 1 行，空表不许假绿（D366）")
     ap.add_argument("--json", action="store_true", help="额外输出机器可读摘要")
     a = ap.parse_args(argv)
+
+    if a.require_rows and not a.db_copy:
+        ap.error("--require-rows 只能与 --db-copy 一起用")
 
     if a.self_test:
         if a.vectors or a.db_copy:
@@ -533,17 +601,28 @@ def main(argv):
         rows = load_vectors(a.vectors) if a.vectors else load_db_copy(a.db_copy)
     except InputError as e:
         print("输入错误：%s" % e, file=sys.stderr)
-        print("rows=0 mismatches=0")
+        print("rows=0 mismatches=0 failed=0")
         return 2
+
+    if a.require_rows:
+        problem = require_rows_problem(rows)
+        if problem:
+            # D366：空表曾经会打印 rows=0 mismatches=0 并 exit 0，等于假绿；
+            # 真库硬门要求 llm_calls 至少一行（失败行也算）。
+            print("[MISMATCH] %s" % problem)
+            print("rows=0 mismatches=1 failed=0")
+            return 1
 
     details, mismatches, unknown = check_rows(rows)
     exit_code = 2 if unknown else (1 if mismatches else 0)
+    failed_count = sum(1 for row in rows if row.get("failed"))
 
     if a.json:
         print(json.dumps({
             "source": a.vectors or a.db_copy,
             "rows": len(rows),
             "mismatches": mismatches,
+            "failed": failed_count,
             "unknown_formula_rows": unknown,
             "exit": exit_code,
             "details": [{"id": i, "source": s, "problems": ps}
@@ -552,7 +631,7 @@ def main(argv):
     else:
         summarize(rows, details, mismatches, unknown)
         return exit_code
-    print("rows=%d mismatches=%d" % (len(rows), mismatches))
+    print("rows=%d mismatches=%d failed=%d" % (len(rows), mismatches, failed_count))
     return exit_code
 
 

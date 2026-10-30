@@ -1,9 +1,11 @@
 package com.dreamkeeper.ui.detail
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -78,6 +81,8 @@ import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.Tag
+import com.dreamkeeper.export.ExportFormat
+import com.dreamkeeper.export.ExportResult
 import com.dreamkeeper.llm.GenerationKind
 import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.ui.day.DayViewModel
@@ -168,7 +173,15 @@ fun DetailScreen(
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val generationPhase by vm.generationPhase.collectAsStateWithLifecycle()
+    val exportState by vm.export.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var exportOpen by rememberSaveable { mutableStateOf(false) }
+    val exportContext = LocalContext.current
+    // §0.4 导出闸门：有最终稿，或至少有可回退的原文；两者都没有时按钮禁用并给文案。
+    val exportableBody = state.finalNovel != null ||
+        !(state.dream?.faithfulText ?: state.dream?.rawTranscript).isNullOrBlank()
+    // D379：MediaStore.Downloads 需要 API 29+，低版本不导出（按钮禁用 + 文案）。
+    val exportSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -179,6 +192,7 @@ fun DetailScreen(
                 date = state.dream?.date?.let { DayViewModel.titleOf(it) }.orEmpty(),
                 onBack = onBack,
                 onAction = { message -> scope.launch { snackbarHost.showSnackbar(message) } },
+                onExport = { exportOpen = true },
             )
 
             when {
@@ -220,6 +234,7 @@ fun DetailScreen(
                                 onRetryGeneration = vm::retryGeneration,
                                 onSend = vm::revise,
                                 onSelectVersion = vm::selectVersion,
+                                onExport = { exportOpen = true },
                             )
 
                             2 -> TagsTab(tags = state.tags)
@@ -258,6 +273,21 @@ fun DetailScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
+        if (exportOpen) {
+            ExportSheet(
+                exporting = exportState.exporting,
+                saved = exportState.saved,
+                error = exportState.error,
+                canExport = exportableBody,
+                apiSupported = exportSupported,
+                onExport = { format -> vm.export(format, exportContext.contentResolver) },
+                onShare = { result -> shareExported(exportContext, result) },
+                onDismiss = {
+                    exportOpen = false
+                    vm.resetExport()
+                },
+            )
+        }
         }
     }
 }
@@ -267,6 +297,7 @@ private fun DetailTopBar(
     date: String,
     onBack: () -> Unit,
     onAction: (String) -> Unit,
+    onExport: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -301,6 +332,14 @@ private fun DetailTopBar(
                 Text("⋮", style = MaterialTheme.typography.titleLarge, color = Paper)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                // Task 10 导出入口 1：顶栏「更多」里；入口 2 在小说化 tab 顶部。
+                DropdownMenuItem(
+                    text = { Text("导出", style = MaterialTheme.typography.bodyMedium, color = Paper) },
+                    onClick = {
+                        menuOpen = false
+                        onExport()
+                    },
+                )
                 // Plan 1 只给入口不给实现：点了必须给一句人话，不能什么也不发生
                 DropdownMenuItem(
                     text = { Text("编辑", style = MaterialTheme.typography.bodyMedium, color = Paper) },
@@ -548,6 +587,7 @@ private fun NovelTab(
     onRetryGeneration: () -> Unit,
     onSend: (String) -> Unit,
     onSelectVersion: (Int) -> Unit,
+    onExport: () -> Unit,
 ) {
     var opinion by rememberSaveable { mutableStateOf("") }
     // ASK 的助手气泡：只有 versionId==null 的 assistant 消息才是「没建版、只回话」的那条。
@@ -568,14 +608,29 @@ private fun NovelTab(
                 onRetry = onRetryGeneration,
             )
         }
-        // brief 0.7：N 从 tab 标题挪到内容顶部这一行；「补写 N 处」的字样仍与 D41 一致
-        if (count > 0) {
-            Text(
-                text = "补写 $count 处 · 查看",
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = Ember,
-            )
+        // brief 0.7：N 从 tab 标题挪到内容顶部这一行；「补写 N 处」的字样仍与 D41 一致。
+        // Task 10：同一行右侧给第二个导出入口（顶栏「更多」里还有一个）。
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (count > 0) {
+                Text(
+                    text = "补写 $count 处 · 查看",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Ember,
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = onExport) {
+                Text(
+                    text = "导出",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Paper,
+                )
+            }
         }
         VersionStrip(
             versions = versions,
@@ -923,4 +978,20 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Uni
         }
         Text(label, style = MaterialTheme.typography.labelSmall, color = labelColor)
     }
+}
+
+/** Task 10：导出成功后把 MediaStore Uri 分享出去；必须带读权限，否则接收方打不开。 */
+private fun shareExported(context: Context, result: ExportResult) {
+    val mime = when (result.displayName.substringAfterLast('.', "").lowercase()) {
+        "txt" -> "text/plain"
+        "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "pdf" -> "application/pdf"
+        else -> "*/*"
+    }
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = mime
+        putExtra(Intent.EXTRA_STREAM, result.uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(send, "分享导出文件"))
 }

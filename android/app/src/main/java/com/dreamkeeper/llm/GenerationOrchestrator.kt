@@ -223,6 +223,7 @@ class GenerationOrchestrator(
                 temperature = temperature,
                 jsonMode = false,
                 apiKey = apiKey(),
+                kind = "FAITHFUL",
             ),
         )
         return FaithfulCall(rendered, response, gate(input, response.content, GateMode.FAITHFUL))
@@ -290,6 +291,7 @@ class GenerationOrchestrator(
                     temperature = 0.1,
                     jsonMode = true,
                     apiKey = apiKey(),
+                    kind = "NOVEL",
                 ),
             )
         } catch (e: LlmException) {

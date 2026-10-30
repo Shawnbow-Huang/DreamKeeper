@@ -92,6 +92,7 @@ class DeepSeekClient(
                 currentCoroutineContext().ensureActive()
                 val kind = transportKind(io)
                 attempts += Attempt(attemptNo, null, elapsedMs(startedAtMs), kind, null, startedAtMs)
+                logAttempt(req, attemptNo, ok = false, httpStatus = null)
                 if (!kind.isRetryable || attempts.size >= retry.maxAttempts) {
                     throw LlmException(kind, null, null, attempts.toList(), io)
                 }
@@ -104,15 +105,38 @@ class DeepSeekClient(
             attempts += Attempt(attemptNo, raw.status, latencyMs, statusKind, raw.requestId, startedAtMs)
 
             if (raw.status in 200..299) {
-                return parseSuccess(req, raw, attempts.toList(), elapsedMs(firstStartedAtMs))
+                // D392：空 content / 非 JSON 是在 parseSuccess 里抛的，也必须算 failed。
+                val response = try {
+                    parseSuccess(req, raw, attempts.toList(), elapsedMs(firstStartedAtMs))
+                } catch (e: LlmException) {
+                    logAttempt(req, attemptNo, ok = false, httpStatus = raw.status)
+                    throw e
+                }
+                logAttempt(req, attemptNo, ok = true, httpStatus = raw.status)
+                return response
             }
 
+            logAttempt(req, attemptNo, ok = false, httpStatus = raw.status)
             val kind = statusKind ?: LlmException.Kind.SERVER
             if (!kind.isRetryable || attempts.size >= retry.maxAttempts) {
                 throw LlmException(kind, raw.status, raw.requestId, attempts.toList())
             }
             sleeper(nextDelayMs(attempts.size - 1, raw.retryAfterMs))
         }
+    }
+
+    /**
+     * D370 / D392：每次尝试在**最终判定处**打一行，`n` 与 `llm_calls.attemptNo` 对齐。
+     *
+     * 失败口径与服务端无关：传输错误（http=none）、HTTP 非 2xx、2xx 但空 content / 非 JSON
+     * 都记 failed；`http` 照抄实际状态码。CancellationException 不记（不是一次尝试的结论）。
+     */
+    private fun logAttempt(req: ChatRequest, attemptNo: Int, ok: Boolean, httpStatus: Int?) {
+        Log.d(
+            TAG,
+            "DKLLM attempt n=$attemptNo kind=${req.kind} " +
+                "status=${if (ok) "ok" else "failed"} http=${httpStatus ?: "none"}",
+        )
     }
 
     // ---------------------------------------------------------------- HTTP

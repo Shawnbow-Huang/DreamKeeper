@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.detail
 
+import android.content.ContentResolver
 import android.media.MediaPlayer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +13,9 @@ import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.MediaAsset
 import com.dreamkeeper.domain.Tag
+import com.dreamkeeper.export.AndroidExporter
+import com.dreamkeeper.export.ExportFormat
+import com.dreamkeeper.export.ExportResult
 import com.dreamkeeper.llm.GenerationFailure
 import com.dreamkeeper.llm.GenerationKind
 import com.dreamkeeper.llm.GenerationRunner
@@ -67,6 +71,18 @@ sealed interface GenerationPhase {
 }
 
 /**
+ * 导出面板状态（Task 10 §0.3）。
+ *
+ * ViewModel 不持有 Context：`ContentResolver` 由 Composable 在点击时传入；成功后把
+ * [ExportResult] 交给 UI 做 `ACTION_SEND` 分享，失败原因必须回显，不能静默吞。
+ */
+data class ExportUiState(
+    val exporting: ExportFormat? = null,
+    val saved: ExportResult? = null,
+    val error: String? = null,
+)
+
+/**
  * 详情页：把「这一条梦」和「它的标签」两条 Flow 合起来，并持有播放器。
  *
  * 标签必须走 `observeTagsForDream`（`tags INNER JOIN dream_tags`）：`Dream` 上没有
@@ -94,6 +110,10 @@ class DetailViewModel(
 ) : ViewModel() {
 
     private val dreamId: String = dreamId
+
+    /** 导出三态：面板打开期间订阅；关闭时 [resetExport] 清空。 */
+    private val _export = MutableStateFlow(ExportUiState())
+    val export: StateFlow<ExportUiState> = _export.asStateFlow()
 
     /** 版本线/消息/最终稿不是 `Dream` 上的列，单独一条流；任何写操作后重读。 */
     private data class Conversation(
@@ -296,6 +316,30 @@ class DetailViewModel(
                 }
             refreshConversation()
         }
+    }
+
+    /**
+     * 导出到 `Download/DreamKeeper/`（§0.3 / D339）。
+     *
+     * 正文/标签/版本号全部由 [AndroidExporter] 从仓库现取，和详情页显示同源（§0.4）；
+     * 失败保留可读文案（MediaStore 拒绝、磁盘、正文为空等），面板不会假装成功。
+     */
+    fun export(format: ExportFormat, resolver: ContentResolver) {
+        if (_export.value.exporting != null) return
+        _export.value = ExportUiState(exporting = format)
+        viewModelScope.launch {
+            _export.value = runCatching {
+                AndroidExporter(repo, resolver).export(dreamId, format)
+            }.fold(
+                onSuccess = { ExportUiState(saved = it) },
+                onFailure = { ExportUiState(error = it.message ?: "导出失败") },
+            )
+        }
+    }
+
+    /** 面板关闭时清空成功/失败提示，下次打开是干净的。 */
+    fun resetExport() {
+        _export.value = ExportUiState()
     }
 
     private suspend fun refreshConversation() {
