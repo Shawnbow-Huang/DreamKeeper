@@ -273,6 +273,114 @@ class WavStoreTest {
         assertEquals(64L, state.dataSize)
     }
 
+    // ---------------------------------------------------------------- 追问追加：ensurePlaceholder / markOpen
+
+    @Test
+    fun `ensurePlaceholder writes a 44 byte header only when the file is missing`() {
+        val store = WavStore(tmp.root)
+
+        val file = store.ensurePlaceholder("dream-1")
+
+        assertEquals(44L, file.length())
+        assertArrayEquals(PLACEHOLDER_HEADER, file.readBytes())
+    }
+
+    @Test
+    fun `ensurePlaceholder leaves an existing recording byte identical`() {
+        // 第二次 START 前的入口：已有录音一个字节都不许动（改走 create 会把前一段抹成 44 字节）
+        val store = WavStore(tmp.root)
+        val file = filledFile(store, "dream-1", dataBytes = 32_000)
+        val before = file.readBytes()
+
+        val ensured = store.ensurePlaceholder("dream-1")
+
+        assertEquals(file, ensured)
+        assertArrayEquals("已有录音必须逐字节原样保留", before, ensured.readBytes())
+        assertEquals(32_044L, ensured.length())
+    }
+
+    @Test
+    fun `ensurePlaceholder rebuilds a header shorter than 44 bytes`() {
+        val store = WavStore(tmp.root)
+        val file = File(tmp.root, "dream-1.wav")
+        file.writeBytes(ByteArray(10) { 0x5A })
+
+        val ensured = store.ensurePlaceholder("dream-1")
+
+        assertEquals(44L, ensured.length())
+        assertArrayEquals(PLACEHOLDER_HEADER, ensured.readBytes())
+    }
+
+    @Test
+    fun `markOpen flips the header back to placeholder without touching pcm`() {
+        val store = WavStore(tmp.root)
+        val file = filledFile(store, "dream-1", dataBytes = 32_000)
+        val pcmBefore = file.readBytes().copyOfRange(WavMath.HEADER_BYTES, file.length().toInt())
+
+        store.markOpen(file)
+
+        val state = store.state(file)
+        assertTrue("markOpen 后 placeholder 必须是 true（唯一的正在写标记）", state.placeholder)
+        assertEquals(32_044L, state.fileBytes)
+        assertArrayEquals(PLACEHOLDER_HEADER, readHeader(file))
+        assertArrayEquals(
+            "markOpen 只许改 offset 4..8 与 40..44，PCM 一个字节都不许动",
+            pcmBefore,
+            file.readBytes().copyOfRange(WavMath.HEADER_BYTES, file.length().toInt()),
+        )
+    }
+
+    @Test
+    fun `openWriter appends to an existing take and never touches the header marker`() {
+        // 第二次 START 的唯一合法路径：markOpen → openWriter 追加 → finish 按整文件回填
+        val store = WavStore(tmp.root)
+        val file = filledFile(store, "dream-1", dataBytes = 32_000) // 第一段 1 s
+        val firstPcm = file.readBytes().copyOfRange(WavMath.HEADER_BYTES, file.length().toInt())
+        store.markOpen(file)
+
+        val writer = store.openWriter(file)
+        assertEquals("追加应从已有 PCM 起算，而不是从 0", 32_000L, writer.bytesWritten)
+        writer.write(ByteArray(64_000), 64_000) // 补录 2 s
+        assertArrayEquals(
+            "追加过程中头必须仍是占位：openWriter / write 都不许回填",
+            PLACEHOLDER_HEADER,
+            readHeader(file),
+        )
+
+        val state = writer.finish()
+
+        assertEquals("最终 dataSize 按整文件算", 96_000L, state.dataSize)
+        assertEquals(96_044L, file.length())
+        assertFalse(state.placeholder)
+        assertArrayEquals(
+            "第一段 1 s PCM 必须原样还在，不许被截断",
+            firstPcm,
+            file.readBytes().copyOfRange(WavMath.HEADER_BYTES, WavMath.HEADER_BYTES + firstPcm.size),
+        )
+    }
+
+    @Test
+    fun `markOpen refuses a tail with a partial frame`() {
+        // §0-7：半帧会让此后整条时间线错位，拒绝追加比自动补零/裁剪安全
+        val store = WavStore(tmp.root)
+        val file = filledFile(store, "dream-1", dataBytes = 32_000)
+        RandomAccessFile(file, "rw").use { raf ->
+            raf.seek(raf.length())
+            raf.write(byteArrayOf(0x7F))
+        }
+
+        assertThrows(IllegalStateException::class.java) { store.markOpen(file) }
+    }
+
+    @Test
+    fun `markOpen rejects a file shorter than the header`() {
+        val store = WavStore(tmp.root)
+        val short = File(tmp.root, "short.wav")
+        short.writeBytes(ByteArray(43))
+
+        assertThrows(IllegalStateException::class.java) { store.markOpen(short) }
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** 只取前 44 字节（头），长度另行断言。 */

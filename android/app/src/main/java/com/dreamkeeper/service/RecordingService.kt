@@ -132,14 +132,25 @@ class RecordingService : Service() {
             return
         }
         // ③ 占位头先落盘：进程被杀也留得下一份可修复的文件。
+        // 追问补录写同一枚文件：已有录音只 markOpen，**绝不 create**（FileOutputStream(file,false)
+        // 会把前一段整段截成 44 字节）。createdThisTake 记住「这枚文件是我这次新建的」，
+        // 后面三条失败路径与 CANCEL 只许删自己新建的文件，不许删掉用户已有的录音。
+        val existing = audioStore.fileFor(dreamId)
+        val reusable = existing.exists() && existing.length() >= WavMath.HEADER_BYTES
         val file = try {
-            audioStore.create(dreamId)
+            if (reusable) {
+                audioStore.markOpen(existing) // 尾部有半帧时这里会抛：拒绝追加，不补零不裁剪
+                existing
+            } else {
+                audioStore.create(dreamId)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "创建 WAV 失败：dreamId=$dreamId", e)
+            Log.e(TAG, "准备 WAV 失败：dreamId=$dreamId（reusable=$reusable）", e)
             session.fail(ERROR_STORAGE)
             stopSelf()
             return
         }
+        val createdThisTake = !reusable
         session.begin(dreamId, file.path)
 
         // ④ 渠道必须先于 startForeground 建好。
@@ -155,8 +166,8 @@ class RecordingService : Service() {
             )
         } catch (e: Exception) {
             Log.e(TAG, "startForeground 失败", e)
-            // 还没开始录音就失败了：删掉刚建的占位头文件，别在 files/audio/ 里留孤儿（D127）。
-            runCatching { file.delete() }
+            // 还没开始录音就失败了：只在**本次新建**了文件时删掉，别把前一段追问补录的录音删了（D127）。
+            if (createdThisTake) runCatching { file.delete() }
             session.fail(ERROR_FOREGROUND)
             stopForegroundAndSelf()
             return
@@ -167,17 +178,17 @@ class RecordingService : Service() {
         val writer = record?.let { openWriter(file) }
         if (record == null || writer == null) {
             record?.release()
-            runCatching { file.delete() }
+            if (createdThisTake) runCatching { file.delete() }
             session.fail(ERROR_AUDIO_OPEN)
             stopForegroundAndSelf()
             return
         }
-        val recording = ActiveRecording(dreamId, file, record, writer)
+        val recording = ActiveRecording(dreamId, file, record, writer, createdThisTake)
         if (!recording.startCapture()) {
             recording.release()
-            // 句柄必须关（close 兜底 finish），文件删掉——这一趟什么都没录到（D127）。
+            // 句柄必须关（close 兜底 finish）；同样只删本次新建的文件。
             runCatching { writer.close() }
-            runCatching { file.delete() }
+            if (createdThisTake) runCatching { file.delete() }
             session.fail(ERROR_AUDIO_OPEN)
             stopForegroundAndSelf()
             return
@@ -255,7 +266,9 @@ class RecordingService : Service() {
         active = null
         try {
             if (recording.cancelRequested) {
-                runCatching { recording.file.delete() }
+                // 取消只丢弃**本次**录进来的那一段；追问补录是在用户已有录音上追加的，
+                // 整删会把前一段也弄丢，所以保留文件（PCM 已落盘，finish 已回填头）。
+                if (recording.createdThisTake) runCatching { recording.file.delete() }
                 session.cancel()
             } else if (stop.reason == REASON_DEAD || stop.reason == REASON_ERROR) {
                 session.fail(
@@ -291,6 +304,8 @@ class RecordingService : Service() {
         val file: File,
         private val record: AudioRecord,
         private val writer: WavWriter,
+        /** true = 这枚文件是本次 START 新建的；CANCEL / 失败收尾只许删自己新建的文件。 */
+        val createdThisTake: Boolean,
     ) {
         private val sink = WavSink(writer)
         private val source = AudioRecordSource(record)

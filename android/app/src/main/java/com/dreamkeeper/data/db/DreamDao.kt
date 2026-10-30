@@ -58,6 +58,20 @@ interface DreamDao {
     suspend fun getById(id: String): DreamEntity?
 
     /**
+     * Task 5 追问窗口收尾：**只**窄更新音频时长与转写状态。
+     *
+     * 走整行 `upsert` 会把 `rawTranscript` 等文本列一起覆盖（追问页没有完整文本，
+     * 用它保存等于把 Task 7 要转写的内容抹掉）。`updatedAt` 也刻意不动：
+     * 补录不是一次「用户编辑」。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawAudioMs = :rawAudioMs, transcriptStatus = :transcriptStatus
+        WHERE id = :id
+    """)
+    suspend fun updateAudio(id: String, rawAudioMs: Long, transcriptStatus: String)
+
+    /**
      * 4 列 LIKE 搜索。
      *
      * **term 必须是已转义的**：`\` → `\\`、`%` → `\%`、`_` → `\_`。否则用户搜 `100%`

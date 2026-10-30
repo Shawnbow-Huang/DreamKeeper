@@ -159,6 +159,17 @@ class DreamRepository(
     }
 
     /**
+     * 追问窗口收尾的窄更新：只写音频时长与转写状态。
+     *
+     * 与 [save] 的分工：补录后时长变了，但文本还没转写（Task 7 才写），
+     * 走整行 [save] 会拿一个 `rawTranscript` 不完整的 [Dream] 覆盖掉老文本。
+     * 这里不碰 `createdAt` / `deletedAt` / `updatedAt` / 编辑标记。
+     */
+    suspend fun updateAudio(id: String, rawAudioMs: Long, transcriptStatus: String) {
+        dreams.updateAudio(id, rawAudioMs, transcriptStatus)
+    }
+
+    /**
      * 用户输入 → LIKE 查询：按空白切词，逐词查 4 列（title / rawTranscript / faithfulText /
      * novelText），按 id 求**交集**（每个词都要命中，任一列命中即可）。
      *

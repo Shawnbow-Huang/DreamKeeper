@@ -67,6 +67,54 @@ class WavStore(private val rootDir: File) {
         return file
     }
 
+    /**
+     * 追加前的入口：**只在**文件不存在或头不完整（< 44 字节）时写占位头。
+     *
+     * 已有录音一个字节都不动 —— 这正是追问补录不能再走 [create] 的原因：
+     * `create` 用 `FileOutputStream(file, false)` 截断，会把前一段整段抹成 44 字节。
+     */
+    fun ensurePlaceholder(dreamId: String): File {
+        val file = fileFor(dreamId)
+        file.parentFile?.mkdirs()
+        if (!file.exists() || file.length() < WavMath.HEADER_BYTES) {
+            FileOutputStream(file, false).use { it.write(placeholderHeader()) }
+        }
+        return file
+    }
+
+    /**
+     * 把两个尺寸字段写回 0xFFFFFFFF，让 `state().placeholder == true` 成为「正在写」的唯一标记。
+     *
+     * 只动 offset 4..8 与 40..44；PCM 一个字节都不碰。尾部有半帧时拒绝（§0-7）：
+     * 半帧会让此后整条时间线错位，宁可不追加，也不自动补零或裁剪。
+     */
+    fun markOpen(file: File) {
+        if (!file.exists()) throw NoSuchFileException(file.path)
+        val fileBytes = file.length()
+        if (fileBytes < WavMath.HEADER_BYTES) {
+            throw IllegalStateException("WAV 头不完整：只有 $fileBytes 字节，至少需要 ${WavMath.HEADER_BYTES} 字节（${file.path}）")
+        }
+        val partial = WavMath.trailingPartialBytes(fileBytes)
+        if (partial != 0) {
+            throw IllegalStateException("数据段尾部有 $partial 字节半帧，拒绝追加（${file.path}）")
+        }
+        val header = readHeader(file)
+        if (WavMath.readU32(header, 4) == WavMath.PLACEHOLDER_SIZE &&
+            WavMath.readU32(header, 40) == WavMath.PLACEHOLDER_SIZE
+        ) {
+            return // 已经是「正在写」，幂等
+        }
+        RandomAccessFile(file, "rw").use { raf ->
+            val field = ByteArray(4)
+            WavMath.writeU32(field, 0, WavMath.PLACEHOLDER_SIZE)
+            raf.seek(4)
+            raf.write(field)
+            raf.seek(40)
+            raf.write(field)
+            raf.fd.sync()
+        }
+    }
+
     /** 唯一写句柄；文件缺失或头不完整时先补占位头。写完必须 [WavWriter.finish]。 */
     fun openWriter(file: File): WavWriter {
         file.parentFile?.mkdirs()

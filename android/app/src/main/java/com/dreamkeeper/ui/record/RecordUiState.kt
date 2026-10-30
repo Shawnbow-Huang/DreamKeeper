@@ -28,11 +28,5 @@ data class RecordUiState(
     val permissionState: PermissionState = PermissionState.ASKABLE,
 )
 
-/**
- * Task 5 的追问状态。Task 4 不读取、不修改它——先原样留着，避免两个任务的字段定义打架。
- */
-data class FollowUpUiState(
-    val remainingMs: Int = 30_000,
-    val recording: Boolean = false,
-    val visible: Boolean = false,
-)
+// Task 5 的追问状态 `FollowUpUiState` 已迁到 `ui/followup/FollowUpViewModel.kt`：
+// 倒计时只能有一个源（FollowUpViewModel 的 ticker），不允许在录音页再留一份默认值 30_000 的副本。
