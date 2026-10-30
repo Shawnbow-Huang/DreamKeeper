@@ -287,6 +287,7 @@ object RecordingCommands {
 - [ ] 3.4b `AudioRecord` 参数**钉死**：`MediaRecorder.AudioSource.VOICE_RECOGNITION`、`16_000`、`AudioFormat.CHANNEL_IN_MONO`、`AudioFormat.ENCODING_PCM_16BIT`；buffer 取 `max(AudioRecord.getMinBufferSize(...), 3200)`；读循环放**专用线程**并先 `Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)`；写文件**不套 `BufferedOutputStream`**（多一次拷贝、崩溃时丢缓冲）；每约 1 秒 `fd.sync()` 一次。
 - [ ] 3.4c `RecordingService` 把 `RecorderCore.run` 的 `onChunk(bytes, amplitudeDb)` 转成状态：`session.update(elapsedMs = bytes / 32, amplitude = (amplitudeDb + 60) / 60f)`（`silenceFloorDb = -60`，见 Task 2 的振幅契约；**不许**另起定时器或随机数算振幅，也不许在这里再算一次 RMS）。
 - [ ] 3.4d 录音中途被吊销权限：`AudioRecord` 读循环捕获 `SecurityException` / `read()` 返负 → `snapshot.fail("录音权限被收回")` + 收尾（`finish()` 回填 + `stopSelf()`），不许把异常吞掉留在录音态。
+- [ ] 3.4e `PcmSource` 实现必须防忙循环：`read()` 返回 0 时 `RecorderCore` 会立刻再读，所以真源实现要**连续 50 次（约 5 秒）仍读不到数据就把 `state()` 报成 `DEAD`**；否则 AudioRecord 半死时 CPU 会空转、文件停滞而界面上还在「录音中」。
 - [ ] 3.5 实现通知：常驻、`IMPORTANCE_LOW`、锁屏 `VISIBILITY_PRIVATE`、`setOngoing(true)`；`ContentIntent` → `MainActivity` + `entry=NOTIFICATION` + `FLAG_IMMUTABLE`；`ACTION_STOP` 走 `PendingIntent.getService(...)` 指向本 Service 的 STOP；渠道在 `RecordingNotifications.ensureChannel()` 里建。
 - [ ] 3.6 `AppContainer` 加 `audioStore`（`WavStore(filesDir/audio)`）与 `recordingSession`。
 - [ ] 3.6b 新建 `android/app/src/main/java/com/dreamkeeper/audio/WavSink.kt`：`class WavSink(private val writer: WavWriter) : PcmSink`，`write(buffer, length)` → `writer.write(buffer, length)`；`sync()` → `writer.flushToDisk()`（**注意**：Task 1 的 `WavWriter` 接口只有 `bytesWritten` / `write` / `finish`，**没有** `sync`——若确认缺失，就给 `WavWriter` 加一个 `fun syncToDisk()` 并在 `PcmWavWriter` 里实现为 `fd.sync()`，同时补一条 `WavStoreTest`）；`bytesWritten()` → `writer.bytesWritten`；`finish()` → `writer.finish()`。**禁止**把 `WavWriter` 直接当 `PcmSink` 用（`bytesWritten` 是属性不是方法、也没有 `sync()`），报告里要写明这一段是怎么接的。
@@ -621,6 +622,9 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D112 | 42dp/160dp 等尺寸口径 | 仓内唯一有据的下限是 **48dp**（`CalendarScreen.kt:238-240`、`LibraryScreen.kt:127`）；主钮 `160.dp` 保留，但补「最小按住 200ms 才算一次录音」防蹭碰；文档里出现的 42dp 属笔误，不改 | UI Designer：`42dp` 在全仓 docs 里 0 命中，无出处 | 实测结论 |
 | D113 | 权限被拒后仍可能「先建草稿再让服务 fail」 | 钉死：`hasPermission()` 为 false 时 `onPressStart` 什么都不做（不生成 id、不建文件、不起服务），只把 `permissionBlocked` 置 true | UI Designer：原 4.1/4.4 顺序会让空草稿堆积、并在启动服务时才炸 | 实测结论 |
 | D114 | Task 2 的 `PcmSink` 与 Task 1 的 `WavWriter` 对不上（前者 `bytesWritten()`/`sync()`，后者 `bytesWritten` 属性/无 `sync`） | Task 3 增加 `audio/WavSink.kt` 适配层；若 `WavWriter` 确实缺落盘方法，就给它加 `syncToDisk()` 并补 `WavStoreTest` 一条 | Lead 复核 Task 2 代码时发现：两个接口在不同任务里各自成型，中间没有适配器，Task 3 照 3.4c 直接 `RecorderCore(source, writer)` 会编译不过 | 实测结论 |
+| D115 | `RecorderCore.finishWith` 把 `sink.sync()` 与 `sink.finish()` 放在同一个 `try` 里 | 拆成两个 `try`：sync 失败也要尝试 finish 回填头；补 2 条用例（`sync failure still finishes the header` / `finish failure ends with error and keeps real bytes`） | Lead 复核 Task 2 代码时发现：磁盘满/IO 错导致 sync 抛异常时，头会永远停在 `0xFFFFFFFF`，只能靠启动扫描补救；已做变异验证（改回合一 → 那条用例红，20 tests 1 failed） | 实测结论 |
+| D116 | 简报的 `RecorderCore` 没有停止入口，`user` 与 `stopped` 无法区分 | 实现者新增 `RecorderCore.stop()`（置 `userStopped` 并转达 `source.stop()`）；**一个 `RecorderCore` 只 run 一次**（停止标记不重置），Task 3 每次录音新建实例 | 实施者报告 + Lead 复核：`run()` 里没有复位 `userStopped` 的地方，复用实例会立刻按 `user` 收尾 | 实测结论 |
+| D117 | `read()` 返回 0 时 `RecorderCore` 走 `continue`，无 sleep | Task 3 的 `PcmSource` 真实现必须「连续 50 次（≈5 秒）读不到就报 `DEAD`」；JVM 测试里的假源不受影响 | 实施者主动披露（concern 5）：真设备半死时读循环会空转，界面仍显示录音中 | 以为的坑 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
