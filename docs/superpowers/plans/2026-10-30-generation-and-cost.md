@@ -144,16 +144,38 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 1 接线：权限、依赖、设置页骨架
 
-- Files：`android/app/src/main/AndroidManifest.xml`（+`INTERNET`、+debug 的 `networkSecurityConfig`）、
-  `android/app/src/debug/res/xml/network_security_config.xml`（新增，只放行 `127.0.0.1`/`10.0.2.2` 明文）、
-  `android/gradle/libs.versions.toml`（+okhttp）、`android/app/build.gradle.kts`（+implementation）、
-  `ui/nav/DreamRoute.kt`（+`Settings`）、`ui/settings/SettingsScreen.kt`+`SettingsViewModel.kt`（新增，占位可保存 Key 前先只显示「未配置」）、
-  `di/AppContainer.kt`（+`apiKeyStore`/`llmClient`/`generationScope` 三个 lazy）、`ui/DreamKeeperRoot.kt`（+Settings 路由）、
-  `ui/calendar/CalendarScreen.kt`（顶栏加设置入口，48dp）。
-- Steps：先写「点击设置入口 → 进入 Settings 页」的导航断言（Robolectric 或纯路由单测），红 →
-  接线 → 绿 → `assembleDebug` + 真机截图 `p3-settings-01-idle.png`。
-- Expected：设置页可达且全深色；`dumpsys package com.dreamkeeper | Select-String INTERNET` 有结果；
-  release 构建**不含**明文放行。
+> **派工前修订（Lead 按 Mobile App Builder + Evidence Collector 预审裁定，覆盖下文任何冲突）**
+> 1. **本任务只加 `generationScope`**；`apiKeyStore` 放到 Task 2、`llmClient` 放到 Task 5——原写法会引用尚不存在的类型，Task 1 当场编译不过（D223）。
+> 2. **明文放行只能放 debug 源集**：main 只加 `INTERNET`；`android:networkSecurityConfig` 与 `res/xml/network_security_config.xml` 都放 `src/debug/`，并新增 `src/debug/AndroidManifest.xml`。放 main 会让 `assembleRelease` 因资源缺失失败；「修」成 main 有资源则等于 release 也放行（D224）。
+> 3. **不许用 `Icons.*`**：仓库没有 material-icons 依赖（`CalendarScreen.kt:171` 已有同样教训），入口照 `CalendarScreen.kt:200-210` 的 `ArrowButton` 写文字盒 + `contentDescription = "设置"`（D225）。
+> 4. **不加 Compose 测试依赖**：仓库没有 `ui-test-junit4`，导航只做 `DreamRoute.Settings.route` 的纯单测（D226）。
+> 5. **OkHttp 钉 `4.12.1`**（纯 JVM jar）；5.5.1 的 `.module` 是 KMP root，AGP 9.5 内建 Kotlin、未挂 `kotlin-android` 时有变体解析风险（D227）。
+> 6. `Settings` **不许**加进底部栏：`DreamKeeperRoot.kt:92` 的 `showBottomBar` 按路由等值判定，加进去会变第三个 tab。
+> 7. 本任务**只证「config 挂上了」**，不证「明文真的能通」——后者要等第一个 `127.0.0.1:18080` 请求（D229）。
+
+- Files：
+  - `android/app/src/main/AndroidManifest.xml`（**只加** `<uses-permission android:name="android.permission.INTERNET"/>`）
+  - `android/app/src/debug/AndroidManifest.xml`（**新建**：`<application android:networkSecurityConfig="@xml/network_security_config"/>`）
+  - `android/app/src/debug/res/xml/network_security_config.xml`（**新建**：`cleartextTrafficPermitted="false"` 的 base-config + **恰好两个** `<domain>`：`127.0.0.1`、`10.0.2.2`）
+  - `android/gradle/libs.versions.toml`（`okhttp = "4.12.1"` + library 条目）
+  - `android/app/build.gradle.kts`（`implementation(libs.okhttp)`）
+  - `android/app/src/main/java/com/dreamkeeper/ui/nav/DreamRoute.kt`（+`Settings`）
+  - `android/app/src/main/java/com/dreamkeeper/ui/settings/SettingsScreen.kt`、`SettingsViewModel.kt`（新建；**不碰 ApiKeyStore**，Key 区显示「还没配置」）
+  - `android/app/src/main/java/com/dreamkeeper/di/AppContainer.kt`（**只加** `generationScope`，形制照 `:38` 的 `transcriptionScope`，并在注释里写清与 `DreamKeeperApp.appScope` 谁负责取消谁）
+  - `android/app/src/main/java/com/dreamkeeper/ui/DreamKeeperRoot.kt`（+Settings 路由、把 `onSettings` 传给 `CalendarScreen`）
+  - `android/app/src/main/java/com/dreamkeeper/ui/calendar/CalendarScreen.kt`（`MonthHeader` 加 `onSettings`，右侧第 4 个 48dp 文字盒）
+  - `android/app/src/test/java/com/dreamkeeper/ui/nav/DreamRouteTest.kt`（新建）
+- Steps：
+  1. 先写 `DreamRouteTest`：断言 `DreamRoute.Settings.route` 唯一且非空 → 跑红（`Unresolved reference 'Settings'`）。
+  2. 接线至绿；`assembleDebug` 成功。
+  3. **包内证据**：`aapt2 dump permissions app-debug.apk` 命中 `android.permission.INTERNET`；`aapt2 dump xmltree --file AndroidManifest.xml app-debug.apk` 里 `networkSecurityConfig` **恰 1 行**；同一份 APK 的 `cleartextTrafficPermitted` 只有 domain 级、`base-config` **0** 行。
+  4. **release 负向**：`assembleRelease` 必须 `BUILD SUCCESSFUL` 并留下 `app-release-unsigned.apk` 的 sha256；对其跑同一 `xmltree` 断言 `networkSecurityConfig` **0 行**。
+  5. 真机（**emulator-5554**，1080x2400@420dpi）：点设置入口 → 出现设置页独有文案 → 截图
+     `docs/evidence/plan3/p3-settings-01-idle.png` + `check-near-white.ps1 -TopOffset 100 -MaxRatio 0`；
+     `uiautomator dump` 取入口 bounds，宽高均 **≥126px**（48dp）。
+- Expected：路由单测绿；debug APK 有 INTERNET 与唯一一处 `networkSecurityConfig`；release APK 构建成功且**没有**该属性；
+  设置页可达、全深色、入口触控 48dp；`adb logcat` 无 FATAL。
+  **不许**写「明文已验证可用」——本任务没发过任何请求。
 
 ### Task 2 Key 加密存储
 
@@ -254,6 +276,16 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D220 | 提示词资产用 Gradle `Sync` 拷到 `build/gen/prompts` 再 `assets.srcDir`（直接 srcDir 会平铺且带入多余目录） |
 | D221 | 对话改稿的 G1/G5 对 `rawTranscript`、G2/G3 对当前版本（否则「细节太多」类合法删除永远过不了 G3） |
 | D222 | T1 档撞网络错误不视为掉档（设计未写，按「先重试同档、再判失败」实现） |
+| D223 | T1-1：Task 1 只加 `generationScope`，`apiKeyStore`/`llmClient` 分别在 Task 2/5 建（原 brief 会在 Task 1 引用不存在的类型，编译必红） |
+| D224 | T1-2：`networkSecurityConfig` 与放行 xml 一律放 `src/debug/`，并新增 `src/debug/AndroidManifest.xml`；放 main 会导致 `assembleRelease` 资源缺失失败，或把 release 一起放开（专家实测判断，构建验证见 T1 Expected） |
+| D225 | T1-3：不用 `Icons.*`（仓库无 material-icons），入口用文字盒 + `contentDescription`，照 `CalendarScreen.kt:200-210` |
+| D226 | T1-4：不加 `ui-test-junit4`，导航只做 `DreamRoute` 纯单测 |
+| D227 | T1-5：OkHttp 钉 `4.12.1`；5.5.1 是 KMP root，AGP 9.5 内建 Kotlin 下的变体解析风险未验证 |
+| D228 | T1-6：证据极性相反——Plan 1 的 `dumpsys … INTERNET` 是**期望为空**（负向），Task 1 是**期望命中**；且 `dumpsys` 只能说「装上了」，要证「这份 sha 的包」必须 `aapt2 dump permissions` + `lastUpdateTime ≥ APK mtime` |
+| D229 | T1-7：Task 1 只证 config 挂上，不证明文可用（第一发请求要等 Task 5 的假服务器） |
+| D230 | T1-8：release 负向必须先 `assembleRelease` 成功并留 APK sha256，否则是「真空通过」 |
+| D231 | T1-9：截图设备写「emulator-5554（1080x2400@420dpi）」；48dp = 126px；截图统一 `-TopOffset 100 -MaxRatio 0`（D82） |
+| D232 | T1-10：先落 `docs/evidence/plan3/README.md`（照 plan2 那份模板），再开始拍图 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
