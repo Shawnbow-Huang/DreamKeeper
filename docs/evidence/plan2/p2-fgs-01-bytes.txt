@@ -1,0 +1,26 @@
+# 判据③ 写入速率（Δbytes / Δuptime，单位 B/s；期望 16000 Hz × 2 B = 32000 B/s）
+apk_sha256: 39dab6ec3fc469c76f7299455c0ee6a8c6d6821ad2b831f153b08ed2e860f090
+device_date: Fri Oct 30 16:02:22 CST 2026
+file: files/audio/p2fgs01.wav
+replay: adb shell "run-as com.dreamkeeper stat -c %s files/audio/p2fgs01.wav; cat /proc/uptime"
+method: 每 2 s 采一次「文件字节数 + 设备开机秒数(/proc/uptime 第一列)」，共 4 次；
+        /proc/uptime 是单调时钟，不受 adb 往返与主机时钟影响；
+        run-as 只包住 stat，/proc/uptime 由 shell 用户读取（两者间隔约 5ms）。
+        rate_Bps 取首末两次的平均斜率；lsq_Bps 取 4 点的最小二乘斜率（消除 100ms 分块写入的相位抖动）。
+expect: 32000 B/s ± 2% → [31360, 32640]
+
+sample1: bytes=42636 uptime=1308.45
+sample2: bytes=109836 uptime=1310.63
+sample3: bytes=180236 uptime=1312.83
+sample4: bytes=250636 uptime=1315.03
+
+delta_bytes: 208000
+delta_seconds: 6.580
+rate_Bps: 31610.942
+lsq_Bps: 31650.594
+tolerance: 31360..32640
+verdict: PASS
+
+note: 分块写入（RecorderCore 每 100ms 一次 write、每 32000 真实字节一次 fd.sync）会让
+      文件长度以 3200 字节为步长跳变，因此单次首末采样会有 ±(3200/Δt) 的相位误差；
+      Δt≈6.8s 时为 ±470 B/s（±1.5%），已用最小二乘斜率交叉验证。

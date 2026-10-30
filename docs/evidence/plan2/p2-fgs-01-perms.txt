@@ -1,0 +1,15 @@
+# 权限面（dumpsys package）：四条 uses-permission 均需出现，且运行时/安装时均已授予
+apk_sha256: 39dab6ec3fc469c76f7299455c0ee6a8c6d6821ad2b831f153b08ed2e860f090
+device_date: Fri Oct 30 16:02:22 CST 2026
+replay: adb shell dumpsys package com.dreamkeeper | grep -E 'RECORD_AUDIO|POST_NOTIFICATIONS|FOREGROUND_SERVICE'
+expect: requested 里 4 条齐全；FOREGROUND_SERVICE / FOREGROUND_SERVICE_MICROPHONE granted=true；
+        RECORD_AUDIO / POST_NOTIFICATIONS 运行时 granted=true（本次用 pm grant 预授权）
+
+93:      android.permission.POST_NOTIFICATIONS
+94:      android.permission.FOREGROUND_SERVICE
+96:      android.permission.FOREGROUND_SERVICE_MICROPHONE
+97:      android.permission.RECORD_AUDIO
+99:      android.permission.FOREGROUND_SERVICE: granted=true
+101:      android.permission.FOREGROUND_SERVICE_MICROPHONE: granted=true
+115:        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+116:        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]

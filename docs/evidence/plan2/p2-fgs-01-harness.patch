@@ -1,0 +1,55 @@
+diff --git a/android/app/src/main/java/com/dreamkeeper/MainActivity.kt b/android/app/src/main/java/com/dreamkeeper/MainActivity.kt
+index 2d49f2e..925dedb 100644
+--- a/android/app/src/main/java/com/dreamkeeper/MainActivity.kt
++++ b/android/app/src/main/java/com/dreamkeeper/MainActivity.kt
+@@ -26,6 +26,50 @@ class MainActivity : ComponentActivity() {
+         } else {
+             ""
+         }
++        // === TEMP Task 3 证据钩子（未提交；产出 p2-fgs-* 后还原，见 docs/evidence/plan2/p2-fgs-01-harness.patch）===
++        // Task 4 之前录音页还没接上「按住说梦」，这里用 intent extra 模拟一次「可见页面按下」，
++        // 唯一目的是从 Activity 的 Context 走 startForegroundService（而不是 am start-foreground-service）。
++        if (BuildConfig.DEBUG) {
++            val record = intent?.getBooleanExtra("dk_debug_record", false) == true
++            val stop = intent?.getBooleanExtra("dk_debug_stop", false) == true
++            val cancel = intent?.getBooleanExtra("dk_debug_cancel", false) == true
++            if (record || stop || cancel) {
++                // post 到 decorView：等 onCreate/onStart/onResume 走完，Activity 真的可见了再起服务，
++                // 否则 API 31+ 的「后台起前台服务」限制会抛 ForegroundServiceStartNotAllowedException。
++                window.decorView.post {
++                    val service = android.content.Intent(
++                        this,
++                        com.dreamkeeper.service.RecordingService::class.java,
++                    )
++                    when {
++                        record -> {
++                            val dreamId = intent.getStringExtra("dk_debug_dream_id") ?: "fgs-debug"
++                            android.util.Log.i("DK_DEBUG", "fgs-start dreamId=$dreamId")
++                            startForegroundService(
++                                service.setAction(com.dreamkeeper.service.RecordingService.ACTION_START)
++                                    .putExtra(
++                                        com.dreamkeeper.service.RecordingService.EXTRA_DREAM_ID,
++                                        dreamId,
++                                    ),
++                            )
++                        }
++                        stop -> {
++                            android.util.Log.i("DK_DEBUG", "fgs-stop")
++                            startService(
++                                service.setAction(com.dreamkeeper.service.RecordingService.ACTION_STOP),
++                            )
++                        }
++                        else -> {
++                            android.util.Log.i("DK_DEBUG", "fgs-cancel")
++                            startService(
++                                service.setAction(com.dreamkeeper.service.RecordingService.ACTION_CANCEL),
++                            )
++                        }
++                    }
++                }
++            }
++        }
++        // === TEMP END ===
+         // Activity 只做一件事：把根界面接进主题
+         setContent {
+             DreamKeeperTheme {

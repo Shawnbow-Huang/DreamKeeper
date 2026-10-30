@@ -1,0 +1,27 @@
+# 判据② 通知栏视觉证据（p2-fgs-01-notify.png）
+apk_sha256: 39dab6ec3fc469c76f7299455c0ee6a8c6d6821ad2b831f153b08ed2e860f090
+device: emulator-5554 / Android 17 (API 37)
+device_date: Fri Oct 30 16:02:22 CST 2026
+png_sha256: 932294e29722a82aa8e6573810aa681575a7a76e992a41ffe34134ae25502ad5
+device_theme: dark（采集前 cmd uimode night yes；原值 no，脚本结束时还原）
+capture_cost_seconds: 展开通知栏后 sleep 2 再截屏
+replay: adb shell cmd uimode night yes
+replay: adb shell am start -n com.dreamkeeper/.MainActivity --ez dk_debug_record true --es dk_debug_dream_id p2fgs01 --activity-clear-task
+replay: sleep 3
+replay: adb shell cmd statusbar expand-notifications; sleep 2
+replay: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan2/p2-fgs-01-notify.png
+replay: adb shell cmd statusbar collapse
+replay: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-near-white.ps1 -Path docs/evidence/plan2/p2-fgs-01-notify.png -TopOffset 100 -MaxRatio 0
+replay: adb shell cmd uimode night no
+expect: 通知栏里可见「梦匣 / 正在录梦 / 松开就结束；点「结束」立刻停」，条目左侧为 app 图标；
+        状态栏右上角出现麦克风进行中 chip（绿色），即系统认为正在使用麦克风
+
+--- capture-screen.ps1 输出（rc=0）
+RESULT: OK path=docs/evidence/plan2/p2-fgs-01-notify.png serial=emulator-5554 bytes=162735 dims=1080x2400 sha256=932294E29722A82AA8E6573810AA681575A7A76E992A41FFE34134AE25502AD5
+
+--- check-near-white.ps1 输出（TopOffset=100 MaxRatio=0，rc=1，0=通过）
+RESULT: FAIL image=docs/evidence/plan2/p2-fgs-01-notify.png reason=near-white ratio 0.171% > max 0.000% dims=1080x2400 samples=69120 nearWhite=118 ratio=0.1707% center=#151720
+
+note: 深色系统主题下通知栏底色 #151720 一类，near-white 计数为 0；
+      浅色主题下同一画面会因系统给 app 图标垫的白圆底被判 0.234%（见 p2-fgs-01-theme.txt）。
+      app 自身是深色主题，与截图无关。

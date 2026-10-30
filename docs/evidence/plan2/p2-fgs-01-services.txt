@@ -1,0 +1,54 @@
+# 判据① 前台服务（dumpsys activity services）
+apk_sha256: 39dab6ec3fc469c76f7299455c0ee6a8c6d6821ad2b831f153b08ed2e860f090
+device: emulator-5554 / Android 17 (API 37)
+device_date: Fri Oct 30 16:02:22 CST 2026
+replay: adb shell am start -n com.dreamkeeper/.MainActivity --ez dk_debug_record true --es dk_debug_dream_id p2fgs01 --activity-clear-task
+replay: adb shell dumpsys activity services com.dreamkeeper
+expect: 同一段 ServiceRecord 内 startRequested=true + isForeground=true + foregroundId=42 + types=0x00000080
+note: API 37 的 dumpsys 字段名是 startRequested（旧版本叫 started）；types 打十六进制，
+      0x00000080 = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE（0x80），
+      manifest 里对应 android:foregroundServiceType="microphone"。
+
+ACTIVITY MANAGER SERVICES (dumpsys activity services)
+  User 0 active services:
+  * ServiceRecord{327d930 u0 com.dreamkeeper/.service.RecordingService c:com.dreamkeeper}
+    intent={act=com.dreamkeeper.action.START cmp=com.dreamkeeper/.service.RecordingService}
+    packageName=com.dreamkeeper
+    processName=com.dreamkeeper
+    targetSdkVersion=37
+    baseDir=/data/app/~~iEcB6kiZoOC_3F_IrX3Lcg==/com.dreamkeeper-u1HQQKZEU_5L9gF4UMaktQ==/base.apk
+    dataDir=/data/user/0/com.dreamkeeper
+    app=ProcessRecord{281b84a 5703:com.dreamkeeper/u0a237}
+    useNewWiuLogic_forCapabilities()=true
+    useNewWiuLogic_forStart()=true
+    useNewBfslLogic()=true
+    mAllowWiu_noBinding=PROC_STATE_TOP
+    mAllowWiu_inBindService=DENIED
+    mAllowWiu_byBindings=DENIED
+    getFgsAllowWiu_legacy=PROC_STATE_TOP
+    getFgsAllowWiu_new=PROC_STATE_TOP
+    getFgsAllowWiu_forStart=PROC_STATE_TOP
+    getFgsAllowWiu_forCapabilities=PROC_STATE_TOP
+    allowUiJobScheduling=true
+    recentCallingPackage=com.dreamkeeper
+    recentCallingUid=10237
+    mAllowStart_noBinding=PROC_STATE_TOP
+    mAllowStart_inBindService=DENIED
+    mAllowStart_byBindings=DENIED
+    getFgsAllowStart_legacy=PROC_STATE_TOP
+    getFgsAllowStart_new=PROC_STATE_TOP
+    getFgsAllowStart=PROC_STATE_TOP
+    startForegroundCount=1
+    infoAllowStartForeground=[callingPackage: com.dreamkeeper; callingUid: 10237; uidState: TOP ; uidBFSL: [BFSL]; BFGS denied: false; intent: Intent { act=com.dreamkeeper.action.START xflg=0x4 cmp=com.dreamkeeper/.service.RecordingService (has extras) }; code:PROC_STATE_TOP; tempAllowListReason:<null>; allowWiu:12; targetSdkVersion:37; callerTargetSdkVersion:37; startForegroundCount:0; bindFromPackage:null; isBindService:false]
+    isForeground=true foregroundId=42 types=0x00000080 foregroundNoti=Notification(channel=recording shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE color=0x00000000 category=service actions=1 vis=PRIVATE)
+    createTime=-880ms startingBgTimeout=--
+    lastActivity=-877ms restartTime=-877ms createdFromFg=true
+    startRequested=true delayedStop=false stopIfKilled=true callStart=true lastStartId=1
+ startCommandResult=2
+
+--- 机器核对（对上面同一份 dump 做正则计数，期望各 >=1）
+isForeground=true + foregroundId=42 + types=0x00000080 : 1
+startRequested=true                                    : 2
+foregroundNoti flags 含 FOREGROUND_SERVICE             : 1
+startCommandResult=2（START_NOT_STICKY）               : 1
+infoAllowStartForeground（系统记录起服务时的调用方状态）: 1

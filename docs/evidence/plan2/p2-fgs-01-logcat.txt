@@ -1,0 +1,22 @@
+# 判据④ logcat 三类关键字（emulator-5554，整个录制窗口：Fri Oct 30 16:02:22 CST 2026 → Fri Oct 30 16:02:37 CST 2026）
+apk_sha256: 39dab6ec3fc469c76f7299455c0ee6a8c6d6821ad2b831f153b08ed2e860f090
+replay: adb logcat -d > logcat.txt; grep -c FATAL logcat.txt; grep -c ForegroundServiceStartNotAllowed logcat.txt; grep -c DidNotStartInTime logcat.txt
+expect: 三条计数均为 0
+
+FATAL=0
+ForegroundServiceStartNotAllowed=0
+DidNotStartInTime=0
+
+--- 本 app 相关日志（DK_DEBUG 钩子 / ActivityManager Background started FGS / RecordingService）
+10-30 16:02:21.569  5703  5703 I DK_DEBUG: fgs-start dreamId=p2fgs01
+10-30 16:02:21.572   710   781 I ActivityManager: Background started FGS: Allowed [callingPackage: com.dreamkeeper; callingUid: 10237; uidState: TOP ; uidBFSL: [BFSL]; BFGS denied: false; intent: Intent { act=com.dreamkeeper.action.START xflg=0x4 cmp=com.dreamkeeper/.service.RecordingService (has extras) }; code:PROC_STATE_TOP; tempAllowListReason:<null>; allowWiu:12; targetSdkVersion:37; callerTargetSdkVersion:37; startForegroundCount:0; bindFromPackage:null; isBindService:false]
+10-30 16:02:34.300  5703  5703 I DK_DEBUG: fgs-stop
+
+--- FATAL 命中行（应为空）
+(none)
+
+--- ForegroundServiceStartNotAllowed 命中行（应为空）
+(none)
+
+--- DidNotStartInTime 命中行（应为空）
+(none)

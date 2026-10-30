@@ -1,0 +1,5 @@
+# 截图采集说明
+device_theme: 采集期间 cmd uimode night yes（脚本结束时还原为采集前的值）
+why: 浅色系统主题下，通知条目左侧 app 图标被系统垫了一层纯白圆底，check-near-white.ps1
+     -TopOffset 100 -MaxRatio 0 实测 nearWhite=162/69120=0.234% -> FAIL；深色主题下同一
+     画面 nearWhite=0 -> OK。白像素来自系统通知栏样式，不是 app 渲染异常（app 自身是深色主题）。

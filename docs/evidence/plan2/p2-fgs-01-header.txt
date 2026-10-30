@@ -1,0 +1,29 @@
+# 松手后：服务消失、WAV 头回填（offset 4..8 / 40..44 不再是 FF FF FF FF）
+apk_sha256: 39dab6ec3fc469c76f7299455c0ee6a8c6d6821ad2b831f153b08ed2e860f090
+device_date: Fri Oct 30 16:02:37 CST 2026
+file: files/audio/p2fgs01.wav
+file_bytes: 404236
+replay: adb shell run-as com.dreamkeeper stat -c %s files/audio/p2fgs01.wav
+replay: adb shell run-as com.dreamkeeper od -An -tx1 -N 44 files/audio/p2fgs01.wav
+replay: adb shell dumpsys activity services com.dreamkeeper   # 应无 ServiceRecord
+expect: riffSize = fileBytes-8 = 404228；dataSize = fileBytes-44 = 404192
+
+--- 前 44 字节（od -An -tx1 -N 44，每行 16 字节）
+ 52 49 46 46 04 2b 06 00 57 41 56 45 66 6d 74 20
+ 10 00 00 00 01 00 01 00 80 3e 00 00 00 7d 00 00
+ 02 00 10 00 64 61 74 61 e0 2a 06 00
+
+| offset | 字段 | 读到的字节 | 解释 |
+|--------|------|-----------|------|
+| 4..8   | riffSize  | 04 2b 06 00 | 404228（期望 404228）|
+| 40..44 | dataSize  | e0 2a 06 00 | 404192（期望 404192）|
+
+riffSize_ok: yes
+dataSize_ok: yes
+
+--- 停止后 dumpsys activity services（应为空）
+ACTIVITY MANAGER SERVICES (dumpsys activity services)
+  (nothing)
+
+--- 停止后 dumpsys notification 里本包记录（应为空）
+(none)
