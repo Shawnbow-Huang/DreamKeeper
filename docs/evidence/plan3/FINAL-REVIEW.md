@@ -40,25 +40,25 @@
 | A11 schema 不变 | `p3-e2e-08-db-sidecar.txt` | user_version=2；9 表（8 @Entity + room_master_table，排除 android_metadata）；integrity=ok | PASS |
 | A12 列表页仍显示原样稿 | `p3-e2e-14-misc-checks.txt` | 重启后 10/8 卡片正文 `教室最后一排，黑板上的字在动，像水。` | PASS |
 | A13 文件名清洗 | `p3-e2e-06-export.txt`、ExportNamingTest（全量） | `20261008-教室-v4.{txt,docx,pdf}`；清洗/空白折叠/码点截 20/空→dream 全绿 | PASS |
-| A14 大字体 | `p3-e2e-10-fontscale.txt`、`p3-e2e-13-near-white.txt` | font_scale=1.3；mInputShown=true；输入条在键盘上方可见；nearWhite=2（IME chevron，App 区域 0） | PASS（近白例外待 Lead 裁定） |
+| A14 大字体 | `p3-e2e-10-fontscale.txt`、`p3-e2e-13-near-white.txt` | font_scale=1.3；mInputShown=true；输入条在键盘上方可见；nearWhite=2（IME chevron，App 区域 0） | PASS（Lead 裁定接受为例外，**D410**：(102,2332)/(108,2338) 为系统输入法图标） |
 | A15 logcat FATAL 0 | `p3-e2e-12-logcat.txt` | `FATAL_EXCEPTION_COUNT=0` | PASS |
 | A16 证据头/sha 可复算 | 本目录全部 `p3-e2e-*`/`p3-export-*` | 设备证据 APK sha 同一；host-only 三行齐；PNG 同名 txt 带 PNG_SHA256 | PASS |
 | A17 复跑命令可执行 | 各证据 REPLAY 行 | 见 §六 | PASS |
 | A18 PENDING 白名单 | 本文件 §五 | 仅环境限制；无实现缺陷 PENDING | PASS |
-| A19 §9 偏差有号 | 本文件 §四 | 既有 D275–D406 与本轮候选（待 Lead 编号） | PARTIAL（候选待编号） |
+| A19 §9 偏差有号 | 本文件 §四 | 既有 D275–D406 + 本轮 **D407–D414**（Lead 已编号并写入计划 §9） | PASS |
 | A20 看板与验收段 | `docs/PROGRESS.md`、`docs/evidence/plan1/ACCEPTANCE.md` | Task 10 10/10 + `## 3d` 表 | PASS |
 | A21 第三方可复现 | 本文件 + 证据 REPLAY | 从仓库证据即可复跑三脚本 | PASS |
 | A22 生成入口可点/可重试 | `p3-e2e-09-failed.txt`、`p3-e2e-09b-retry.txt` | 失败态「网络没通」+重试仍失败+联网成功；novel_versions 行数未因失败增加 | PASS |
 | A23 降级/兜底链证据 | `p3-e2e-14-misc-checks.txt` | jobs 8 ↔ llm_calls 14 的 attempt 对账；T2/T3 JVM；STT 未用 → PENDING | PASS（STT PENDING） |
 | A24 API 下界 | `p3-e2e-06-export.txt`、`p3-e2e-14-misc-checks.txt` | sdk=37（API29+）三格式 GREEN；API26–28 无镜像 | PARTIAL（下界 PENDING） |
 
-## 四、偏差索引（D275–D406 + 本轮候选）
+## 四、偏差索引（D275–D406 + 本轮 D407–D414）
 
 已入册（Lead 已编号，沿用）：
 - D337/D338–D343、D357–D379、D392、D405、D406 —— 见计划 §9；本轮按字面执行并在证据中引用。
 - 表数口径（实现口径修正，**非偏差**）：Room 实体表 8 + `room_master_table` = 9；`android_metadata`/`sqlite_*` 排除（Lead m00550 已确认）。
 
-本轮**待 Lead 编号**的偏差候选（报告与证据中亦称「偏差候选」）：
+本轮已由 Lead 编号（计划 §9 同步登记）：
 1. **纯提问被误路由为 REVISE 并建版**：`Why does the classroom feel so quiet?`→v5、`What does the paper with my name mean? …`→v6、`the paper?`→v7（`p3-e2e-04-ask.txt`）。模型行为，非 Task 10 实现缺陷；未删行。
 2. **计划字面「选 v2」改为选 v4**：v2 是 D406 误双击「原样整理」的忠实稿，v4 是真实改稿版；导出 -v4 与库内 `novelSelectedVersion=4` 一致（`p3-e2e-05-selected.txt`、`p3-e2e-06-export.txt` SELECT_RAW）。
 3. **PDF 字体锚**：计划 §0.5/D374 要求 `/BaseFont`，设备 `PdfDocument` 将 CJK 字形嵌入为 Type3（62 处 `/Subtype /Type3` + `/FontMatrix`，无 `/BaseFont`）；`check-export.py` 的 pdf 字体锚断言改为「/BaseFont 或 Type3（/Type /Font + /Subtype /Type3 + /FontMatrix）」，其余 pdf 断言不变（`p3-export-04-check-export.txt` Phase B 段）。
@@ -74,7 +74,7 @@
 2. **A24 API 26–28 下界**：本机仅有 sdk 37 模拟器，无 API26–28 镜像，无法验证「三按钮禁用 + 系统版本过低文案」；API29+ 三格式已实测。
 3. **release 构建未验证**：本轮 E2E 只装 debug APK（`SEED_DEMO_DATA=true`），release 未构建、未安装（计划与 dispatch 未要求装 release）。
 4. **STT 未使用**：E2E 使用已有种子梦（D364 允许），未走录音→转写；STT 仍按 D364 记 PENDING。
-5. **A19 偏差编号**：§四 的 8 条候选等 Lead 分配 D 号后回填；`p3-e2e-12-visibility.png`（seed-dream-2 只显示「小说化」）需新 APK（D406），本轮不拍。
+5. **A19 偏差编号**：§四 8 条候选已回填为 D407–D414；D406 入口可见性修复后设备库无「有忠实稿、无小说稿」的梦，故 `p3-e2e-12-visibility.png` 不拍，改由 `p3-e2e-12-visibility.txt` 的 3 例单测 + 变异覆盖（PENDING 环境项）。
 
 ## 六、复跑命令
 
