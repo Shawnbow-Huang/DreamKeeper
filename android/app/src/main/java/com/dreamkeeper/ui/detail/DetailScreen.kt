@@ -205,9 +205,8 @@ fun DetailScreen(
                                 count = state.novelChangeCount,
                                 // §0.7：详情正文用最终稿（selected ?: maxVersion），不用 dreams.novelText。
                                 novelText = state.finalNovel?.novelText ?: state.dream?.novelText,
-                                hasNovelDraft = state.dream?.novelText != null ||
-                                    state.versions.isNotEmpty() ||
-                                    (state.dream?.novelVersion ?: 0) > 0,
+                                // 是否有「小说稿」：只认 novel / novel_revise 版本，原样整理稿不算（D394）。
+                                hasNovelVersion = hasNovelVersion(state.dream, state.versions),
                                 versions = state.versions,
                                 messages = state.messages,
                                 selectedVersion = state.dream?.novelSelectedVersion,
@@ -533,9 +532,9 @@ private fun NovelTab(
     /**
      * 是否已有小说稿。不能拿 [novelText] 判：`finalNovel` 在没有版本时会回退到
      * `faithfulText` / `rawTranscript`（Task 9 的展示契约），这样每一条有原文的梦都会
-     * 被当成「已有稿」而永远不显示生成入口。
+     * 被当成「已有稿」而永远不显示生成入口。口径见 [hasNovelVersion]（D394）。
      */
-    hasNovelDraft: Boolean,
+    hasNovelVersion: Boolean,
     versions: List<NovelVersionEntity>,
     messages: List<NovelMessageEntity>,
     selectedVersion: Int?,
@@ -561,7 +560,7 @@ private fun NovelTab(
     }
     Column(modifier = Modifier.fillMaxSize()) {
         // Task 9b：只在「这篇还没有小说稿」时露出生成入口；有稿后只留版本线与改稿输入条。
-        if (!hasNovelDraft) {
+        if (!hasNovelVersion) {
             GenerationActions(
                 phase = generationPhase,
                 onFaithful = onGenerateFaithful,

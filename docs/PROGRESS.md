@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-30 23:58（Task 9 验收通过：改稿 10 例、两处变异、全量 35 类 344 例绿；下一步 Task 9b 生成入口接线）
+> 最后更新：2026-10-31 00:40（Task 9b/9c 验收通过：生成入口接线 + 可见性口径修正，全量 36 类 350 例绿；下一步 Task 10 导出与端到端验收）
 
 ## 一、当前在做
 
@@ -99,7 +99,9 @@
 ## 四、刚完成
 
 - ✅ **Task 9 对话改稿**（`c1c8d75`）：模型 JSON `action` 分流 ASK/REVISE；REVISE 首轮 0.3 → 闸门不过则 0.0 + 上一版违规清单重试一次 → 再不过旧稿不动；版本号取「版本表 MAX」与 `dreams.novelVersion` 的较大者 +1（种子 v3 → 改稿 v4）；改稿一个事务写消息/版本/窄更新。Lead 独立复跑 targeted 10/10、全量 35 类 344 例；变异 `selectVersion` 撤窄 UPDATE 杀 2 例、ASK 改走建版杀 1 例。
-- ⏭ 下一步 **Task 9b**：生成入口 UI（「原样整理/小说化」按钮 + 三态 + 失败重试 + `GenerationRunner` 接口），派工书已就绪。
+- ✅ **Task 9b 生成入口接线**（`c24a9f4`/`ea1ec20`）：`GenerationRunner` 接口 + `GenerationOrchestrator` 两处 override（逻辑零改动）；`DetailViewModel` 三态 `generationPhase`、ViewModel 前置闸门（非 OK/空原文不调 runner）、失败重试复用同一入口；`NovelTab` 顶部「原样整理/小说化」两按钮 + Running/Failed 文案 + 重试。3 例先红后绿、两变异（3 红 / 1 红）；设备 smoke：无稿梦两按钮可见、无 Key 失败态正确、有稿态入口不出现、logcat FATAL 0（`p3-wire-0*`）。
+- ✅ **Task 9c 可见性口径修正**（D394，Lead）：原 `hasNovelDraft` 把原样整理稿算成小说稿，整理后「小说化」入口永久消失；改为 `hasNovelVersion(dream, versions)`（只认 `promptId != "faithful"` 的版本，无版本行退回 `novelText`/`novelVersion`）+ 3 例，变异只杀 faithful-only 用例（`p3-wire-05-visibility.txt`）。
+- ⏭ 下一步 **Task 10**：导出 txt/docx/pdf + check-export + check-cost 收口 + E2E 十步 + FINAL-REVIEW；**需要用户重新在设置页输入 DeepSeek Key**（被 9b smoke 的「清 Key」步骤清掉，D398）。
 
 - ✅ **设计 v1.4**（`93029a2`）：模式一从「零 LLM」改为「必调 LLM 的理顺」+ 三级失败链（重试温度 0.0 并附违规清单 → 保守版 → 原始转写）；新增 §6.3 对话改稿（最小改动 ≤115% / 歧义先问不改 / 多版本 + 挑选最终稿）；§5 增 `novel_versions` / `novel_messages` / `llm_calls`；§9 收敛 DeepSeek 单厂商 + flash 默认 + 思考档位表 + 「思考开着时温度被忽略」；§14 增对话改稿验收。
 - ✅ **五闸门脚本**（`dddf702`）：`scripts/check-faithful.py`，G1 数量/颜色/方位/专名、G2 长度比、G3 2-gram 覆盖率、G4 跨场景因果、G5 不确定词；9 条变异自测全绿；用真实梦境「只清理 `[em]` 残留」验证判绿（清理格式不算违规）。

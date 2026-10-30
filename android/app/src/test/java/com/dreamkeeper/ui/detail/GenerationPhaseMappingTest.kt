@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
+import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.llm.GenerationFailure
@@ -188,7 +189,55 @@ class GenerationPhaseMappingTest {
         assertEquals(GenerationPhase.Idle, vm.generationPhase.value)
     }
 
+    // ------------------------------------------------ 9c：生成入口可见性口径（D394）
+
+    /**
+     * 原样整理成功会写一条 `promptId = "faithful"` 的版本；它**不算**小说稿，
+     * 否则用户点完「原样整理」就再也找不到「小说化」入口。
+     */
+    @Test
+    fun `faithful only version still offers the novel entry`() {
+        val d = dream("seed-dream-4")
+        assertEquals(false, hasNovelVersion(d, listOf(version(1, "faithful"))))
+    }
+
+    /** 小说化/改稿版本一出现，生成入口就该收起。 */
+    @Test
+    fun `novel or revise version hides the generation entries`() {
+        val d = dream("seed-dream-4")
+        assertTrue(hasNovelVersion(d, listOf(version(1, "novel"))))
+        assertTrue(
+            hasNovelVersion(
+                d,
+                listOf(version(1, "faithful"), version(2, "novel_revise")),
+            ),
+        )
+    }
+
+    /** Plan 1/2 的老数据没有版本行：退回 `novelText` / `novelVersion` 判。 */
+    @Test
+    fun `legacy dream without version rows falls back to novelText`() {
+        val raw = dream("seed-dream-4")
+        assertEquals(false, hasNovelVersion(raw, emptyList()))
+        assertTrue(hasNovelVersion(raw.copy(novelText = "旧稿"), emptyList()))
+        assertTrue(hasNovelVersion(raw.copy(novelVersion = 3), emptyList()))
+    }
+
     // ---------------------------------------------------------------- fixtures
+
+    private fun version(no: Int, promptId: String): NovelVersionEntity = NovelVersionEntity(
+        id = "v-$no-$promptId",
+        dreamId = "seed-dream-4",
+        version = no,
+        text = "稿 $no",
+        changeLogJson = if (promptId == "faithful") null else "[]",
+        origin = "GENERATE",
+        promptId = promptId,
+        promptVersion = 2,
+        promptHash = "hash",
+        model = "deepseek-flash",
+        createdAt = 0L,
+    )
 
     private fun dream(
         id: String,

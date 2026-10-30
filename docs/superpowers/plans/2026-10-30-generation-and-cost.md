@@ -828,7 +828,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 - §0.8 `docs/evidence/plan3/FINAL-REVIEW.md` 结构固定六节：结论（Plan 3 是否可交付）→ 交付物与提交链 → 证据索引（文件 ↔ 断言）→
   偏差索引（D275–D379）→ PENDING 与理由（含 D379「API<29 未验证」、无 PDF 查看器、模拟器麦克风）→ 复跑命令（逐条可粘贴）。`ACCEPTANCE.md` 的 `## 3d` 只放一张表：能力 / 证据文件 / 结论。
 
-- Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **39 类 / 359 例** 0 失败
+- Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **39 类 / 362 例** 0 失败
   （347 + 12；347 见 Task 9b）；设备端三格式文件全部 `check-export.py` GREEN；`check-cost.py --db-copy` `mismatches=0` 且 `failed=N`；
   截图 `nearWhite=0`（`p3-e2e-07-pdf-open.png` 若拍到则按 D359 排除）；`FINAL-REVIEW.md` 六节齐全、A1–A24 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
 
@@ -1020,6 +1020,13 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D391 | T9-12：NovelTab 正文区由 `BodyScroll` 改为内联段落渲染（按空行切段），以便同一滚动列里穿插 ASK 气泡 | 计划要求气泡在正文下方、输入条上方且同屏可滚；`BodyScroll` 是单一 Text，无法插入气泡。字号/颜色沿用 `bodyLarge`+`Paper`，与原样 tab 一致 |
 | D392 | T10-30：`failed=N` 的独立对账改为「只数生成链的失败日志」——`ChatRequest` 加 `kind`（FAITHFUL/NOVEL/REVISE，不上 wire），两个 orchestrator 各传自己的 kind，logcat 按 `status=failed` + `kind=(FAITHFUL|NOVEL)` 计数；Task 10 Files 加 `ChatModels.kt`/`GenerationOrchestrator.kt`/`ReviseOrchestrator.kt` | 原 D370 的 `grep -c " kind="` 会**同时数成功行与改稿行**（它们走同一个 `DeepSeekClient`），与 `llm_calls` 的 error 行数必不相等；且 `ChatRequest` 无 kind 字段（`ChatModels.kt:40-47`），DeepSeekClient 单文件造不出 `kind=<k>`；改稿不记账（D387）使「日志有、库无」成为常态，必须能过滤；日志行在**最终判定处**打：HTTP 非 2xx、传输错误、空 content、非 JSON 都记 `status=failed`（`http=` 照抄实际码），只有 HTTP 2xx 且 content 可解析才 `status=ok`，否则「200 后解析失败」会漏计 |
 
+| D393 | T9b-1：生成入口可见性用 `hasNovelDraft = dream.novelText != null \|\| versions.isNotEmpty() \|\| novelVersion > 0`，不用显示文本 | `resolveFinalNovel()` 无版本时回退 `novelText ?: faithfulText ?: rawTranscript`，用显示文本判会让每条有原文的梦都当成「有稿」；本条被 D394 修订 |
+| D394 | **9c 收尾（Lead 直接修）**：`hasNovelVersion(dream, versions)` 只认 `promptId != "faithful"` 的版本；无版本行时退回 `novelText`/`novelVersion`；补 3 例（faithful-only / novel-revise / legacy） | 实测走查发现 D393 的一刀切把「原样整理」也算成小说稿：整理成功会写 faithful 版本且 `dreams.novelText` 被写，两按钮一起消失，用户再也找不到「小说化」（`DetailViewModel.kt` 生成入口段）。改后 36 类/350 例，变异（`return true`）只杀 faithful-only 用例，见 `p3-wire-05-visibility.txt` |
+| D395 | T9b-2：3 例测在 ViewModel 缝（`FakeGenerationRunner` 记录按钮真实 onClick 目标），无 Compose 点击级用例 | 仓库无 `compose-ui-test` 依赖且本任务禁新增；按钮可见/可点由设备截图与 UI dump 证明（`p3-wire-01-buttons.*`） |
+| D396 | T9b-3：额外交付 `p3-wire-04-device.txt`（派工书只点名两图 + 同名 txt） | 用于收纳 install/`pm path`/`adb pull` sha/logcat 全文/有稿态 UI dump，避免把 331 行 logcat 塞进截图 txt |
+| D397 | T9b-4：开工基线 HEAD 为 `f1279c0`，提交基于 `67bde4e` | 执行期间 Lead 落了两个 docs-only 提交（`2ea8a3d`/`67bde4e`，D392），Task 9b 段文字无改动 |
+| D398 | T9b-5：设备 smoke 用设置页「清除」清空本地 Key 以复现「不配 Key」失败态，**未恢复** | 设备当时已由用户手工保存真实 Key（00:05）；清空后 `settings.xml` 变空 map，真实 API 冒烟前需重新粘贴。教训：失败态应优先用飞行模式，不要动共享状态 |
+| D399 | T9b-6：变异跑于 16:08 的旧代码，随后只调「闸门顺序/按钮可见性」两处，最终代码在 16:19:47 / 16:20:42 复绿 | 变异目标（按钮回调、retry 入口）两处未被后续调整触碰；证据文件同时收最终代码的绿与全量 |
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
 ## 10. 自审记录
@@ -1191,3 +1198,27 @@ T3  不调用模型                                   → faithfulText = rawTran
   并发改稿未验证（D388）；UI 层选版失败路径无用例；改稿不记账（D387）。
 - 结论：**通过**（含上述 PENDING，均已在后续任务范围或计划偏差中登记）。
 
+### Task 9b 验收（Lead，2026-10-31）
+
+- 交付：`c24a9f4` + `ea1ec20`（9b 佐证修正），14 文件 +1842/−28：新建 `llm/GenerationRunner.kt`、`test/.../GenerationPhaseMappingTest.kt`，
+  `GenerationOrchestrator.kt` 仅 `: GenerationRunner` + 两处 `override`、`DetailViewModel.kt`（`generationPhase`/前置闸门/`retryGeneration`）、
+  `DetailScreen.kt`（`GenerationActions` 两按钮 + Running/Failed 文案 + 重试）、证据 9 件。报告 `.superpowers/sdd/.../task-9b-report.md`（9.2KB，不入库）。
+- Lead 独立复跑：`--tests GenerationPhaseMappingTest --rerun-tasks` BUILD SUCCESSFUL 25s，XML `tests=6`；全量 `--rerun-tasks` 36s →
+  **36 类 / 347 例 / 0/0/0**（344 + 3）。变异原文与报告一致：①两入口 `= Unit` → 3 红；②retry 改 FAITHFUL → 仅用例③红，预期与实际逐字吻合。
+- 设备：APK `bcc37def…5cd1f`，`install -r` Success，`adb pull` 后主机 sha 相等，设备 `date` 2026-10-31 00:21:22 CST；
+  seed-dream-4 两按钮可见（`p3-wire-01-buttons.png`，nearWhite=0）；清 Key 后点「原样整理」→「没生成成：没配 Key 或 Key 不对」+ 重试
+  （`p3-wire-02-failed.png`）；seed-dream-3 有稿态 `原样整理` 计数 0；logcat 331 行 `FATAL EXCEPTION` 0。
+- 偏差：D393–D399（7 条，见 §9）。其中 D394 是**验收中发现的真缺陷**，Lead 当轮修复（见下）。
+- PENDING（承接）：真实 DeepSeek 生成成功路径（Task 10 E2E）；Running 期间按钮 disabled 设备截图（可选项）；有稿态仅 UI dump 无截图。
+- 结论：**通过（附 D394 修复）**。
+
+### Task 9c 收尾：生成入口可见性口径修正（Lead，2026-10-31）
+
+- 问题：9b 的 `hasNovelDraft` 把原样整理稿算成小说稿——整理成功后 `dreams.novelText` 与 faithful 版本同时出现，
+  两个生成入口一起消失，「小说化」再也点不到（这与设计「小说化手动 CTA」冲突）。
+- 修复：`DetailViewModel.kt` 新增顶层纯函数 `hasNovelVersion(dream, versions)`（有版本行看 `promptId != "faithful"`；
+  无版本行退回 `novelText`/`novelVersion`），`DetailScreen.kt` 改用它；`GenerationPhaseMappingTest` 补 3 例。
+- 证据 `p3-wire-05-visibility.txt`：targeted 6/6 绿；变异（`return true` 恢复旧口径）→ 只杀 faithful-only 用例 1，
+  `BUILD FAILED in 24s`；恢复后复绿；全量 **36 类 / 350 例 / 0/0/0**。
+- 该修复不改变「无稿梦两按钮」的设备表现；faithful-only 状态下入口仍在的端到端走查归 Task 10 E2E。
+- 结论：**通过**；Task 10 的期望基线更新为 **39 类 / 362 例**（350 + 12）。

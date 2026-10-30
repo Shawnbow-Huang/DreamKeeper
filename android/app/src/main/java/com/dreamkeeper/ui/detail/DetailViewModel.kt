@@ -320,3 +320,20 @@ class DetailViewModel(
         super.onCleared()
     }
 }
+
+/**
+ * 「这篇梦是不是已经有小说稿」——决定 NovelTab 顶部还要不要露出生成入口。
+ *
+ * 两条都不能用：
+ * - **不能拿界面显示文本判**：`finalNovel` 在没有版本行时会回退 `novelText ?: faithfulText ?:
+ *   rawTranscript`（Task 9 展示契约），那样每一条有原文的梦都会被当成「已有稿」。
+ * - **不能只看「有没有版本」**：原样整理（faithful 链）成功也会写一条 `promptId = "faithful"`
+ *   的版本；把它算成小说稿，用户点一次「原样整理」后就再也找不到「小说化」入口（D394）。
+ *
+ * 口径：有版本行时看提示词归属（只有 `novel` / `novel_revise` 版本算小说稿）；没有版本行时
+ * 退回 Plan 1/2 的老数据（种子/历史记录只有 `dreams.novelText` 与 `novelVersion`）。
+ */
+internal fun hasNovelVersion(dream: Dream?, versions: List<NovelVersionEntity>): Boolean {
+    if (versions.isNotEmpty()) return versions.any { it.promptId != "faithful" }
+    return dream?.novelText != null || (dream?.novelVersion ?: 0) > 0
+}

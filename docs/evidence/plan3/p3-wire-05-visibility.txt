@@ -1,0 +1,70 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:34:12Z
+REPLAY=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" --rerun-tasks --console=plain
+
+# p3-wire-05-visibility（Task 9b 收尾 / D394：生成入口可见性口径）
+
+## 为什么改
+
+Task 9b 的 `hasNovelDraft = dream.novelText != null || versions.isNotEmpty() || novelVersion > 0`
+把「原样整理」也算成小说稿：原样整理（faithful 链）成功会写一条 `promptId="faithful"` 的版本，
+`dreams.novelText` 同时被写成整理稿 → 用户点一次「原样整理」后，「小说化」入口永久消失。
+实测走查：seed-dream-4（无稿）顶部有「原样整理 / 小说化」两按钮；按 9b 的口径，整理成功后
+`dreams.novelText != null`，两按钮都会消失（D394）。
+
+## 改法
+
+`DetailViewModel.kt` 新增顶层纯函数（可 JVM 直测）：
+
+    internal fun hasNovelVersion(dream: Dream?, versions: List<NovelVersionEntity>): Boolean {
+        if (versions.isNotEmpty()) return versions.any { it.promptId != "faithful" }
+        return dream?.novelText != null || (dream?.novelVersion ?: 0) > 0
+    }
+
+`DetailScreen.kt` 的 `NovelTab(hasNovelVersion = hasNovelVersion(state.dream, state.versions))`。
+口径：有版本行时只看提示词归属（`novel` / `novel_revise` 才算小说稿）；没有版本行时退回
+Plan 1/2 老数据（`dreams.novelText` / `novelVersion`）。
+
+## 用例（新增 3 例，`GenerationPhaseMappingTest`）
+
+1. `faithful only version still offers the novel entry` —— 只有 faithful 版本 → `false`（仍露出入口）
+2. `novel or revise version hides the generation entries` —— novel / novel_revise 版本 → `true`
+3. `legacy dream without version rows falls back to novelText` —— 无版本行：raw-only `false`，
+   `novelText` 非空 `true`，`novelVersion=3` `true`
+
+## 复跑（绿）
+
+    > Task :app:testDebugUnitTest
+    BUILD SUCCESSFUL in 23s
+    JUnit XML: name=com.dreamkeeper.ui.detail.GenerationPhaseMappingTest tests=6 failures=0 errors=0
+
+## 变异（红 → 恢复 → 绿）
+
+变异：`if (versions.isNotEmpty()) return versions.any { it.promptId != "faithful" }`
+    → `if (versions.isNotEmpty()) return true`（等价于 9b 旧口径：任何版本都算小说稿）
+
+    GenerationPhaseMappingTest > faithful only version still offers the novel entry FAILED
+    6 tests completed, 1 failed
+    > Task :app:testDebugUnitTest FAILED
+    BUILD FAILED in 24s
+
+恢复：`cp .scratch-d394-orig.kt DetailViewModel.kt`（与变异前文件逐字节一致）后复跑：
+
+    BUILD SUCCESSFUL in 24s
+    JUnit XML: name=com.dreamkeeper.ui.detail.GenerationPhaseMappingTest tests=6 failures=0 errors=0
+
+## 全量
+
+    > Task :app:testDebugUnitTest --rerun-tasks
+    BUILD SUCCESSFUL
+    XML 汇总：classes=36 tests=350 failures=0 errors=0 skipped=0
+
+（36 类不变；347 → 350 = Task 9b 的 3 例 + 本次 3 例。）
+
+## 读法
+
+- 先看本文件第 4 行起的「为什么改」：这是 Task 9b 验收时发现的口径缺陷，不是新功能。
+- 变异只咬用例 1（faithful-only），用例 2/3 在旧口径下仍绿——所以旧口径是「过度判定」，
+  症状是入口消失而不是误显示。
+- 设备侧证据：本修复不改变「无稿梦显示两按钮」的表现（seed-dream-4 仍是两按钮，见
+  `p3-wire-01-buttons.png`）；faithful-only 状态下入口仍在的端到端走查归 Task 10 的 E2E（真 Key）。
