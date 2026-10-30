@@ -161,12 +161,12 @@ design v1.5 的 §14 共 8 条；本节只写「本轮（Plan 2 / Task 9）结�
 | A11 schema 不变 | `p3-e2e-08-db-sidecar.txt` | ✅ PASS（9 表 / user_version=2 / integrity=ok） |
 | A12 列表页仍显示原样稿 | `p3-e2e-14-misc-checks.txt` | ✅ PASS |
 | A13 文件名清洗 | `p3-e2e-06-export.txt`、全量 JVM | ✅ PASS |
-| A14 大字体输入条不被遮挡 | `p3-e2e-10-fontscale.txt`、`p3-e2e-13-near-white.txt` | ✅ PASS（nearWhite=2 为 IME chevron，偏差候选） |
+| A14 大字体输入条不被遮挡 | `p3-e2e-10-fontscale.txt`、`p3-e2e-13-near-white.txt` | ✅ PASS（nearWhite=2 为 IME chevron，Lead 裁定接受，**D410**） |
 | A15 logcat FATAL EXCEPTION 0 | `p3-e2e-12-logcat.txt` | ✅ PASS |
 | A16 证据头三行/sha | 本目录全部 `p3-e2e-*` / `p3-export-*` | ✅ PASS |
 | A17 复跑命令可执行 | `FINAL-REVIEW.md` §六 与各 REPLAY | ✅ PASS |
 | A18 PENDING 白名单只收环境限制 | `FINAL-REVIEW.md` §五 | ✅ PASS |
-| A19 §9 偏差都有 D 号 | `FINAL-REVIEW.md` §四 | ⚠️ 本轮候选待 Lead 编号 |
+| A19 §9 偏差都有 D 号 | `FINAL-REVIEW.md` §四 | ✅ 本轮候选已由 Lead 编号 **D407–D414** 并写入计划 §9 |
 | A20 看板 10/10 + 验收段 | `docs/PROGRESS.md`、本节 | ✅ PASS |
 | A21 FINAL-REVIEW 第三方可复现 | `docs/evidence/plan3/FINAL-REVIEW.md` | ✅ PASS |
 | A22 生成入口可点、失败可重试 | `p3-e2e-09-failed.txt`、`p3-e2e-09b-retry.txt` | ✅ PASS |
