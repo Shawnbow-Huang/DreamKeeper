@@ -201,7 +201,7 @@ private fun Timeline(entries: List<LibraryItem>, onOpen: (String) -> Unit) {
 private fun TimelineEntry(item: LibraryItem, onClick: () -> Unit) {
     val dream = item.dream
     // D214：时间轴和卡片必须走同一个文案分派，否则卡片修好了、时间轴还是一条只有日期没内容的空行
-    val heading = cardText(dream.title, dream.faithfulText ?: dream.rawTranscript).heading
+    val heading = cardText(dream.title, previewText(item.finalNovelText, dream)).heading
 
     Row(
         modifier = Modifier
@@ -274,6 +274,7 @@ private fun CardStream(entries: List<LibraryItem>, onOpen: (String) -> Unit) {
                 DreamCard(
                     dream = item.dream,
                     tags = item.tags,
+                    previewText = previewText(item.finalNovelText, item.dream),
                     onClick = { onOpen(item.dream.id) },
                 )
             }

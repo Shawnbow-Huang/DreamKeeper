@@ -22,7 +22,12 @@ import kotlinx.coroutines.flow.stateIn
  * 只给 `List<Dream>` 的实现者会被迫传 `emptyList()`，于是「下坠的预感」那张卡的标签
  * 在「全部」页静默消失，和当日列表长得不一样（D62）。
  */
-data class LibraryItem(val dream: Dream, val tags: List<Tag>)
+data class LibraryItem(
+    val dream: Dream,
+    val tags: List<Tag>,
+    /** 选中版正文（D332）；null 表示这个梦还没有任何小说版本行。 */
+    val finalNovelText: String? = null,
+)
 
 data class LibraryUiState(
     val layout: LibraryLayout,
@@ -57,13 +62,13 @@ class LibraryViewModel(
      * `null` = 还没读到；`emptyList()` = 读到了、确实没有梦。
      * 两者在界面上的含义完全相反，所以不在这一层就把空表当成「空态」。
      */
-    private val items: Flow<List<LibraryItem>?> = repo.observeAll().flatMapLatest { dreams ->
-        if (dreams.isEmpty()) {
+    private val items: Flow<List<LibraryItem>?> = repo.observeAllWithPreview().flatMapLatest { rows ->
+        if (rows.isEmpty()) {
             // combine() 不接受空列表，必须走这个分支
             flowOf(emptyList())
         } else {
-            combine(dreams.map { repo.observeTagsForDream(it.id) }) { tagLists ->
-                dreams.mapIndexed { i, d -> LibraryItem(d, tagLists[i]) }
+            combine(rows.map { repo.observeTagsForDream(it.dream.id) }) { tagLists ->
+                rows.mapIndexed { i, row -> LibraryItem(row.dream, tagLists[i], row.finalNovelText) }
             }
         }
     }

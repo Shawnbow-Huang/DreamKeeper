@@ -36,7 +36,9 @@ import org.json.JSONArray
 fun versionLabel(n: Int, summary: String?, changeCount: Int): String {
     val clean = summary?.trim().orEmpty()
     return if (clean.isEmpty()) {
-        "v$n · 无说明"
+        // D444：生成/改稿版本不一定有 assistant 摘要（GENERATE 版本没有），
+        // 但 changeLog 能给出「这一版补了几处」。有数就显示数，别一律「无说明」。
+        if (changeCount > 0) "v$n · 改动 $changeCount 处" else "v$n · 无说明"
     } else {
         "v$n · $clean · 改动 $changeCount 处"
     }
@@ -61,6 +63,13 @@ fun summaryFor(version: NovelVersionEntity, messages: List<NovelMessageEntity>):
     messages.lastOrNull { it.versionId == version.id && it.role == "ASSISTANT" }?.content
 
 /**
+ * 版本条只出**小说版本**：`promptId == "faithful"` 的行是整理稿（T3 起落版本表），
+ * 不属于小说线，混进来会让用户把整理稿选成「当前小说」（D332 的现场症状）。
+ */
+fun visibleVersions(versions: List<NovelVersionEntity>): List<NovelVersionEntity> =
+    versions.filter { it.promptId != "faithful" }
+
+/**
  * 版本条：横向滚动的版本线，点一下选中该版。
  *
  * 不包 `BottomSheet`（§0.8）；列表按新→旧，默认选中 `selectedVersion ?: 最新版`。
@@ -74,14 +83,15 @@ fun VersionStrip(
     modifier: Modifier = Modifier,
     currentVersion: Int? = null,
 ) {
-    if (versions.isEmpty()) return
-    val active = selectedVersion ?: currentVersion ?: versions.first().version
+    val shown = visibleVersions(versions)
+    if (shown.isEmpty()) return
+    val active = selectedVersion ?: currentVersion ?: shown.first().version
     Column(modifier = modifier.fillMaxWidth()) {
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            items(versions, key = { it.id }) { version ->
+            items(shown, key = { it.id }) { version ->
                 VersionChip(
                     label = versionLabel(version.version, summaryFor(version, messages), changeCount(version)),
                     selected = isSelectedVersion(version.version, active),

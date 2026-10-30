@@ -404,7 +404,7 @@ suspend fun commitSuccess(
 4. 变异：版本线不过滤 → 用例如红。
 
 **Expected**
-- 全量 **48 类 / 413 例 / 0 失败**。
+- 全量 **48 类 / 413 例 / 0 失败**（T6a 验收值；T6b 完成后 **49 类 / 417 例**）。
 
 ## Task 7：发布就绪与终验
 
@@ -462,6 +462,10 @@ suspend fun commitSuccess(
 | D445 | 2026-10-31 | T5 | 「想法非空」与 D408「纯提问→ASK」只有 JVM/提示词层证据，设备侧验证缺失 | 模拟器无中文输入法（`adb input text` 仅 ASCII），无法输入中文想法/提问；`NovelIdeaTest` 已覆盖 200 字截断与槽渲染，提示词 v1.1 §0 已写分流规则 → 设备验证归 T7，能打字时补 |
 | D446 | 2026-10-31 | T5 | `GenerationActions` 改为常驻（`showNovel` 恒 true），与 D406「有小说稿即收起」不同 | 需求 B 要求「主动再小说化」：已有小说稿时仍允许带新想法重新生成；重入由 `Running` 防重入兜住 → T6a 复核视觉与误触 |
 | D447 | 2026-10-31 | T5 | `p4-novel-01/02` 首三行用真实设备时间（非 host-only） | 这两份含设备操作（安装/点击/截图/拉库），按 G-2 用 `adb shell date` 抓取；纯 JVM 的 `p4-novel-00` 仍是 host-only |
+| D448 | 2026-10-31 | T6a | `resolveFinalNovel()` 与「全部」页 SQL 都过滤掉 `promptId="faithful"` 的版本行（原来会把整理稿当成小说版导出/展示） | T3 起整理稿也落 `novel_versions`，旧口径没有 promptId 概念；导出文件名与「当前 vN」都必须指向小说版，否则 T3 的收益被旧查询吃掉 |
+| D449 | 2026-10-31 | T6 | T6 拆成 T6a（版本线/列表/文案，已完成）与 T6b（成本行 + 生成提到 app-scope） | T6b 要改 `DetailScreen`/`DetailViewModel`/`GenerationRunner`，与 T6a 同文件；一次派工容易互相踩。T6b 期望 +1 类 4 例 → 49 类/417 例，T7 沿用 |
+| D450 | 2026-10-31 | T6a | `observeAllWithPreview()` 的 SQL 没有单测 | Room 查询要靠真实库跑；`LibraryPreviewTest` 只锁纯函数兜底顺序，SQL 由设备 `p4-ui-01` 的现象佐证（列表正文切到选中版） |
+| D451 | 2026-10-31 | T6a | 设备截图只能证明「可见项里没有 faithful」 | `LazyRow` 只渲染可见项，远端行不在截图里；过滤的确定性证据是 `VersionStripFilterTest` + 变异必红，设备图只作现象佐证 |
 
 ## 10. 自审记录
 
@@ -553,3 +557,13 @@ suspend fun commitSuccess(
 - **证据**：`p4-novel-00-tests.txt`（host-only）、`p4-novel-01-dialog.{png,txt}`（弹框，nearWhite=0）、`p4-novel-02-generated.{png,txt}`（生成后 v8 行、DB 双侧 sha、合并 sha、nearWhite=0、Key 命中 0）。
 - **PENDING**：真实梦质量评测（D417，无样本）；想法非空/D408 路由的设备验证（D445）；版本条与 `dreams.novelVersion` 修正（D444，转 T6a）；真机转写（T7）。
 - **结论**：通过。下一步 T6a（版本线/列表/重试入口收口），再 T6b（app-scope/成本行）→ T7。
+
+### Task 6a 验收（Lead，2026-10-31）
+
+- **交付**：`VersionStrip.visibleVersions()` 过滤 faithful + `versionLabel` 改动数兜底（D444）；`DreamDao.observeAllWithPreview()` + `DreamRepository.observeAllWithPreview()`/`DreamPreview` + `LibraryItem.finalNovelText` + `DreamCard(previewText=…)` + `ui/library/LibraryPreview.kt`（D332）；`resolveFinalNovel` 过滤 faithful（D448）；`NOVEL_EMPTY` 文案；新测试 `VersionStripFilterTest`（2 例）、`LibraryPreviewTest`（2 例），既有 `VersionStripTest` 期望按 D444 更新。
+- **Lead 独立复跑**：两个新类各 2/0（41s）；全量 `--rerun-tasks` → **48 类 / 413 例 / 0 失败 / 0 错误 / 0 跳过**（57s）。
+- **契约核对**：版本线只出小说版本；列表预览优先选中版 → 整理稿 → 原始转写；导出/当前版号不含 faithful。
+- **变异**：`visibleVersions` 去掉过滤 → `faithful rows are hidden from the version strip` 红（2/1，42s）；恢复后 `VersionStrip.kt` sha 前16 `f67f276562960f13`。
+- **证据**：`p4-ui-00-tests.txt`（host-only）、`p4-ui-01-list.{png,txt}`、`p4-ui-02-version.{png,txt}`（均 nearWhite=0）。
+- **PENDING**：SQL 无单测（D450）、远端 faithful 不可截图（D451）、成本行/app-scope 转 T6b（D449）。
+- **结论**：通过。下一步 T6b（成本行 + 生成 app-scope，49 类/417 例）→ T7 终验。

@@ -136,7 +136,7 @@ private enum class DetailTab(val label: String) {
 }
 
 /** 小说化还没有稿子时的占位。等 Plan 2 接上大模型，这里换成正文 */
-private const val NOVEL_EMPTY = "还没有生成。等接上大模型后，这里会有一篇读得通的版本。"
+private const val NOVEL_EMPTY = "还没有小说稿。点上面的「小说化」，想好怎么写可以直接生成。"
 
 /** 波形根数：定值，别按宽度算——换个屏就换一个波形，截图对不上 */
 private const val WAVE_BARS = 40

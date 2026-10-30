@@ -55,6 +55,17 @@ class DreamRepository(
     /** 全部未删除的梦（列表数据源之一） */
     fun observeAll(): Flow<List<Dream>> = dreams.observeAll().map { list -> list.map(::toDomain) }
 
+    /**
+     * 「全部」页：梦 + 选中版正文（D332）。
+     *
+     * 预览优先看选中版（没选看最新版），没有再退回 faithful/raw —— 兜底逻辑在
+     * `ui/library/LibraryPreview.kt`，这里只负责把库里的两段文本原样带出来。
+     */
+    fun observeAllWithPreview(): Flow<List<DreamPreview>> =
+        dreams.observeAllWithPreview().map { rows ->
+            rows.map { row -> DreamPreview(toDomain(row.dream), row.finalNovelText) }
+        }
+
     /** 当日列表。`date.toString()` 就是 `dreamDate` 列的 `yyyy-MM-dd` 存储格式，不需要再格式化 */
     fun observeDay(date: LocalDate): Flow<List<Dream>> =
         dreams.observeDay(date.toString()).map { list -> list.map(::toDomain) }
@@ -245,7 +256,9 @@ class DreamRepository(
      */
     suspend fun resolveFinalNovel(dreamId: String): FinalNovel? {
         val dream = findById(dreamId) ?: return null
-        val versions = db.novelVersionDao().listByDream(dreamId)
+        // D448：`novel_versions` 里混着 promptId="faithful" 的整理稿行（T3 起），
+        // 它们不是小说版本；不过滤会把整理稿当成「当前小说」导出/展示。
+        val versions = db.novelVersionDao().listByDream(dreamId).filter { it.promptId != "faithful" }
         if (versions.isEmpty()) {
             val text = dream.novelText ?: dream.faithfulText ?: dream.rawTranscript
             if (text.isBlank()) return null
@@ -463,3 +476,6 @@ data class FinalNovel(
     val novelText: String,
     val selected: Boolean,
 )
+
+/** 「全部」页预览：梦 + 选中版正文（没有版本行时为 null）。 */
+data class DreamPreview(val dream: Dream, val finalNovelText: String?)

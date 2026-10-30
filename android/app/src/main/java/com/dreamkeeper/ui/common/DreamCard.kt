@@ -33,8 +33,13 @@ import com.dreamkeeper.ui.theme.Paper
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DreamCard(dream: Dream, tags: List<Tag>, onClick: () -> Unit) {
-    val texts = cardText(dream.title, dream.faithfulText ?: dream.rawTranscript)
+fun DreamCard(
+    dream: Dream,
+    tags: List<Tag>,
+    onClick: () -> Unit,
+    previewText: String? = null,
+) {
+    val texts = cardText(dream.title, previewText ?: dream.faithfulText ?: dream.rawTranscript)
     val heading = texts.heading
     val body = texts.body
 

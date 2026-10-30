@@ -1,0 +1,23 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T19:57:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.VersionStripFilterTest" --tests "com.dreamkeeper.ui.library.LibraryPreviewTest" --rerun-tasks --console=plain
+RED_BASELINE=T6a 属行为修正（过滤/预览口径），按 D427 先例以变异反证代替先红基线。
+
+## 改了什么（T6a，D332/D444/D448）
+1) 版本线只出小说版本：`VersionStrip.visibleVersions()` 过滤 `promptId == "faithful"`（T3 起整理稿也落 `novel_versions`，
+   不过滤会被选成「当前小说」）；
+2) 「全部」页预览走选中版：新增 `DreamDao.observeAllWithPreview()`（子查询取 `novelSelectedVersion`，没选取最大非 faithful 版本）
+   → `DreamRepository.observeAllWithPreview()` → `LibraryItem.finalNovelText` → `DreamCard(previewText=…)`；
+   兜底顺序 `previewText(finalNovelText, dream)`：选中版 → 整理稿 → 原始转写；
+3) `resolveFinalNovel()` 同步过滤 faithful（D448），导出文件名/「当前 vN」不再可能指向整理稿；
+4) `versionLabel` 无摘要但有改动数时显示「改动 N 处」（D444）；NOVEL_EMPTY 文案改为「还没有小说稿。点上面的「小说化」…」。
+
+## 测试（真实输出）
+- targeted：`VersionStripFilterTest` 2 例 + `LibraryPreviewTest` 2 例 = **BUILD SUCCESSFUL 41s**，XML 各 `tests=2 failures=0`。
+- 变异：`visibleVersions` 改回不过滤 → `VersionStripFilterTest > faithful rows are hidden from the version strip FAILED`，
+  `2 tests completed, 1 failed`，BUILD FAILED 42s；恢复后 `VersionStrip.kt` sha 前16 `f67f276562960f13`。
+- 全量 `--rerun-tasks`：BUILD SUCCESSFUL 57s，XML **classes=48 tests=413 failures=0 errors=0 skipped=0**（46/409 + 2 + 2）。
+
+## 边界
+- `observeAllWithPreview()` 的 SQL 没有单测（Room 查询只在设备/现有库上跑），靠 `p4-ui-01-list` 的设备现象与
+  `LibraryPreviewTest` 的纯函数口径共同覆盖；faithful 行混入的回归由 `VersionStripFilterTest` 挡住。

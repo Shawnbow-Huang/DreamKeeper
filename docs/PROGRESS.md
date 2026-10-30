@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-31 03:56（**Plan 4 开工 6/8**：T1 数据库 v3、T2 尾段转写/启动补跑、T3 忠实稿基座与两槽分离、T4 补一段入口与原样 tab、T5 小说化显式触发与想法已验收，全量 **46 类 409 例**绿；D415–D447 已登记。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
+> 最后更新：2026-10-31 04:02（**Plan 4 开工 7/8**：T1 数据库 v3、T2 尾段转写/启动补跑、T3 忠实稿基座与两槽分离、T4 补一段入口与原样 tab、T5 小说化显式触发与想法、T6a 版本线/列表已验收，全量 **48 类 413 例**绿；D415–D451 已登记。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
 
 ## 一、当前在做
 
@@ -76,7 +76,7 @@
 **先修的前提**（专家实测）：仓库没有 OkHttp 也没有 kotlinx.serialization；manifest 没有 INTERNET；
 `check-near-white.ps1` 其实**有** `-MaxRatio`（Plan 2 的登记是错的）。
 
-## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 6/8
+## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 7/8
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -86,7 +86,8 @@
 | T3 忠实稿基座与整段重跑 | ✅ 完成 | 忠实链同事务写 `dreams.faithfulText`（`commitSuccess` 第 5 参）+ `novel()` 两槽分离 + changeLog 双基准；两处变异必红、恢复逐字节同；全量 **44 类 399 例**；证据 `p4-faithful-00`；D431–D434 |
 | T4「补一段」入口与原样 tab | ✅ 完成 | `append/{dreamId}` 复用录音页（`createdThisTake` 分流追加收尾）+ 原样 tab 显示整理稿/原始转写切换 +「还有 N 秒没转成文字」重试/跳过 +「补一段」「重新理顺」+ 回详情自动重理顺一次（防重入）；变异关掉自动重跑 2 例红；全量 **45 类 405 例**；设备追加实测 WAV 140844B=44+4400×32、`rawAudioMs 2400→4400`、PENDING 交启动补跑；证据 `p4-append-04..06`；D435–D443 |
 | T5 小说化显式触发与想法 | ✅ 完成 | 「小说化」常驻入口 + `NovelIdeaDialog`（200 字、空想法可直接生成）+ `prompts/novel.v2.1.md`（`cc497720`，第 4 可选槽）+ `prompts/novel_revise.v1.1.md`（`45a17e0a`，§0 意见/问题分流）+ `promptVersion` 主版本号解析；变异「第 4 槽必填」1 例红；全量 **46 类 409 例**；设备空想法生成 v8 `promptId=novel/promptVersion=2/promptHash 64hex`；证据 `p4-novel-00..02`；D444–D447 |
-| T6 可见性与体验缺陷 | ⬜ | T6a：版本线过滤 faithful、GENERATE 版本条改动数、列表用选中版；T6b：成本行、生成提到应用级作用域 |
+| T6a 版本线与列表可见性 | ✅ 完成 | 版本线过滤 faithful（`visibleVersions`）+ `versionLabel` 改动数兜底 + 「全部」页预览用选中版（DAO 子查询/`previewText` 兜底）+ `resolveFinalNovel` 过滤 faithful；变异不过滤即红；全量 **48 类 413 例**；设备列表正文切到选中版、版本条 v8/v7/v6；证据 `p4-ui-00..02`；D448–D451 |
+| T6b 成本行与 app-scope | ⬜ | 成本行（0 调用不显示、>0 两位小数）+ 生成提应用级作用域（离开详情再回来能读到 Running/Failed），期望 49 类/417 例 |
 | T7 发布就绪与终验 | ⬜ | release/API26–28/真机清单 + FINAL-REVIEW + ACCEPTANCE `## 3e` + 看板 8/8 |
 
 任务书：[plans/2026-10-31-plan4-voice-append.md](superpowers/plans/2026-10-31-plan4-voice-append.md) · 分支 `plan4-voice-append`（从 `plan3-generation` 的 `00a9cf2` 切出）

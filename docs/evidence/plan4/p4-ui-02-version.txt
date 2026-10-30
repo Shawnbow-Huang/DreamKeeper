@@ -1,0 +1,14 @@
+APK_SHA256=6ac22d2dd85201dd (同一安装包)
+DEVICE_TIME=Sat Oct 31 03:57:30 CST 2026
+REPLAY=全部→10月8日「教室」→小说化 tab → screencap /sdcard/p4-ui-02-version.png
+
+## 证据链
+- 截图 `docs/evidence/plan4/p4-ui-02-version.png`，329,780 B，sha256 前16 `92096329c598fe28`；nearWhite=0 / 40,898 点 / 0.0000%。
+- 文本节点：版本条可见 `v8 · 无说明` / `v7 · 这一版没改，保留原样 · 改动 0 处` / `v6 · …`；
+  状态行「当前 v4 · 已选中」；顶部「小说化」「导出」常驻。
+
+## 读法
+- 版本条按新→旧横滚，faithful 行（v1/v2）不在可见项里；「过滤是否生效」的确定性断言在
+  `VersionStripFilterTest`（变异不过滤即红），设备侧只作现象佐证（LazyRow 只渲染可见项，截图不能证明远端没有 faithful 行）。
+- `v8 · 无说明` 是因为该行的 `changeLogJson` 为空数组（生成时的 3 处改动只落在 `dreams.novelChangeLog`），
+  不是 label 逻辑漏算；该口径记 D444。

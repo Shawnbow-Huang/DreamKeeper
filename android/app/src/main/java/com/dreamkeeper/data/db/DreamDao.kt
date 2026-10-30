@@ -43,6 +43,33 @@ interface DreamDao {
     @Query("SELECT * FROM dreams WHERE deletedAt IS NULL ORDER BY dreamDate DESC, createdAt DESC")
     fun observeAll(): Flow<List<DreamEntity>>
 
+    /**
+     * 「全部」页专用：每行梦 + 该梦**当前选中版（没选就算最新版）**的小说正文。
+     *
+     * D332 要求列表显示「挑中的那一版」，而不是恒读 `dreams.novelText`。
+     * 子查询口径与 `resolveFinalNovel(selected ?: max)` 保持一致；一个梦没有任何
+     * `novel_versions` 行时为 NULL，交给预览兜底（faithful/raw，见 `previewText`）。
+     */
+    @Query(
+        """
+        SELECT d.*, (
+            SELECT v.text FROM novel_versions v
+            WHERE v.dreamId = d.id
+              AND v.promptId <> 'faithful'
+              AND v.version = COALESCE(
+                  d.novelSelectedVersion,
+                  (SELECT MAX(v2.version) FROM novel_versions v2
+                   WHERE v2.dreamId = d.id AND v2.promptId <> 'faithful')
+              )
+            LIMIT 1
+        ) AS finalNovelText
+        FROM dreams d
+        WHERE d.deletedAt IS NULL
+        ORDER BY d.dreamDate DESC, d.createdAt DESC
+        """
+    )
+    fun observeAllWithPreview(): Flow<List<DreamWithPreview>>
+
     /** 不排除软删：回收站要能按 id 打开一条已删除的梦。 */
     @Query("SELECT * FROM dreams WHERE id = :id")
     fun observeById(id: String): Flow<DreamEntity?>
@@ -324,3 +351,9 @@ interface DreamDao {
         faithfulText: String?,
     ): Int
 }
+
+/** 「全部」页的行模型：梦本体 + 选中版正文（可能为 NULL）。 */
+data class DreamWithPreview(
+    @androidx.room.Embedded val dream: DreamEntity,
+    val finalNovelText: String?,
+)

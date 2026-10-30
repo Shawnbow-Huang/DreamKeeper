@@ -1,0 +1,15 @@
+APK_SHA256=6ac22d2dd85201dd (app-debug.apk sha256 前16，13,879,641 B；adb install -r Success)
+DEVICE_TIME=Sat Oct 31 03:57:09 CST 2026
+REPLAY=adb shell am start -n com.dreamkeeper/.MainActivity; adb shell input tap 810 2266（全部）; adb shell screencap -p /sdcard/p4-ui-01-list.png
+
+## 证据链
+- 截图 `docs/evidence/plan4/p4-ui-01-list.png`，97,301 B，sha256 前16 `49e7f3fa2e63b5fc`；nearWhite=0 / 40,898 点 / 0.0000%。
+- 库事实（03:51 合并库）：`seed-dream-2` 的版本行 v1/v2=faithful、v3/v8=novel、v4..v7=novel_revise，`novelSelectedVersion=4`、最大版本=8。
+
+## 页面事实
+- 10月22日卡片正文变成「我一直在下楼梯。」（选中/最新小说版），不再是旧口径的整理稿「一直在下楼梯，每一层都一样。」；
+- 10月8日卡片标题「教室」保持，正文为空（该版 v4 首段为空行开头，`cardText` 取不到正文行，属既有排版行为）；
+- 其余卡片日期/标题不变。
+
+## 读法
+- 列表预览确实从「整理稿优先」切到「选中版优先」（D332）；SQL 侧同一条子查询也用于 `resolveFinalNovel`（D448）。

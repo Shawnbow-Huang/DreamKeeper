@@ -18,7 +18,8 @@ class VersionStripTest {
     @Test
     fun `versionLabel 无说明时不带改动数且选中态按版本号判定`() {
         assertEquals("v4 · 无说明", versionLabel(4, "  ", 0))
-        assertEquals("v9 · 无说明", versionLabel(9, null, 5))
+        // D444：没有摘要但有改动数时，显示改动数（GENERATE 版本没有 assistant 摘要）
+        assertEquals("v9 · 改动 5 处", versionLabel(9, null, 5))
         assertTrue(isSelectedVersion(4, 4))
         assertFalse(isSelectedVersion(4, null))
         assertFalse(isSelectedVersion(4, 3))
