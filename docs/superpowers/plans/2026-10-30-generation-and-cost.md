@@ -56,13 +56,14 @@ NovelMessage(id, dreamId, role /*USER|ASSISTANT*/, content, versionId: String?, 
 LlmCall(id, dreamId, kind, model, reasoningEffort, cacheHitTokens, cacheMissTokens, outputTokens,
         reasoningTokens, isPeak, priceSnapshotJson, costMicroYuan, formulaVersion,
         httpStatus, attemptNo, requestId, usageJson, error, latencyMs, createdAt)
-PromptVersion(id, kind, version, promptHash, createdAt)   // 唯一键 (kind, version, promptHash)
-GenerationJob：沿用现有表，补 stage / attemptNo / error 三列
+// 不建 PromptVersion 表（D267）：提示词以 prompts/ 文件 + sha256 为唯一真源
+// 不建 generation_jobs 的「补列」版本（D268）：v1 没有这张表，Task 4 整表 CREATE
+GenerationJob(id, dreamId, stage, attemptNo, error, createdAt)   // v1 无此表 → CREATE TABLE
 ```
 
 - `DreamDatabase` version 1 → **2**，写 `MIGRATION_1_2`，`exportSchema = true`，提交
   `app/schemas/com.dreamkeeper.data.db.DreamDatabase/2.json`；**禁止 `fallbackToDestructiveMigration`**。
-- 迁移测试用 `MigrationTestHelper`（`room-testing` 已加）：v1 库文件 → 跑迁移 → 断言新列默认值与新表可写。
+- 迁移测试**不用** `MigrationTestHelper`（D271）：`room-testing` 只在 `testImplementation` 且没有把 schemas 挂到 test assets，helper 找不到 `1.json`。替代：`1.json` 的 `createSql` 手搭 v1 库 + `room_master_table.identity_hash='3150a0bccf0e3cb537faa8aac20e4186'`，再用 `Room.databaseBuilder(...).addMigrations(MIGRATION_1_2)` 打开并由 Room 自校验；同测试里再做 DAO 往返。
 
 ## 4. 价格与成本（唯一真源 = 资产文件）
 
@@ -341,12 +342,85 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 4 数据库 v2 迁移
 
-- Files：`data/db/DreamEntity.kt`（+两列，末尾追加带默认值）、`data/db/NovelVersionEntity.kt`、`NovelMessageEntity.kt`、
-  `LlmCallEntity.kt`、`PromptVersionEntity.kt`、`GenerationJobEntity.kt`（补三列）、`data/db/DreamDatabase.kt`（version=2 + `MIGRATION_1_2`）、
-  `data/db/NovelVersionDao.kt`、`LlmCallDao.kt`、`PromptVersionDao.kt`、`test/.../MigrationTest.kt`、`app/schemas/.../2.json`。
-- Steps：先写迁移测试（v1 库 → 迁移 → 新表可写、旧数据不丢、新列默认值正确），红 → 实现 → 绿；
-  `git diff --exit-code` 确认 `1.json` 未被改写、`2.json` 入库。
-- Expected：老库平滑升级；`identityHash` 变化记录在案；无 destructive。
+> 0. 派工前修订（Lead 按 Mobile App Builder / Evidence Collector 预审裁定，覆盖下文任何冲突）
+>
+> **0.1 必崩项：`create()` 必须挂迁移**。`android/app/src/main/java/com/dreamkeeper/data/db/DreamDatabase.kt:73-75` 现在没有任何 `.addMigrations(...)`，
+> 老库一升级就抛 `IllegalStateException: A migration from 1 to 2 was required but not found`。写完 `MIGRATION_1_2` 后补 `.addMigrations(MIGRATION_1_2)`。
+>
+> **0.2 SQL 不许手写**：先写实体（`@Entity` + `indices`）→ 编译出 `app/schemas/com.dreamkeeper.data.db.DreamDatabase/2.json`
+> → 把 2.json 里每张新表的 `createSql` **逐字**抄进 `MIGRATION_1_2`。手工 SQL 与实体漂移是这类 bug 的第一来源。
+>
+> **0.3 迁移内容**：
+> `ALTER TABLE dreams ADD COLUMN novelSelectedVersion INTEGER;`（可空，免 DEFAULT）
+> `ALTER TABLE dreams ADD COLUMN generationStage TEXT;`
+> `generation_jobs` **整表新建**（v1 里没有，D268）+ `novel_versions` + `novel_messages` + `llm_calls`
+> 索引：`index_novel_versions_dreamId_version`（UNIQUE）、`index_novel_messages_dreamId_createdAt`、`index_llm_calls_dreamId_createdAt`、
+> **`index_dream_tags_tagId`**（D269：D27 当初不加的唯一理由是「加索引要付一次迁移」，这次已在付，边际成本 0）
+> **`dreams` 不加索引**；**不加任何外键**（v1 四表零 FK，梦是软删除；删梦时在应用层同事务删三表行）。
+> 新表索引必须在 `@Entity(indices=[...])` 同步声明，否则 Room 校验会说迁移结果与实体不符。
+>
+> **0.4 `novel_versions` 插入必须 `OnConflictStrategy.ABORT`，禁止 REPLACE**：`DreamDao.kt:12` 那套 REPLACE 会先删旧行，
+> 等于静默删掉一个版本正文与它的 `novel_messages`。版本号用事务内 `SELECT MAX(version)+1`。
+>
+> **0.5 `save()` 必须带上新列**：`android/app/src/main/java/com/dreamkeeper/data/DreamRepository.kt:139-159` 是 read-modify-write，
+> 新列不写会在每次保存时被抹成 null。补 `novelSelectedVersion = existing?.novelSelectedVersion`、`generationStage = existing?.generationStage`，
+> 并加回归用例「设 `novelSelectedVersion=2` 后编辑正文，再读仍是 2」。
+>
+> **0.6 旧列不改类型**：`createdAt` 等保持 INTEGER epoch millis（设计 D7）；改类型 = 整表重建，风险最高收益为零。新表时间列一律 `Long`。
+>
+> **0.7 迁移测试**（见 §3 的替代方案）：手搭 v1 库 + `Room.databaseBuilder(...).addMigrations(MIGRATION_1_2)` 打开，Room 自校验 schema；
+> 同一测试里做 DAO 往返：`NovelVersion` 插一条含中文与换行的正文 → 按 `dreamId` 读回**逐字相等**。
+>
+> **0.8 升级前留库副本**：打开库前只读探测 `PRAGMA user_version`，== 1 就把 `databases/dreamkeeper.db`（含存在的 `-wal`/`-shm`）
+> 复制到 `files/db-backup/dreamkeeper-v1-<ts>.db`；v2 打开成功且 `integrity_check` 通过后再删多余备份、留一份。
+> 接在 `DreamKeeperApp` 启动序列里、`audioScan` 之前。
+>
+> **0.9 设备侧取证形态**：设备上 `databases/dreamkeeper.db` 实测只有 4096 B、0 表、`user_version=0`，数据在 **201,912 B 的 `-wal`** 里 →
+> 必须 `force-stop` 后**三件一起拉**（`.db`/`-wal`/`-shm`），宿主 python `sqlite3` 打开；**emulator API 37 无 sqlite3 二进制**。
+> `run-as` 只对 debug 包有效；release 的「不丢数据」由同一份迁移 + `2.json` 校验承担（写进未验证）。
+>
+> **0.10 基线必须含非种子行**：只拿 4 条种子做基线会假绿（destructive 清库后会重新 seed 出同 id 的 4 行）。
+> v1 包里要造 2 条非种子数据：① 改 `seed-dream-1` 的 `title`/`novelText`；② 走一次真实录制新建 1 条（带 `rawAudioPath`/`rawAudioMs`）。
+>
+> **0.11 比对口径**（`scripts/check-migrate.py --dump DIR --out J` / `--diff B A`）：
+> `dreams` **20 列逐列等值**（id/ownerId/dreamDate/createdAt/title/rawTranscript/faithfulText/novelText/novelVersion/novelChangeLog/mood/isDraft/deletedAt/updatedAt/rawAudioPath/rawAudioMs/faithfulEditedByUser/novelEditedByUser/remoteId/transcriptStatus）；
+> 新列必须全 NULL 且 NULL 计数 == 行数；**`updatedAt` 一个字都不许变**；`tags`/`dream_tags`/`media_assets` 全列（浮点按精确文本、中文按 UTF-8 原文，禁 `ensure_ascii`）；
+> `sqlite_master` 表数 6 → 9（含 `room_master_table`）；`PRAGMA user_version` 1→2；`identity_hash` 必变（登记）；`integrity_check` 与 `foreign_key_check` 干净。
+> 报告：首行 `tables=9 rows_before=N rows_after=N`，每表一行，末行 `RESULT: GREEN`，exit 0/1。
+>
+> **0.12 降级只能「留证据」不能「支持」**：`install -r` 回 v1 包 → `logcat -d` 原始崩溃串整段落盘（不许凭记忆写）；
+> 结论只写「不可降级 + 升级前留副本」。
+>
+> **0.13 证据 `p3-mig-*`**：`00-red.txt`（含「因缺 schemas assets 而红」的更正记录）、`01-baseline.json`+`.txt`、`02-upgrade.txt`、`02-after.png`+同名 `.txt`（`PNG_SHA256=`）、
+> `03-diff.txt`（`RESULT: GREEN`）、`04-newtables.txt`（DAO 往返 + 删表反证）、`05-downgrade.txt`（原始崩溃串）。
+> 首三行：`APK_SHA256=<v2 前16> OLD_APK_SHA256=<v1 前16>` / `DEVICE_TIME=<adb shell date 原文>` / `REPLAY=<整串>`。
+> **sha 必须来自 `pm path` → `adb pull` → `sha256sum`**，不许抄本地文件（实测本地三份 APK 互不相同）。
+>
+> **0.14 反证必须做**：删掉 `MIGRATION_1_2` 里某张新表的 `CREATE` 重跑迁移测试**必须红**。
+>
+> **0.15 `scripts/check-migrate.py` 落仓库**（纯 stdlib），sqlite3 连接形制照 `scripts/check-cost.py`。
+>
+> **0.16 顺手把 vectors 登记成 test input**（D266 的后果）：`app/build.gradle.kts` 加 `tasks.withType<Test> { inputs.file(...) }` 指向 `docs/evidence/plan3/p3-cost-01-vectors.json`。
+> 这是本任务**允许**改 `build.gradle.kts` 的唯一理由。
+
+- Files：`data/db/DreamEntity.kt`（尾部追加 2 列）、`data/db/{NovelVersionEntity,NovelMessageEntity,GenerationJobEntity,LlmCallEntity}.kt`（新建）、
+  `data/db/{NovelVersionDao,NovelMessageDao,GenerationJobDao,LlmCallDao}.kt`（新建）、`data/db/DreamDatabase.kt`（version=2 + `MIGRATION_1_2` + `addMigrations`）、
+  `data/DreamRepository.kt`（`save()` 带新列）、`di/AppContainer.kt`、`DreamKeeperApp.kt`（迁移前快照钩子）、`app/schemas/.../2.json`、
+  `test/.../data/db/MigrationTest.kt`（手搭 v1 + DAO 往返）、`test/.../data/DreamRepositoryNovelSelectedTest.kt`、`scripts/check-migrate.py`、
+  `app/build.gradle.kts`（只加 test inputs）、`docs/evidence/plan3/p3-mig-*`。
+- Interfaces：
+  `@Database(entities = [...], version = 2, exportSchema = true)`；`val MIGRATION_1_2: Migration`
+  `interface NovelVersionDao { @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(v: NovelVersionEntity); @Query("SELECT * FROM novel_versions WHERE dreamId = :dreamId ORDER BY version DESC") suspend fun listByDream(dreamId: String): List<NovelVersionEntity> }`
+  `scripts/check-migrate.py --dump DIR --out JSON` / `--diff BEFORE AFTER`
+- Steps：
+  1. 写实体与 DAO → 编译出 `2.json` → 抄 `createSql` 写 `MIGRATION_1_2`。
+  2. 写 `MigrationTest.kt`（手搭 v1 库，含 1 条带 `rawAudioPath` 的梦）→ 未加迁移时**跑红** → `p3-mig-00-red.txt`。
+  3. 补迁移 → 绿；DAO 往返（中文+换行）绿；`DreamRepository` 新列回归绿。
+  4. 变异：删一张新表 `CREATE` → 必红（记进 `04-newtables.txt`）。
+  5. 设备：v1 APK → 种子 + 2 条非种子 → 三件拉库 → `install -r` v2 → 再拉 → `check-migrate.py --diff` → `RESULT: GREEN`。
+  6. 降级实验 + 原始崩溃串落盘。
+- Expected：`user_version` 1→2；9 张表；20 列逐列等值、`updatedAt` 未变、新列全 NULL；`integrity_check`/`foreign_key_check` 干净；
+  DAO 往返逐字相等；删表反证必红；`check-migrate.py` 未变异 GREEN exit 0、变异 exit 1。
 
 ### Task 5 LlmClient（OkHttp + org.json）
 
@@ -459,6 +533,18 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D260 | T3-8：`scripts/check-cost.py` 复算真源是行内 `priceSnapshotJson`，不是当前资产 | 调价后历史账目必须还能复算；变异实验里「改快照必须红、改资产不许变绿」专门抓这条 |
 | D261 | T3-9：`--db-copy` 本轮只能写 PENDING（表 Task 4 建、行 Task 8 写） | 空库跑出 `mismatches=0` 是假绿；真跑排到 Task 10 |
 | D262 | T3-10：证据向量 JSON 先于实现提交，测试读同一份 JSON，不另抄常量 | 同义反复的根源是「测试有自己的期望副本」；提交顺序本身即证据 |
+| D263 | T3-11：brief §0.8 的通用断言 `peak−2·off ∈ −1..0` **不成立** | 取整是 round-half-up，差值可达 **+1**：arith-02（v4-pro, hit=miss=1, out=0）peak=5、off=2、delta=+1。测试与 `p3-cost-05` 改为断言 **−1..1**，并把这个反例留作见证 |
+| D264 | T3-12：新增 `.gitattributes`（超出 Files 白名单） | 仓库 `core.autocrlf=true` 且此前无 `.gitattributes`，fresh clone 会把 JSON 转 CRLF，使内容寻址的 `cardSha256` / `JSON_SHA256` 失效。只固定 `assets/pricing/*.json` 与 `docs/evidence/plan3/*.json` 为 LF |
+| D265 | T3-13：新增公开 `parsePriceCard(rawBytes)`（brief Interfaces 未列） | 加载器与单测共用同一解析入口；否则测试要么复制解析逻辑，要么只能靠 Robolectric AssetManager |
+| D266 | T3-14：vectors JSON 不是 Gradle test 输入 | 改 JSON 后普通重跑报 UP-TO-DATE（BUILD SUCCESSFUL 1s，测试未执行）；本任务所有红/绿/咬合命令均加 `--rerun`。**Task 4 起把 vectors 登记为 test input** |
+| D267 | T4-1：**不建 `prompt_versions` 表**（作废 §3 里该表与 Entity/Dao 要求） | 与 D5/D150 及 `DreamDatabase.kt:15` 注释「提示词以 `prompts/` 文件为唯一真源」直接冲突；审计只需 `promptId/promptVersion/promptHash` 三列 |
+| D268 | T4-2：`generation_jobs` 必须**整表新建**，并补 `GenerationJobDao` | 计划 §3 原写「沿用现有表、补三列」，但 v1 只有 dreams/tags/dream_tags/media_assets（`1.json`），照写会全机型首启崩 |
+| D269 | T4-3：本次迁移**补 `index_dream_tags_tagId`** | D27 当初不加的唯一理由是「加索引要付一次迁移」；这次迁移已在付，边际成本 0，`DreamTagDao.deleteByTag` 与 join 都需要 |
+| D270 | T4-4：升级前把 v1 库（含 `-wal`/`-shm`）快照到 `files/db-backup/` | Room 迁移在事务内、失败即回滚，但之后 App 打不开库；release 无 `run-as` → 用户零回滚通道，只能靠升级前副本 |
+| D271 | T4-5：迁移测试不用 `MigrationTestHelper`，改「手搭 v1 库 + `Room.databaseBuilder` 打开」 | `room-testing` 只在 `testImplementation` 且没有 `sourceSets` 把 schemas 挂到 test assets，helper 找不到 `1.json`；替代方案与 helper 核心断言等价 |
+| D272 | T4-6：`scripts/check-migrate.py` 落仓库；首三行改用 `APK_SHA256` + `OLD_APK_SHA256`（两只 APK） | 迁移证据天然有两只包；README §2 只规定单 APK，属形态差异 |
+| D273 | T4-7：`app/build.gradle.kts` 把 `p3-cost-01-vectors.json` 登记为 test input | D266：不登记则改 JSON 后 `testDebugUnitTest` 报 UP-TO-DATE，测试根本没跑 |
+| D274 | T4-8：设备侧「只拉 `.db`」是假红，必须三件一起拉 | 实测 `databases/dreamkeeper.db` 只有 4096 B、0 表、`user_version=0`，数据在 201,912 B 的 `-wal` 里；emulator API 37 无 sqlite3 二进制 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
