@@ -891,6 +891,12 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D201 | 模拟器未加 `-allow-host-audio`、输入全零，本轮从未观察到 `Ok` | 所有 `Ok`/分段/超时结论只来自 JVM 单测，一律标「设备未验证」；33+ 正路径在报告与看板上都写未通过 | `p2-stt-03-attempt.txt`：`entered_transcribe=NO`、`pipe_created=NO`、`bytes_written_to_pipe=0` |
 | D202 | 追加录音后「重转写」策略未定：CAS 的 `TRIM(rawTranscript)=''` 守卫会让已有文本的行不接受新转写，补录那段的话不会进正文（宁可不假装，也不覆盖） | 本轮不加宽守卫、不写 `updatedAt`；把「追加后如何重转写」登记为 Plan 3 待决（候选：区分机器文本/用户文本两列，或加 `transcriptEpoch`） | `DreamDao.finishFollowUp` 注释；`task-7-report.md` §2.6 |
 | D203 | Task 7 的可用性探测在本机结论是 `Unavailable(本机没有中文离线识别)`（`installed/supported/pending/online` 四表全空） | 如实落证据，只交「能失败、不伪造」；`Available`/`NeedsDownload` 两档只有 JVM 单测覆盖（`mapSupport` 纯函数） | `docs/evidence/plan2/p2-stt-02-availability.txt`；`SystemSttEngineSupportTest` |
+| D204 | T8-1：`AudioPlayback.prepare()` 语义改成「repair + prepare + start」一步到位（计划接口只列了 prepare/toggle） | 接受：播放条一次点击就该出声；`toggle()` 仍管暂停/继续/播完重播，两条路径都有单测 | `AudioPlaybackStateTest` 5 组；`AudioPlayback.kt` prepare/toggle |
+| D205 | T8-2：提交信息写「时长取 rawAudioMs」，实现以字节为准并在差 >100 ms 时回写 | 以实现为准（§0.12 就是这么要求的），现有数据两者都是 6021 ms，无行为差异；提交信息不改写历史 | `p2-play-01-playing.txt` 第 14 行：`duration bytes=6021 db=6021 diff=0` |
+| D206 | T8-3：计划要求「新录 5 秒再播」，实际复用 Task 7 的 6.0 s 真实文件（192716 B） | 接受：模拟器输入恒零，重录不产生可听信号；播放链路验证不依赖重新录制 | `p2-play-01-playing.txt` 第 6 行 |
+| D207 | T8-4：播放位置存在 ViewModel 的 `PlaybackState` 里（旋转/重组不丢），未用 `rememberSaveable`；进程被杀后的位置恢复未实现 | 接受本轮范围（进程级恢复无产品价值）；旋转由 ViewModel 天然覆盖，未单独截图，属未验证项 | `task-8-report.md` §7 |
+| D208 | T8-5：证据 ②③ 用 `adb run-as chmod 000` / `cp dirty.wav` 制造坏文件与脏头，不是应用内操作 | 接受：可重复、可恢复、不改生产代码；`chmod` 后已 `chmod 600` 还原并在证据里留 `ls -l` 对照 | `p2-play-02-negative.txt` 第 5 节；`p2-play-03-repair.txt` 第 1 节 |
+| D209 | T8-6：`playerFactory` 在 `DetailViewModel` 内创建、生产不注入；`audioStore == null` 时播放条显示「播放器不可用」（只为测试/预览留的口子） | 接受：可测性缝与生产路径分开；不加 DI 框架（Global Constraints 禁 Hilt/Koin） | `AudioPlayback.kt:81-86`；`AudioPlaybackStateTest` 注入 fake |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
