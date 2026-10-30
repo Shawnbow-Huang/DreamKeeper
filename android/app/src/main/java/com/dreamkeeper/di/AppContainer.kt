@@ -164,7 +164,8 @@ class AppContainer(
 
     /** 录音收尾 → 一次性本地转写 → CAS 窄更新（§0.5–§0.7 全在里面）。 */
     val transcriptWriter: TranscriptWriter by lazy {
-        TranscriptWriter(repository, audioStore, sttEngine)
+        // 尾段临时文件放 cache：audio 目录里的 *.wav 会被 AudioScan 当「孤儿录音」恢复成草稿。
+        TranscriptWriter(repository, audioStore, sttEngine, tempDir = File(appContext.cacheDir, "stt-tail"))
     }
 
     // ---------------------------------------------------------------- 生成链（Plan 3 / Task 8）

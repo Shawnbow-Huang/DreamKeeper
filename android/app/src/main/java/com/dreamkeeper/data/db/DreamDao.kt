@@ -257,6 +257,31 @@ interface DreamDao {
     suspend fun markTranscriptionRetry(id: String, expectedMs: Long): Int
 
     /**
+     * 追加段转写失败：只改状态，**不动** `rawAudioMs` 与水位（§0.4 失败重试口径）。
+     *
+     * 不能复用首写路径的 `updateTranscriptStatus`：那条只从 `PENDING` 出发且要求正文为空，
+     * 追加行的正文必然非空。这里按 `rawAudioMs` 对齐即可，0 行=让位。
+     */
+    @Query("""
+        UPDATE dreams
+        SET transcriptStatus = 'FAILED'
+        WHERE id = :id
+          AND rawAudioMs = :expectedMs
+    """)
+    suspend fun markAppendFailed(id: String, expectedMs: Long): Int
+
+    /** 启动/启动后补跑：PENDING 且还有未覆盖音频的行（与 status 之外的时长判据一致）。 */
+    @Query("""
+        SELECT * FROM dreams
+        WHERE transcriptStatus = 'PENDING'
+          AND rawAudioPath IS NOT NULL
+          AND rawAudioMs IS NOT NULL
+          AND rawAudioMs > transcriptMs
+        ORDER BY createdAt
+    """)
+    suspend fun pendingAppends(): List<DreamEntity>
+
+    /**
      * 「这段不用转写」：把水位直接推到当前音频末尾，保留旧正文。
      *
      * 只在确有未覆盖音频时生效（`transcriptMs < :expectedMs`），保证水位单调不减。

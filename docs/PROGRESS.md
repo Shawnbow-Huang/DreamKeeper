@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-31 02:52（**Plan 4 开工 2/8**：T1 数据库 v3 + 追加 CAS 已验收（含审计补修 D423），全量 **42 类 382 例**绿；D415–D422 已登记。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
+> 最后更新：2026-10-31 03:18（**Plan 4 开工 3/8**：T1 数据库 v3 + 追加 CAS（含审计补修 D423）、T2 尾段转写与启动补跑已验收，全量 **44 类 395 例**绿；D415–D430 已登记。Plan 3 收尾：39 类 365 例绿、D275–D414 已全部登记）
 
 ## 一、当前在做
 
@@ -76,13 +76,13 @@
 **先修的前提**（专家实测）：仓库没有 OkHttp 也没有 kotlinx.serialization；manifest 没有 INTERNET；
 `check-near-white.ps1` 其实**有** `-MaxRatio`（Plan 2 的登记是错的）。
 
-## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 2/8
+## 二·七、Plan 4（随时语音追加 · 小说化显式触发 · 发布就绪）进行中 3/8
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | T0 契约冻结 | ✅ 完成 | `724d13e`：计划 404 行，DB v2→v3 只加 `dreams.transcriptMs` 水位；三条追加 CAS；`stt/TailWav` 尾段转写；`faithfulText` 基座修正；`novel.v2.1` 第四可选槽；`novel_revise.v1.1` 分流（D408）；版本线/列表/成本栏/生成作用域 |
 | T1 数据库 v3 + 追加 CAS | ✅ 完成 | `dreams.transcriptMs` 水位 + `MIGRATION_2_3`（回填带 `rawAudioMs IS NOT NULL`）+ 四条 CAS（beginAppend/append/retry/skip）+ 3.json；变异两处必红、恢复逐字节同；全量 **41 类 380 例**；证据 `p4-mig-00..02`、`p4-append-00..01`、`p4-full`；D418–D422 |
-| T2 追加写回与重转写兜底 | ⬜ | `stt/TailWav` + writer 排队/启动 reconcile；期望 43 类/390 例 |
+| T2 追加写回与重转写兜底 | ✅ 完成 | `stt/TailWav` 只切尾段 + writer 在飞排队/启动 reconcile（`PENDING && A>T`）+ 失败只置 FAILED；变异删排队必红、恢复逐字节同；全量 **44 类 395 例**；证据 `p4-append-03`；D427–D430 |
 | T3 忠实稿基座与整段重跑 | ⬜ | `faithfulText` 同事务写 + `novel()` 两槽分离 + quote dual 基准 |
 | T4「补一段」入口与原样 tab | ⬜ | append 路由复用录音页；原样 tab 显示忠实稿 + 看原始转写 + 重新理顺；设备 `p4-append-05..07` |
 | T5 小说化显式触发与想法 | ⬜ | 常驻入口 + `NovelIdeaDialog` + `novel.v2.1` 四槽 + promptVersion 解析 + 路由 v1.1 |

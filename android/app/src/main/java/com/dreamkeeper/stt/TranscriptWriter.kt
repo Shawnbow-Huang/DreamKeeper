@@ -26,9 +26,14 @@ class TranscriptWriter(
     private val repository: DreamRepository,
     private val audioStore: WavStore,
     private val engine: SttEngine,
+    /** 尾段临时文件目录；null = 与音频同目录（生产默认）。测试注入临时目录。 */
+    private val tempDir: File? = null,
 ) {
 
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
+
+    /** 在飞期间又来了一次收尾：置位，当前这轮结束后补跑一次（不丢最后一段）。 */
+    private val pendingRerun = ConcurrentHashMap.newKeySet<String>()
 
     /**
      * Service 收尾后调用一次。异常一律吞掉——转写失败不能影响录音已经落盘这件事。
@@ -107,6 +112,115 @@ class TranscriptWriter(
         val rows = repository.markTranscriptFailed(dreamId, expectedMs)
         Log.i(TAG, "转写失败状态写回：$dreamId rows=$rows reason=${reason.take(40)}")
         return rows
+    }
+
+    /**
+     * 追加录音收尾（Plan 4 §0.4）：只转写 `[transcriptMs, rawAudioMs)` 的尾段。
+     *
+     * 三条规则：
+     * 1. 先读行再决定范围——`beginAppend` 已经把新总时长落库，Writer 不再等 UI；
+     * 2. 尾段用 [TailWav] 切成临时小 WAV 再转写，绝不整段重转（否则重复旧文字）；
+     * 3. 在飞期间又收到一次收尾 → 记 [pendingRerun]，当前轮结束后重读行补跑；
+     *    同一段最多拼一次（后缀 CAS 保证幂等）。
+     */
+    suspend fun onAppendFinished(dreamId: String, file: File) {
+        if (!inFlight.add(dreamId)) {
+            pendingRerun.add(dreamId)
+            Log.i(TAG, "同一条梦的尾段转写在飞，已排队补跑：$dreamId")
+            return
+        }
+        try {
+            while (true) {
+                runCatching { appendOnce(dreamId, file) }
+                    .onFailure { Log.w(TAG, "尾段转写异常：$dreamId（${it.message}）") }
+                if (!pendingRerun.remove(dreamId)) break
+            }
+        } finally {
+            inFlight.remove(dreamId)
+        }
+    }
+
+    /**
+     * 启动补转写（F1）：扫「PENDING 且 `rawAudioMs > transcriptMs`」的行，按追加路径补跑。
+     *
+     * 判据**不依赖** `transcriptStatus` 之外的状态机：进程被杀的现场往往就是
+     * 「时长已经落库、正文还没拼上」。`FAILED` 不自动重跑（等用户在详情页点重试）。
+     *
+     * @return 实际发起补跑的行数（诊断口径，不是 UI 事件）
+     */
+    suspend fun reconcilePending(): Int {
+        var attempts = 0
+        for (dream in repository.pendingAppends()) {
+            val path = dream.rawAudioPath ?: continue
+            val file = File(path)
+            if (!file.exists() || audioStore.isOpen(file)) continue
+            attempts++
+            runCatching { onAppendFinished(dream.id, file) }
+                .onFailure { Log.w(TAG, "补转写失败：${dream.id}（${it.message}）") }
+        }
+        if (attempts > 0) Log.i(TAG, "启动补转写：attempts=$attempts")
+        return attempts
+    }
+
+    private suspend fun appendOnce(dreamId: String, file: File) {
+        val row = repository.findById(dreamId) ?: run {
+            Log.w(TAG, "补转写找不到行：$dreamId")
+            return
+        }
+        val toMs = row.rawAudioMs ?: return
+        val fromMs = row.transcriptMs
+        if (toMs <= fromMs) {
+            Log.i(TAG, "没有未覆盖音频，跳过：$dreamId（A=$toMs T=$fromMs）")
+            return
+        }
+        if (audioStore.isOpen(file)) {
+            Log.i(TAG, "音频还在写，跳过尾段转写：$dreamId")
+            return
+        }
+
+        val dir = tempDir ?: file.parentFile
+        val temp = File(dir, "tail-${file.nameWithoutExtension}.wav")
+        val result = try {
+            val dataBytes = TailWav.sliceTo(file, fromMs, temp)
+            if (dataBytes <= 0L) {
+                Log.w(TAG, "尾段为空，标记失败等重试：$dreamId")
+                repository.markAppendFailed(dreamId, toMs)
+                return
+            }
+            transcribe(temp)
+        } finally {
+            temp.delete()
+        }
+
+        val text = (result as? SttResult.Ok)?.text?.trim()
+        if (text != null && isMeaningfulTranscript(text)) {
+            val rows = repository.appendTranscribed(dreamId, "\n" + text, toMs, fromMs)
+            Log.i(TAG, "尾段写回：$dreamId rows=$rows from=$fromMs to=$toMs")
+        } else {
+            val reason = (result as? SttResult.Failed)?.reason ?: "没有识别出可用文字"
+            repository.markAppendFailed(dreamId, toMs)
+            Log.i(TAG, "尾段转写失败写回：$dreamId reason=${reason.take(40)}")
+        }
+    }
+
+    /** 探测 + 一次性转写；把四档可用性折成 [SttResult]。 */
+    private suspend fun transcribe(file: File): SttResult {
+        val availability = runCatching { engine.availability() }
+            .getOrElse { error ->
+                Log.w(TAG, "可用性探测异常：${error.message}")
+                SttAvailability.Unavailable("可用性探测失败")
+            }
+        return when (availability) {
+            SttAvailability.Available -> runCatching { engine.transcribe(file) }
+                .getOrElse { error ->
+                    Log.w(TAG, "转写异常：${error.message}")
+                    SttResult.Failed("转写异常")
+                }
+
+            SttAvailability.AvailableButNoFileInput -> SttResult.Failed("系统不支持文件转写")
+            is SttAvailability.NeedsDownload -> SttResult.Failed("需要下载中文离线包")
+            is SttAvailability.Unavailable -> SttResult.Failed(availability.reason)
+        }
     }
 
     /** 手动补字（详情页）：与自动写回同一条 CAS，成功才置 OK。 */

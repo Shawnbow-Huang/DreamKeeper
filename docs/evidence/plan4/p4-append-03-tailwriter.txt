@@ -1,0 +1,46 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T19:25:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.stt.TailWavTest" --tests "com.dreamkeeper.stt.TranscriptAppendTest" --rerun-tasks --console=plain
+
+# 为什么（T2）
+追加录音只该把「新增尾段」送去识别；整段重转会把已转写文字再拼一遍。系统 STT 只有整文件入口
+（SttEngine.transcribe(file)），所以先切一个只含 [transcriptMs, rawAudioMs) 的临时 WAV，再走同一条入口。
+另外：进程被杀时「时长已落库、正文未拼」是常态 → 启动时按 rawAudioMs > transcriptMs 补转写。
+
+# 改了什么
+- 新 `stt/TailWav.kt`：复制 44 字节 canonical 头、只拷 [44+fromMs*32, EOF) 数据段；
+  重写 RIFF/data 两个 size 字段（源文件占位期可能是 0xFFFFFFFF）；越界写合法空 WAV 并返回 0。
+- `stt/TranscriptWriter.kt`：
+  · `onAppendFinished(dreamId, file)` 读行决定 [T, A) 范围 → TailWav 切片 → 转写 → 后缀 CAS；
+  · 在飞期间再次收尾记 `pendingRerun`，本轮结束后**重读行**补跑（用新水位，不会重复拼）；
+  · `reconcilePending()` 扫「PENDING 且 A > T」的行补跑；FAILED 不自动重跑；
+  · 尾段为空/识别无有效文字 → 只置 FAILED，正文与水位不动。
+- `DreamDao.markAppendFailed(id, expectedMs)`（按 rawAudioMs 对齐、不碰正文/水位）+ `pendingAppends()`；
+- `DreamRepository.appendTranscribed(...)` / `markAppendFailed` / `pendingAppends`；
+- `DreamKeeperApp.onCreate`：audioScan 之后跑 `reconcilePending()`；
+- `AppContainer.transcriptWriter` 注入 `cacheDir/stt-tail`（audio 目录里的 *.wav 会被 AudioScan 当孤儿恢复）。
+
+# 测试（新增 2 类 13 例）
+TailWavTest 6 例：中点切片只含尾段、canonical 头字段（RIFF/data size、采样率、blockAlign/bits）、
+切片数据与源区间逐字节相同、从 0 全量、越界返回 0 且写合法空 WAV、短文件抛 IOException。
+TranscriptAppendTest 7 例（真 Room + 假 STT）：只喂尾段且文本严格追加；无未覆盖音频不调引擎；
+乱码/空白判 FAILED 且保留旧文；在飞期间再收尾 → 排队补跑一次并用新水位（旧段不落库）；
+reconcile 补上 PENDING 行；reconcile 跳过已覆盖/FAILED/已跳过的行。
+
+# 绿跑
+BUILD SUCCESSFUL in 59s：13 tests completed, 0 failed（XML: TailWavTest 6/0、TranscriptAppendTest 7/0）
+
+# 变异反证（必红）
+把 `pendingRerun.add(dreamId)` 删掉（在飞期间的收尾直接丢弃）：
+  TranscriptAppendTest > inFlightFinishQueuesOneRerunWithFreshWatermark FAILED
+  7 tests completed, 1 failed
+  BUILD FAILED in 59s
+恢复后 TranscriptWriter.kt sha256=55393ae1f3159c7f7cd0971d43a4da63bee7e6018140e3e4f4a3b94f3c002388
+  与变异前备份逐字相同（55393ae1…002388）
+
+# 全量
+BUILD SUCCESSFUL in 1m 11s；XML：classes=44 tests=395 failures=0 errors=0 skipped=0
+（382 + TailWavTest 6 + TranscriptAppendTest 7）
+
+# 未覆盖
+设备上的真实追加录音（T4）、进程被杀后补转写（T4/T7 设备证据）、长录音性能。

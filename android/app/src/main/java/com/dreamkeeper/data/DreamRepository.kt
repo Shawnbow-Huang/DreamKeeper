@@ -296,6 +296,17 @@ class DreamRepository(
     suspend fun appendTranscript(id: String, fromMs: Long, toMs: Long, suffix: String): Int =
         dreams.appendTranscript(id, fromMs, toMs, suffix, TranscriptStatus.OK)
 
+    /** 尾段转写成功：拼后缀并推进水位；返回 `false` 表示让位（0 行，不重复拼）。 */
+    suspend fun appendTranscribed(dreamId: String, suffix: String, expectedMs: Long, fromMs: Long): Boolean =
+        dreams.appendTranscript(dreamId, fromMs, expectedMs, suffix, TranscriptStatus.OK) > 0
+
+    /** 尾段转写失败：只改状态（正文与水位都不动）。 */
+    suspend fun markAppendFailed(dreamId: String, expectedMs: Long): Int =
+        dreams.markAppendFailed(dreamId, expectedMs)
+
+    /** 启动补跑：`PENDING` 且 `rawAudioMs > transcriptMs` 的行。 */
+    suspend fun pendingAppends(): List<Dream> = dreams.pendingAppends().map(::toDomain)
+
     /** 手动重试转写：`FAILED` → `PENDING`。 */
     suspend fun markTranscriptionRetry(id: String, expectedMs: Long): Int =
         dreams.markTranscriptionRetry(id, expectedMs)

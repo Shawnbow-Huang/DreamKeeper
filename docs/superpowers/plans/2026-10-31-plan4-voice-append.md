@@ -304,11 +304,11 @@ suspend fun reconcilePendingTranscriptions(): Int   // 启动补转写（F1）
 2. 红 `TranscriptAppendTest`（fake SttEngine，真 Room）：已有转写 → 追加 → 文本严格拼接、水位前进、状态 OK；
    转写中 dataSize 再变 → 补跑一次且只拼一次；被杀遗留 PENDING → reconcile 补上；手改文本 → 追加不覆盖。
 3. 实现，跑绿；变异：把「补跑排队」改回「直接丢弃」→ 补跑用例红；恢复复绿。
-4. 证据 `p4-append-00-red.txt`、`p4-append-01-jvm.txt`（host-only）。
+4. 证据 `p4-append-03-tailwriter.txt`（host-only；因 T2 由 Lead 直接实施，红=两处变异反证，见 D427）。
 
 **Expected**
 - 新 2 类：`TailWavTest`（6 例，含空段/越界/长度不符）、`TranscriptAppendTest`（7 例，含空文本判失败与 skip 水位）；
-  全量 **44 类 / 392 例 / 0 失败**。
+  全量 **44 类 / 395 例 / 0 失败**（T1 后 382 + 13；D428）。
 - 旧 `TranscriptWriterTest` 全绿；不新增依赖。
 
 ## Task 3：忠实稿基座与整段重跑
@@ -338,7 +338,7 @@ suspend fun commitSuccess(
 3. 全量 + 证据 `p4-faithful-00-red.txt` / `01-green.txt` / `02-mutation.txt`。
 
 **Expected**
-- 加 4 例（并入现有类则类数不变；若新建类则 **45 类 / 396 例**，实施者先报 Lead 再定）。
+- 加 4 例（并入现有类则类数不变；若新建类则 **45 类 / 399 例**，实施者先报 Lead 再定）。
 - `p3` 的 GenerationOrchestratorTest 全绿不退化。
 
 ## Task 4：「补一段」入口与原样 tab
@@ -358,7 +358,7 @@ suspend fun commitSuccess(
 4. 变异：去掉防重入 → 自动重跑用例如红；恢复。
 
 **Expected**
-- 全量 **46 类 / 402 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
+- 全量 **46 类 / 405 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
 - 设备：追加后 `rawTranscript` 严格追加、`transcriptMs == rawAudioMs`、faithful 新版本出现、旧版仍可选。
 
 ## Task 5：小说化显式触发与想法
@@ -381,7 +381,7 @@ suspend fun commitSuccess(
 5. D408：`novel_revise.v1.1` 分流 3 条规则 + 2 条解析用例（纯提问→ASK、明确改动→REVISE、拿不准→ASK）。
 
 **Expected**
-- 全量 **47 类 / 406 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
+- 全量 **47 类 / 409 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
 - 资产进包：`unzip -l app-debug.apk | grep prompts/` 含 v2.1 与 v1.1 旧版仍在。
 
 ## Task 6：可见性与体验缺陷
@@ -401,7 +401,7 @@ suspend fun commitSuccess(
 4. 变异：版本线不过滤 → 用例如红。
 
 **Expected**
-- 全量 **49 类 / 410 例 / 0 失败**。
+- 全量 **49 类 / 413 例 / 0 失败**。
 
 ## Task 7：发布就绪与终验
 
@@ -418,7 +418,7 @@ suspend fun commitSuccess(
 5. 看板 8/8、最后更新、下一步 Plan 5。
 
 **Expected**
-- 无新增单测（全量保持 Task 6 的 **49 类 / 410 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
+- 无新增单测（全量保持 Task 6 的 **49 类 / 413 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
 
 ---
 
@@ -437,6 +437,10 @@ suspend fun commitSuccess(
 | D424 | T1 证据 `DEVICE_TIME` 是模板常量（超前 20 分钟）、`p4-mig-02-diff` 的 REPLAY 套了 gradlew、`p4-full` 有两条 REPLAY | 全部改写为真实写入时刻 + 可执行命令，并加「时间口径」注；JVM-only 任务不再借用设备时间 |
 | D425 | T1 证据命名偏离派工书（`-green` 而非 `-after`、`p4-full` 不在 glob） | 保留 `-green` 语义（绿跑而非 after 状态），名实一致优先于派工书笔误；glob 视为示例 |
 | D426 | 计划 T1 Expected 仍写 7 例/377，T2–T7 冻结计数因此少算 | 统一为 42 类/382 例起，T2–T7 顺延为 44/392、45/396、46/402、47/406、49/410、49/410 |
+| D427 | T2 由 Lead 直接实施（上一个实施者不可寻址且已挂起），无「先红」阶段 | 以变异反证代替红：删 `pendingRerun.add` → 补跑用例红；证据 `p4-append-03-tailwriter.txt` 记原文与恢复 sha |
+| D428 | T2 实测新增 13 例（6+7），计划冻结的 392 例少算 3 例 | 全量口径改为 44 类/395 例，T3–T7 顺延为 45/399、46/405、47/409、49/413、49/413 |
+| D429 | 尾段临时 WAV 若落 audio 目录，会被 AudioScan 当「孤儿录音」恢复成草稿 | 临时文件固定落 `cacheDir/stt-tail`，`finally` 删除；`AppContainer` 注入 `tempDir` |
+| D430 | `TailWav.sliceTo` 源文件短于 44 字节时无法构造合法 WAV | 抛 `IOException`（不是静默 0）；越界/空段才写合法空 WAV 返回 0，由调用方判失败 |
 | D422 | 2026-10-31 | T1 | `scripts/check-migrate.py` 的 `diff_2_3` 比较前需去 `i:`/`s:` 前缀 | 实测踩到：dump 值是 canon 字符串，`transcriptStatus == "OK"` 恒假 → 回填期望永远算成 0，真实数据必 RED。已加 `decanon()`；修后 fixture GREEN、负向 RED、v1→v2 回归逐字不变 |
 
 ## 10. 自审记录
@@ -462,6 +466,23 @@ suspend fun commitSuccess(
   （重复追加风险）→ 改 `existing?.transcriptMs ?: dream.transcriptMs` + 2 例 + 变异必红 + `p4-append-02-watermark.txt`；
   同时修正证据 `DEVICE_TIME` 模板值/REPLAY（D424）与命名偏离（D425）、计数口径（D426）。
 - **结论**：通过。偏差 D418–D426 已登记；下一步 T2（写回/reconcile/TailWav）。
+
+### Task 2 验收（Lead，2026-10-31）
+
+- **交付**：`f1768fe` 之后的工作区（本提交）——`stt/TailWav.kt`、`stt/TranscriptWriter.kt`（在飞排队 + reconcile）、
+  `DreamDao.markAppendFailed/pendingAppends`、`DreamRepository` 三个包装、`DreamKeeperApp.onCreate` 启动补跑、
+  `AppContainer` 注入 `cacheDir/stt-tail`、`TailWavTest`（6 例）、`TranscriptAppendTest`（7 例）、
+  `docs/evidence/plan4/p4-append-03-tailwriter.txt`。
+- **Lead 独立复跑**：targeted `--rerun-tasks` → `13 tests completed, 0 failed`（59s）；
+  全量 `--rerun-tasks` → **44 类 / 395 例 / 0 / 0 / 0**（1m11s）。
+- **契约核对**：切片只含 `[transcriptMs, rawAudioMs)`、头 44 字节新 size；成功走后缀 CAS 且文本严格 `before + "\n" + suffix`；
+  在飞重入排队一次、本轮结束**重读行**用新水位补跑；失败只 `markAppendFailed`（正文/水位不动）；
+  启动 reconcile 只补 `PENDING && rawAudioMs > transcriptMs`，FAILED 不自动重跑；临时文件在 cache 且 `finally` 删除。
+- **变异**：删 `pendingRerun.add` → `inFlightFinishQueuesOneRerunWithFreshWatermark` 红（7/1，BUILD FAILED 59s）；
+  恢复后 `TranscriptWriter.kt` sha256 `55393ae1…002388` 与备份逐字同（D427 以变异代红）。
+- **证据**：`p4-append-03-tailwriter.txt`（host-only 头；含为什么/改法/测试/绿跑/变异原文/恢复 sha/全量/未覆盖）。
+- **PENDING**：设备真实追加录音（T4）、进程被杀后的启动补转写（T4/T7）、长录音性能（T7）。
+- **结论**：通过。偏差 D427–D430 已登记；下一步 T3（忠实稿基座与整段重跑）。
 
 每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。

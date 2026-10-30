@@ -37,6 +37,9 @@ class DreamKeeperApp : Application() {
             if (container.audioScanOnStart) {
                 runCatching { container.audioScan.run() }
                     .onFailure { Log.w(TAG, "启动音频扫描失败：${it.message}") }
+                // F1：扫描修好时长后，把「有未覆盖音频的 PENDING 行」补转写（Plan 4 §0.3）。
+                runCatching { container.transcriptWriter.reconcilePending() }
+                    .onFailure { Log.w(TAG, "启动补转写失败：${it.message}") }
             }
         }
     }
