@@ -47,6 +47,7 @@ import com.dreamkeeper.ui.calendar.CalendarViewModel
 import com.dreamkeeper.ui.day.DayScreen
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.detail.DetailScreen
+import com.dreamkeeper.ui.detail.GenerationTracker
 import com.dreamkeeper.ui.followup.FollowUpScreen
 import com.dreamkeeper.ui.library.LibraryScreen
 import com.dreamkeeper.ui.library.LibraryViewModel
@@ -93,8 +94,12 @@ fun DreamKeeperRoot(
     initialSearchQuery: String = "",
     /** 生成 + 改稿门面（Task 9 / D352）；默认 null 让既有预览与测试无需装配。 */
     orchestrator: ReviseOrchestrator? = null,
+    /** 生成任务作用域（T6b）：容器持有，切页不取消。 */
+    generationScope: kotlinx.coroutines.CoroutineScope? = null,
 ) {
     val nav = rememberNavController()
+    // T6b：进度表活在导航根上——详情页重建（返回再进入）仍能看见在跑/失败。
+    val generationTracker = remember { GenerationTracker() }
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
     val showBottomBar = current == DreamRoute.Calendar.route || current == DreamRoute.Library.route
@@ -213,6 +218,8 @@ fun DreamKeeperRoot(
                     onBack = { nav.popBackStack() },
                     orchestrator = orchestrator,
                     onAppend = { target -> nav.navigate(DreamRoute.Append(target).route) },
+                    generationScope = generationScope,
+                    generationTracker = generationTracker,
                 )
             }
             composable("append/{dreamId}") { backStackEntry ->

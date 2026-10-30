@@ -162,6 +162,10 @@ fun DetailScreen(
     orchestrator: ReviseOrchestrator? = null,
     /** Plan 4 §0.4：去追加录音（路由由宿主提供）。 */
     onAppend: (String) -> Unit = {},
+    /** Plan 4 T6b：容器的生成作用域；null 时退化为 viewModelScope。 */
+    generationScope: kotlinx.coroutines.CoroutineScope? = null,
+    /** Plan 4 T6b：跨页生成进度表；null 时只在 ViewModel 内有效（测试/预览）。 */
+    generationTracker: GenerationTracker? = null,
 ) {
     val vm: DetailViewModel = viewModel {
         DetailViewModel(
@@ -171,11 +175,14 @@ fun DetailScreen(
             // Task 8 的生成链也挂在同一个容器编排器上；没有容器时两处都为 null，详情页只读。
             orchestrator = orchestrator?.generation,
             revise = orchestrator,
+            generationScope = generationScope,
+            tracker = generationTracker,
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val generationPhase by vm.generationPhase.collectAsStateWithLifecycle()
     val novelIdeaOpen by vm.novelIdeaPrompt.collectAsStateWithLifecycle()
+    val costMicroYuan by vm.costMicroYuan.collectAsStateWithLifecycle()
     val exportState by vm.export.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var exportOpen by rememberSaveable { mutableStateOf(false) }
@@ -239,6 +246,7 @@ fun DetailScreen(
                                 reviseError = state.reviseError,
                                 revisionAck = state.revisionAck,
                                 generationPhase = generationPhase,
+                                costMicroYuan = costMicroYuan,
                                 onGenerateFaithful = vm::generateFaithful,
                                 onGenerateNovel = vm::requestNovel,
                                 novelIdeaOpen = novelIdeaOpen,
@@ -671,6 +679,7 @@ private fun NovelTab(
     reviseError: String?,
     revisionAck: Int,
     generationPhase: GenerationPhase,
+    costMicroYuan: Long,
     onGenerateFaithful: () -> Unit,
     onGenerateNovel: () -> Unit,
     novelIdeaOpen: Boolean,
@@ -732,6 +741,15 @@ private fun NovelTab(
                     color = Paper,
                 )
             }
+        }
+        val cost = costLabel(costMicroYuan)
+        if (cost != null) {
+            Text(
+                text = cost,
+                modifier = Modifier.padding(start = 16.dp, top = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = InkFaint,
+            )
         }
         VersionStrip(
             versions = versions,

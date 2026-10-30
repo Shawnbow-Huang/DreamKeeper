@@ -180,6 +180,25 @@ class AppendEntryTest {
         assertEquals(TranscriptStatus.OK, row?.transcriptStatus)
     }
 
+    // 7) 生成进度写进跨页进度表（T6b）：请求还没回来时 tracker 必须已是 Running，
+    // 否则用户离开再回来会以为没在跑、又能点一次。
+    @Test
+    fun `generation phase is published to the tracker`() = runTest(dispatcher) {
+        seed(dream("d7", rawAudioMs = 1_000, transcriptMs = 1_000))
+        val tracker = GenerationTracker()
+        runner.gate = CompletableDeferred()
+        val vm = DetailViewModel(repo, "d7", orchestrator = runner, tracker = tracker)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        withTimeout(5_000) { vm.state.first { it.loaded && it.dream != null } }
+        assertEquals(GenerationPhase.Idle, tracker.phaseFor("d7"))
+        vm.generateFaithful()
+        advanceUntilIdle()
+        assertEquals(GenerationPhase.Running(GenerationKind.FAITHFUL, 1), tracker.phaseFor("d7"))
+        runner.gate?.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(GenerationPhase.Idle, tracker.phaseFor("d7"))
+    }
+
     // ---------------------------------------------------------------- harness
 
     private fun dream(

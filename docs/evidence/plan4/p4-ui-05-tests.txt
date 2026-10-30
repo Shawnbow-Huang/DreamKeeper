@@ -1,0 +1,49 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T20:10:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.GenerationScopeTest" --tests "com.dreamkeeper.ui.detail.AppendEntryTest" --rerun-tasks --console=plain
+
+# T6b 证据：成本行 + 跨页进度表（先红后绿的「绿」与变异反证）
+
+## 为什么改
+生成请求原本挂在 `viewModelScope`：用户点完「生成」切走，请求被取消，回到页面看到 Idle——
+等于白花钱、还可能让人再点一次（双份成本）。成本行与「跨页进度表」是同一件事的两面：
+把「在跑」放在 ViewModel 之外，把「花了多少」从 `llm_calls` 读出来。
+
+## 改法
+- `GenerationTracker`（导航根持有）：按 dreamId 存 Running/Failed，成功后清空。
+- `DetailViewModel(generationScope, tracker)`：launch 用容器 `generationScope ?: viewModelScope`；
+  所有状态写入口收敛到 `publishPhase()`，本地 Flow 与 tracker 只写一处。
+- 成本行：`LlmCallDao.sumCostByDream` → `DreamRepository.sumCostMicroYuan` → VM `costMicroYuan`；
+  `costLabel(0)=null`（不显示），否则 `累计 ¥%.4f`。
+
+## 新增用例（共 5 例）
+1. `GenerationScopeTest.zeroCostHidesTheCostLine` — 0 微元不显示。
+2. `GenerationScopeTest.microYuanIsShownWithFourDecimals` — 3200 → `累计 ¥0.0032`；123456 → `累计 ¥0.1235`。
+3. `GenerationScopeTest.runningPhaseSurvivesOutsideTheViewModel` — tracker 默认 Idle、Set Running 后可见、别的梦不受影响。
+4. `GenerationScopeTest.clearingAndFailingAreScopedPerDream` — Failed 可覆盖 Running、clear 只清一个 dreamId。
+5. `AppendEntryTest.generation phase is published to the tracker` — 真 Room + 真 repo + 门闩 fake runner：
+   生成在飞时 tracker 必须是 `Running(FAITHFUL,1)`，完成后回 `Idle`。
+
+## 绿跑
+- `GenerationScopeTest`：BUILD SUCCESSFUL in 26s，XML tests=4 failures=0。
+- `AppendEntryTest`：BUILD SUCCESSFUL in 22s，XML tests=7 failures=0。
+- 全量 `:app:testDebugUnitTest --rerun-tasks`：BUILD SUCCESSFUL in 54s，
+  XML 汇总 **classes=49 tests=418 failures=0 errors=0 skipped=0**（413 + 5）。
+
+## 变异反证（tracker 同步被拿掉必红）
+把 `publishPhase()` 里 `is Running -> tracker?.running(...)` 改成 `Unit`：
+
+```
+AppendEntryTest > generation phase is published to the tracker FAILED
+7 tests completed, 1 failed
+BUILD FAILED in 27s
+```
+
+恢复后 `DetailViewModel.kt` sha256 =
+`eef4594e2b892914cf864b2376266d928fbec304ed7629c72852368d1d198714`，
+targeted 复绿。
+
+## 未覆盖（PENDING 到 T7/真机）
+- 真实网络下的「离开 3 分钟再回来」：设备证据 `p4-ui-04-scope` 只证明了「~25s 的请求在离开期间完成」。
+- 进程被杀后的 Running 恢复：tracker 是内存态，进程重启后归 Idle（请求确实也断了），
+  是否需要把「在跑」也落库，留给 Plan 5 评估。

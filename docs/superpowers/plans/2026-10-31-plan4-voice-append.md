@@ -421,7 +421,7 @@ suspend fun commitSuccess(
 5. 看板 8/8、最后更新、下一步 Plan 5。
 
 **Expected**
-- 无新增单测（全量保持 Task 6 的 **48 类 / 413 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
+- 无新增单测（全量保持 T6b 的 **49 类 / 418 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
 
 ---
 
@@ -467,6 +467,11 @@ suspend fun commitSuccess(
 | D450 | 2026-10-31 | T6a | `observeAllWithPreview()` 的 SQL 没有单测 | Room 查询要靠真实库跑；`LibraryPreviewTest` 只锁纯函数兜底顺序，SQL 由设备 `p4-ui-01` 的现象佐证（列表正文切到选中版） |
 | D451 | 2026-10-31 | T6a | 设备截图只能证明「可见项里没有 faithful」 | `LazyRow` 只渲染可见项，远端行不在截图里；过滤的确定性证据是 `VersionStripFilterTest` + 变异必红，设备图只作现象佐证 |
 
+| D452 | 2026-10-31 | T6b | 成本行用四位小数（`累计 ¥%.4f`），不是计划写的两位 | 一次调用的量级常是 0.001–0.01 元，两位小数会永远显示 ¥0.00；单位是微元（1e-6），四位是能让「花了钱」可见的最小位数 |
+| D453 | 2026-10-31 | T6b | 跨页进度表 `GenerationTracker` 由导航根 `remember` 持有，作用域由容器注入 `generationScope` | 请求必须活过 ViewModel；进度表必须活过 ViewModel 的进度字段。放容器会引入 ui→di 反向依赖，放 ViewModel 又活不过重建——导航根是两者共同祖先 |
+| D454 | 2026-10-31 | T6b | 新增 5 例（4 例 `GenerationScopeTest` + 1 例 `AppendEntryTest`），不是计划写的 4 例 → 49 类/418 例 | 纯 tracker 单测杀不掉「VM 忘了写 tracker」这个变异；第 5 例用真 Room + 门闩 runner 证明 `publishPhase` 真的同步了两处 |
+| D455 | 2026-10-31 | T6b | 设备截图 nearWhite≈0.13% 沿用 D441 的状态栏例外 | 两张图都是详情页深色背景，白像素集中在状态栏与手势条；正文本体 nearWhite=0 |
+| D456 | 2026-10-31 | T6b | 设备证据用「离开再回来成本 0.0105→0.0114、版本 v8→v9」证明 app-scope，Running 瞬态未截到 | 本机生成约 25s，导航往返约 6s，回来时已完成；Running 语义由第 5 例与 `runningPhaseSurvivesOutsideTheViewModel` 守，不硬凑截图 |
 ## 10. 自审记录
 
 ### T0 契约冻结（Lead，2026-10-31）
@@ -567,3 +572,13 @@ suspend fun commitSuccess(
 - **证据**：`p4-ui-00-tests.txt`（host-only）、`p4-ui-01-list.{png,txt}`、`p4-ui-02-version.{png,txt}`（均 nearWhite=0）。
 - **PENDING**：SQL 无单测（D450）、远端 faithful 不可截图（D451）、成本行/app-scope 转 T6b（D449）。
 - **结论**：通过。下一步 T6b（成本行 + 生成 app-scope，49 类/417 例）→ T7 终验。
+
+### Task 6b 验收（Lead，2026-10-31）
+
+- **交付**：`ui/detail/GenerationTracker.kt`（新，导航根持有的进度表）；`DetailViewModel` 增 `generationScope`/`tracker` 参数与 `publishPhase()` 收口、成本 `costMicroYuan`；`DetailScreen` 增两参数与成本行渲染、`NovelTab(costMicroYuan)`；`VersionStrip.costLabel()`；`LlmCallDao.sumCostByDream` + `DreamRepository.sumCostMicroYuan`；`DreamKeeperRoot`（`remember { GenerationTracker() }` + `generationScope` 透传）、`MainActivity` 传 `container.generationScope`；新测试 `GenerationScopeTest`（4 例）+ `AppendEntryTest` 第 7 例。
+- **Lead 独立复跑**：`GenerationScopeTest` 4/0（26s）、`AppendEntryTest` 7/0（22s）；全量 `--rerun-tasks` → **49 类 / 418 例 / 0 失败 / 0 错误 / 0 跳过**（54s）。
+- **契约核对**：`costLabel(0)==null`（无请求不占行）、四位小数；`publishPhase` 三态同步 tracker；launch 走 `generationScope ?: viewModelScope`；版本条仍不含 faithful。
+- **变异**：`is Running -> tracker?.running(...)` 改 `Unit` → `AppendEntryTest > generation phase is published to the tracker FAILED`（7/1，27s）；恢复后 `DetailViewModel.kt` sha256 `eef4594e…8714`，targeted 复绿。
+- **证据**：`p4-ui-05-tests.txt`（host-only）、`p4-ui-03-cost.{png,txt}`（成本行 ¥0.0105）、`p4-ui-04-scope.{png,txt}`（离开再回来：¥0.0114、v9、补写 4 处）。
+- **PENDING**：进程被杀后的 Running 恢复（tracker 是内存态）；真实网络的长时间离开（T7 真机）；成本行在 0 请求梦上的设备截图（JVM 已锁）。
+- **结论**：通过。Task 6 收口；下一步 T7（发布就绪与终验）。

@@ -107,6 +107,13 @@ class DetailViewModel(
     private val orchestrator: GenerationRunner? = null,
     /** 对话改稿入口（Task 9）。默认 null 同样只为不破既有两参单测；生产由根容器注入。 */
     private val revise: ReviseOrchestrator? = null,
+    /**
+     * 生成任务的协程作用域（Plan 4 T6b / §0.10）。生产传容器的 `generationScope`：
+     * 用户退出详情页不该掐掉已经在跑的请求；null 时退化为 `viewModelScope`（单测/预览）。
+     */
+    private val generationScope: kotlinx.coroutines.CoroutineScope? = null,
+    /** 跨 ViewModel 的进度表（T6b）：重进详情页要能看见 Running / Failed。 */
+    private val tracker: GenerationTracker? = null,
 ) : ViewModel() {
 
     private val dreamId: String = dreamId
@@ -160,6 +167,9 @@ class DetailViewModel(
     private var fixedByteMs: Long = Long.MIN_VALUE
 
     init {
+        viewModelScope.launch {
+            runCatching { _costMicroYuan.value = repo.sumCostMicroYuan(dreamId) }
+        }
         viewModelScope.launch { refreshConversation() }
         val playback = playback
         if (playback != null) {
@@ -192,10 +202,22 @@ class DetailViewModel(
 
     // ------------------------------------------------------------ 生成入口（Task 8 / 9b）
 
-    private val _generationPhase = MutableStateFlow<GenerationPhase>(GenerationPhase.Idle)
+    private val _generationPhase = MutableStateFlow<GenerationPhase>(
+        tracker?.phaseFor(dreamId) ?: GenerationPhase.Idle,
+    )
 
     /** 当前生成进度。成功后回到 [GenerationPhase.Idle]——正文已经由 `state` 的 Flow 刷新。 */
     val generationPhase: StateFlow<GenerationPhase> = _generationPhase.asStateFlow()
+
+    /** 写本地 + 跨页进度表（T6b）：只写一处，避免两条来源打架。 */
+    private fun publishPhase(phase: GenerationPhase) {
+        _generationPhase.value = phase
+        when (phase) {
+            GenerationPhase.Idle -> tracker?.clear(dreamId)
+            is GenerationPhase.Running -> tracker?.running(dreamId, phase.kind, phase.attempt)
+            is GenerationPhase.Failed -> tracker?.failed(dreamId, phase.kind, phase.reason)
+        }
+    }
 
     /**
      * 小说化想法对话框是否打开（Plan 4 T5）。
@@ -203,6 +225,10 @@ class DetailViewModel(
      * 为什么不直接生成：用户要的是「先说说自己的想法，再点生成」——对话框是这一步的唯一入口，
      * 关掉就等于放弃了「显式触发」的语义（不许随整理稿自动生成，见 D344/D395）。
      */
+    /** 成本行（T6b）：0 表示没有真实请求，UI 不显示。 */
+    private val _costMicroYuan = MutableStateFlow(0L)
+    val costMicroYuan: StateFlow<Long> = _costMicroYuan.asStateFlow()
+
     private val _novelIdeaPrompt = MutableStateFlow(false)
     val novelIdeaPrompt: StateFlow<Boolean> = _novelIdeaPrompt.asStateFlow()
 
@@ -213,6 +239,9 @@ class DetailViewModel(
     private val appendPending = MutableStateFlow(false)
 
     init {
+        viewModelScope.launch {
+            runCatching { _costMicroYuan.value = repo.sumCostMicroYuan(dreamId) }
+        }
         viewModelScope.launch {
             state.collect { state ->
                 if (!appendPending.value) return@collect
@@ -292,24 +321,28 @@ class DetailViewModel(
         if (_generationPhase.value is GenerationPhase.Running) return
         val dream = state.value.dream ?: return
         if (dream.transcriptStatus != TranscriptStatus.OK) {
-            _generationPhase.value = GenerationPhase.Failed(
-                kind,
-                "转写还没完成，先把原文补上再生成",
+            publishPhase(
+                GenerationPhase.Failed(
+                    kind,
+                    "转写还没完成，先把原文补上再生成",
+                ),
             )
             return
         }
         if (dream.rawTranscript.trim().isEmpty()) {
-            _generationPhase.value = GenerationPhase.Failed(
-                kind,
-                "原文是空的，先补上字再生成",
+            publishPhase(
+                GenerationPhase.Failed(
+                    kind,
+                    "原文是空的，先补上字再生成",
+                ),
             )
             return
         }
         // 闸门先于 runner 判空：没有容器时也不能把「转写没完成」悄悄吞成 Idle。
         val runner = orchestrator ?: return
         val id = dream.id.ifBlank { dreamId }
-        _generationPhase.value = GenerationPhase.Running(kind, 1)
-        viewModelScope.launch {
+        publishPhase(GenerationPhase.Running(kind, 1))
+        (generationScope ?: viewModelScope).launch {
             val result = when (kind) {
                 GenerationKind.FAITHFUL -> runner.generateFaithful(id) { _, attempt ->
                     onGenerationProgress(kind, attempt)
@@ -320,10 +353,11 @@ class DetailViewModel(
             }
             val failure = result.failure
             if (failure != null) {
-                _generationPhase.value = GenerationPhase.Failed(kind, humanReason(failure))
+                publishPhase(GenerationPhase.Failed(kind, humanReason(failure)))
             } else {
                 refreshConversation()
-                _generationPhase.value = GenerationPhase.Idle
+                runCatching { _costMicroYuan.value = repo.sumCostMicroYuan(id) }
+                publishPhase(GenerationPhase.Idle)
             }
         }
     }

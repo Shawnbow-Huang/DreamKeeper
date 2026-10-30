@@ -1,0 +1,28 @@
+APK_SHA256=6ec4bcd21ae4c517..  (13929546 B, app-debug.apk, T6b 构建)
+DEVICE_TIME=Sat Oct 31 04:03:59 CST 2026
+REPLAY=adb shell screencap -p /sdcard/cost.png && adb pull /sdcard/cost.png docs/evidence/plan4/p4-ui-03-cost.png
+
+# T6b 证据 03：成本行（成本行可见性 + 版本线可见）
+
+## 这张图要证明什么
+1. 有真实请求的梦，小说化 tab 顶部显示「累计 ¥0.0105」——数字来自 `llm_calls.costMicroYuan` 求和，
+   不是 UI 估算。
+2. 0 请求的梦不显示这一行（JVM 用例 `zeroCostHidesTheCostLine` 守的是同一口径）。
+3. 版本线只显示 novel / novel_revise 版本（v8/v7/v6），faithful 版本不出现在条上（D448）。
+
+## 页面事实（截图逐项）
+- 标题「10月8日 周四」；tab 行：原样 / 小说化 / 标签 / 素材。
+- 生成入口：仅「小说化」一枚按钮（已有整理稿，「原样整理」按 D406 收起）。
+- 行「补写 3 处 · 查看」、右侧「导出」。
+- **「累计 ¥0.0105」**（InkFaint，labelSmall）。
+- 版本条：`v8 · 无说明`、`v7 · 这一版没改，保留原样 · 改动 0 处`、`v6 · …`；状态行「当前 v4 · 已选中」。
+- 正文为选中版 v4 的段落；底部快捷 chips + 输入条 + 播放条「这条梦没有录音」。
+
+## 复跑/读法
+- 先把设备库拉回来（force-stop 后三件齐拉，见 Task 10 的坑），`SELECT SUM(costMicroYuan) FROM llm_calls WHERE dreamId='seed-dream-2'`
+  应等于 10500；UI 显示四位小数 = 10500/1e6。
+- 若显示 `¥0.0000` 或空行，说明没有请求或聚合口径被改坏——两者都是回归。
+
+PNG_SHA256=ff51cb6039290b5d5f6fd65704cb32aaede3684648a29f40962b63056b7c37ff
+PNG_BYTES=327025
+NEAR_WHITE=0.1324% (状态栏白像素，例外见 D441/D455)

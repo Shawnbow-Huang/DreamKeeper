@@ -1,0 +1,32 @@
+APK_SHA256=6ec4bcd21ae4c517..  (13929546 B, app-debug.apk, T6b 构建)
+DEVICE_TIME=Sat Oct 31 04:07:12 CST 2026
+REPLAY=点「小说化」→ 对话框点「生成」→ 立即 adb shell input keyevent 4 ×2 离开详情 → 重新进 10月8日「教室」→ 小说化 tab → 截屏
+
+# T6b 证据 04：生成跑在 ViewModel 之外（离开页面再回来，请求没被掐掉）
+
+## 这张图要证明什么
+1. 点「生成」后立刻离开详情页（返回列表→返回日历），请求仍在容器的 `generationScope` 上继续跑。
+2. 重新进入同一个梦（新的 ViewModel 实例）时：
+   - 版本线多出 `v9 · 无说明`；
+   - 成本行从 `¥0.0105` 涨到 `¥0.0114`（多出一次真实请求 ¥0.0009）；
+   - 「补写」计数从 3 处变 4 处。
+   三条都说明这次请求是在页面离开期间完成的，不是页面内缓存。
+3. 跨页进度表（`GenerationTracker`）让重新进页后的 UI 能拿到「在跑/失败」；Running 瞬态没截到
+   （本机生成 ~25s，导航回来时已完成），该语义由 JVM 用例
+   `generation phase is published to the tracker` 与 `runningPhaseSurvivesOutsideTheViewModel` 守。
+4. 版本条依旧不含 faithful 版本（v9/v8/v7）。
+
+## 前后对照（同一梦 seed-dream-2）
+| 时刻 | 成本行 | 版本条顶部 | 补写计数 |
+| --- | --- | --- | --- |
+| 离开前（p4-ui-03） | 累计 ¥0.0105 | v8 · 无说明 | 3 处 |
+| 回来后（本图） | 累计 ¥0.0114 | v9 · 无说明 | 4 处 |
+
+## 读法
+- 若回来后成本行没涨、也没有 v9：说明要么请求被 ViewModel 取消（T6b 白做），要么 tracker 让 UI
+  误判已结束；先查 logcat 的 `DKLLM` 行与 `llm_calls` 行数。
+- 本图没有「正在写…」横幅：回来时已完成，属正常；Running 的截图不是本任务的验收项。
+
+PNG_SHA256=3cb01b78f14c22291ec8b03c943b77a5442c805bc3273adbc0290a175549f412
+PNG_BYTES=327011
+NEAR_WHITE=0.1275% (状态栏白像素，例外见 D441/D455)

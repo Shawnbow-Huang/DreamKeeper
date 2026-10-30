@@ -24,6 +24,7 @@ import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.InkDim
 import com.dreamkeeper.ui.theme.Paper
 import com.dreamkeeper.ui.theme.NightRaised
+import java.util.Locale
 import org.json.JSONArray
 
 /**
@@ -33,6 +34,13 @@ import org.json.JSONArray
  * 「vN · 无说明」，**不带改动数**——版本级改动数只有新格式 `changeLogJson` 能算，
  * 旧种子的正文套正则会把这个 seed 的总改动数安到每个版本上。
  */
+/**
+ * 成本行文案（T6b）：0 微元（没有真实请求、或历史全失败）返回 null——UI 不显示，
+ * 别拿「¥0.0000」占一行。单位是微元（1e-6 元），四位小数能看清一次调用的量级。
+ */
+fun costLabel(microYuan: Long): String? =
+    if (microYuan <= 0L) null else String.format(Locale.US, "累计 ¥%.4f", microYuan / 1_000_000.0)
+
 fun versionLabel(n: Int, summary: String?, changeCount: Int): String {
     val clean = summary?.trim().orEmpty()
     return if (clean.isEmpty()) {

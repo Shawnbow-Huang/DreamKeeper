@@ -38,6 +38,7 @@ class DreamRepository(
     private val dreams = db.dreamDao()
     private val tags = db.tagDao()
     private val assets = db.mediaAssetDao()
+    private val llmCalls = db.llmCallDao()
 
     /**
      * 按月查询（闭区间）。`DreamCalendar.monthRange` 返回「月首、月末」两天，
@@ -306,6 +307,9 @@ class DreamRepository(
         dreams.beginAppend(id, newRawAudioMs)
 
     /** 尾段转写写回：后缀 CAS，返回 0 表示让位/已拼过（不重复拼接）。 */
+    /** 详情页成本行：这条梦所有真实请求（含失败行，失败行 cost=0）的微元合计。 */
+    suspend fun sumCostMicroYuan(dreamId: String): Long = llmCalls.sumCostByDream(dreamId)
+
     suspend fun appendTranscript(id: String, fromMs: Long, toMs: Long, suffix: String): Int =
         dreams.appendTranscript(id, fromMs, toMs, suffix, TranscriptStatus.OK)
 
