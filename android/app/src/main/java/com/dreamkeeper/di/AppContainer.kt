@@ -7,6 +7,9 @@ import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.TagDao
+import com.dreamkeeper.data.security.AndroidKeystoreCipher
+import com.dreamkeeper.data.security.ApiKeyStore
+import com.dreamkeeper.data.security.KeystoreApiKeyStore
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.stt.SttEngine
 import com.dreamkeeper.stt.SystemSttEngine
@@ -49,6 +52,20 @@ class AppContainer(
     val generationScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
 
     private val appContext: Context = context.applicationContext
+
+    /**
+     * Key 的加密存储（Task 2）：Keystore 里 AES-256/GCM/NoPadding，prefs 里只有
+     * `Base64(iv‖ct)` 一个字符串。独立 `settings` 文件 + 单键 [KeystoreApiKeyStore]，
+     * 密文被导出也解不开（密钥不可导出，且不随备份走）。
+     *
+     * `by lazy`：不打开设置页、不跑生成任务就不碰 Keystore。
+     */
+    val apiKeyStore: ApiKeyStore by lazy {
+        KeystoreApiKeyStore(
+            AndroidKeystoreCipher(),
+            appContext.getSharedPreferences("settings", Context.MODE_PRIVATE),
+        )
+    }
 
     /** 进程内唯一的 Room 实例；`DreamDatabase.create` 内部没有 `fallbackToDestructiveMigration` */
     val database: DreamDatabase by lazy { DreamDatabase.create(appContext) }

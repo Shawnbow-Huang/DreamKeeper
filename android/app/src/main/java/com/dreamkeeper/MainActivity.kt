@@ -73,6 +73,8 @@ class MainActivity : ComponentActivity() {
         } else {
             null
         }
+        // Task 2 的 debug 写入口（brief §0.11）：给 prefs/logcat 取实物证据用，release 里不存在。
+        applyDebugKeyIntent(intent)
 
         // Activity 只做一件事：把根界面接进主题
         setContent {
@@ -85,6 +87,8 @@ class MainActivity : ComponentActivity() {
                     repo = container.repository,
                     // 排布偏好也由容器给：界面不自己 getSharedPreferences（否则换个 Context 就丢配置）
                     layoutPrefs = container.layoutPrefs,
+                    // Key 的加密存储同理：设置页只认容器里的这一份
+                    apiKeyStore = container.apiKeyStore,
                     // 标签页的重命名/删除走 DAO；合并仍在仓库层（要动关联表，必须事务）
                     tagDao = container.tagDao,
                     session = container.recordingSession,
@@ -114,6 +118,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        applyDebugKeyIntent(intent)
         val entry = intent
             .getStringExtra(RecordingService.EXTRA_ENTRY)
             ?.let { RecordViewModel.parseEntry(it) }
@@ -140,6 +145,24 @@ class MainActivity : ComponentActivity() {
             val flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             if (locked) window.addFlags(flags) else window.clearFlags(flags)
+        }
+    }
+
+    /**
+     * Task 2 的 debug 写入口（brief §0.11）：
+     * `adb shell am start -n com.dreamkeeper/.MainActivity --es dk_debug_save_key <key>`
+     * 走容器真实保存，`--ez dk_debug_clear_key true` 清除——只为拿 prefs/logcat 实物证据。
+     * **只在 DEBUG 包里生效**；release 用 `grep -c dk_debug_save_key app-release-unsigned.apk` = 0 把关。
+     *
+     * 同步执行：Keystore 加密 + `commit()` 都是毫秒级，且取证脚本随后就会读 prefs，
+     * 放到异步线程反而要猜何时写完。
+     */
+    private fun applyDebugKeyIntent(intent: Intent?) {
+        if (!BuildConfig.DEBUG) return
+        val container = (application as DreamKeeperApp).container
+        intent?.getStringExtra("dk_debug_save_key")?.let { container.apiKeyStore.save(it) }
+        if (intent?.getBooleanExtra("dk_debug_clear_key", false) == true) {
+            container.apiKeyStore.clear()
         }
     }
 
