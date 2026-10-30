@@ -866,6 +866,14 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D193 | Task 6 需「只改音频指针」与「读音频相关行」两个动作，既有 DAO 方法不够 | `DreamDao` 加 `setAudio`，`DreamRepository` 加对应读方法（都不碰 `rawTranscript`/`updatedAt`） | 计划 Task 6 Files；schema 零变更（`git diff --exit-code -- android/app/schemas` = 0） |
 | D194 | 状态③（有行无文件）若用干净行做前置，证据会「自己证明自己」 | 先用状态②恢复出的草稿行做前置，再删文件观察 `markMissing` | 计划 Task 6 §0-7；`p2-scan-03-db.txt` / `p2-scan-06-orphan-before/after.txt` |
 | D195 | 计划只规定四态各一张图，实际恢复出的草稿在首页与当日页都可见 | 额外补 `p2-scan-07-home.png` / `p2-scan-07-day.png` / `p2-scan-07-ui.txt` | 计划 Task 6 §0-12 证据清单 |
+| D196 | Task 7 实施者用 Bash `export JAVA_HOME=…` 而不是 PowerShell 的 `$env:JAVA_HOME` | 语义等价，`ops_bash` 默认就是 Bash，不算绕过纪律 | `task-7-report.md` §6 D-1 |
+| D197 | §0.7 只给了「正文 + 状态」一条 CAS，但失败路径需要「置 FAILED 且保留已有原文」 | 新增第二条 CAS `updateTranscriptStatus`，条件收紧为 `transcriptStatus = 'PENDING'`，避免迟到的失败覆盖用户手动补好的 OK；两条都不写 `updatedAt` | `DreamDao.kt` Task 7 段；`DreamDaoTest`/`TranscriptWriterTest` 覆盖 |
+| D198 | `FollowUpViewModel` 收尾无条件写 `PENDING`，会把转写已写的 `FAILED` 盖回「正在转写…」，用户永远等不到结果 | Lead 手修：DAO 新增 `finishFollowUp`（CASE：`FAILED` 保持、无文本才置 `PENDING`、有文本保持），`DreamRepository` 转发，`FollowUpViewModel` 改调用；新增回归用例 + 变异验证（去掉 FAILED 分支 → 1 红） | `FollowUpViewModelTest > collapse must not clobber a FAILED transcription status`；全量 237 用例 |
+| D199 | `TranscriptWriter.awaitRow` 在「行存在但 `rawAudioMs` 还是旧值」时立即失败，追问补录那一次转写被静默跳过 | 改为最多 5 s 有界等待 `rawAudioMs == expectedMs`，并补第 7 条回归用例（仍满足「有界」） | `task-7-report.md` §6 D-4；`TranscriptWriterTest` 第 7 条 |
+| D200 | `p2-stt-05` 负对照标 `NOT_EXECUTED`：本机无中文 on-device 包，任何 WAV 都进不了 `transcribe`，绕过可用性检查去跑等于伪造负对照 | 如实在证据里标未执行；负对照留给有设备端中文包的机器 | `docs/evidence/plan2/p2-stt-05-negative.txt`；`task-7-report.md` §7 |
+| D201 | 模拟器未加 `-allow-host-audio`、输入全零，本轮从未观察到 `Ok` | 所有 `Ok`/分段/超时结论只来自 JVM 单测，一律标「设备未验证」；33+ 正路径在报告与看板上都写未通过 | `p2-stt-03-attempt.txt`：`entered_transcribe=NO`、`pipe_created=NO`、`bytes_written_to_pipe=0` |
+| D202 | 追加录音后「重转写」策略未定：CAS 的 `TRIM(rawTranscript)=''` 守卫会让已有文本的行不接受新转写，补录那段的话不会进正文（宁可不假装，也不覆盖） | 本轮不加宽守卫、不写 `updatedAt`；把「追加后如何重转写」登记为 Plan 3 待决（候选：区分机器文本/用户文本两列，或加 `transcriptEpoch`） | `DreamDao.finishFollowUp` 注释；`task-7-report.md` §2.6 |
+| D203 | Task 7 的可用性探测在本机结论是 `Unavailable(本机没有中文离线识别)`（`installed/supported/pending/online` 四表全空） | 如实落证据，只交「能失败、不伪造」；`Available`/`NeedsDownload` 两档只有 JVM 单测覆盖（`mapSupport` 纯函数） | `docs/evidence/plan2/p2-stt-02-availability.txt`；`SystemSttEngineSupportTest` |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
