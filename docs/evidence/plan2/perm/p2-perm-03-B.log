@@ -1,0 +1,49 @@
+apk_sha256=3979f0f61160cdc4
+device_date=Fri Oct 30 19:41:44 CST 2026
+rerun=bash docs/evidence/plan2/e2e/run-perm-b.sh
+=== shared device_date
+Fri Oct 30 19:41:44 CST 2026
+=== BEFORE (denied, calendar up)
+  pidof        : 24582
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  audio files  : 4
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-04-B-calendar.png serial=emulator-5554 bytes=95814 dims=1080x2400 sha256=3B03ED723A7FF5250B72B893A903DF45729F16C87D77360BE1206F5E4090B945
+=== tap 说梦 with permission denied at 19:41:51
+Fri Oct 30 19:41:50 CST 2026
+=== AFTER
+  pidof        : 24582
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  audio files  : 4
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-05-B-denied.png serial=emulator-5554 bytes=72258 dims=1080x2400 sha256=0A926628CB39CA9B7DD46FDB883F59F6FCD4E2B18CEA96A6B5DB1ADC9B8F8D53
+--- logcat slice
+10-30 19:41:45.137   710   728 V WindowManager: Sent Transition (#234) createdAt=10-30 19:41:45.027 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=135 effectiveUid=10237 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=com.dreamkeeper/.MainActivity } baseActivity=ComponentInfo{com.dreamkeeper/com.dreamkeeper.MainActivity} topActivity=ComponentInfo{com.dreamkeeper/com.dreamkeeper.MainActivity} origActivity=null realActivity=ComponentInfo{com.dreamkeeper/com.dreamkeeper.MainActivity} realActivityIsAppLockEnabled=false numActivities=1 lastActiveTime=14470499 supportsMultiWindow=true supportsMultiWindowWithoutConstraints=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{a49b98b Task{913a0dd #135 type=standard A=10237:com.dreamkeeper}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 0 - 0, 0) topActivityInfo=ActivityInfo{46e8a68 com.dreamkeeper.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isInteractive=false isVisible=false isVisibleRequested=false isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=false lastNonFullscreenBounds=null leafTaskBoundsFromOptions= false capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=503 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false isLeafTask= true eligibleForLetterboxEducation= false isLetterboxEducationEnabled= true isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityAppBounds=Rect(0, 0 - 1080, 2400) isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null topNonResizableActivityAspectRatio=-1.0} topActivityMainWindowFrame=null isAppBubble=false}, pipChange = null, remoteTransitionInfo = null, displayChanges = null, requestedLocation = null, userChange = null, windowingLayerChange = null, fullscreenRequestChange = null, flags = 0, debugId = 234 }
+10-30 19:41:45.137   710   728 V WindowManager:         {WCT{RemoteToken{a49b98b Task{913a0dd #135 type=standard A=10237:com.dreamkeeper}}} m=OPEN f=MOVE_TO_TOP|FLAG_CHANGED_INTERACTIVE leash=Surface(name=Task=135#2441)/@0xf09c27c sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1 winMode=1 userId=0},
+10-30 19:41:45.350 24582 24582 D nativeloader: Configuring clns-9 for other apk /data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk. target_sdk_version=37, uses_libraries=, library_path=/data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/lib/x86_64:/data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.dreamkeeper
+10-30 19:41:45.361 24582 24582 V GraphicsEnvironment: com.dreamkeeper is not listed in per-application setting
+10-30 19:41:45.640   710  5595 D CoreBackPreview: Window{854e9d6 u0 com.dreamkeeper/com.dreamkeeper.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@30dcd62, mPriority=-1, mIsAnimationCallback=false, mOverrideBehavior=0}
+10-30 19:41:46.188 24582 24586 I com.dreamkeeper: Compiler allocated 5250KB to compile void android.view.ViewRootImpl.performTraversals(long)
+10-30 19:41:46.681   710  5595 D WindowManager: setClientSurface Surface(name=VRI-com.dreamkeeper/com.dreamkeeper.MainActivity#2450)/@0xd407ef3 for 854e9d6 com.dreamkeeper/com.dreamkeeper.MainActivity
+10-30 19:41:46.811 24582 24582 I com.dreamkeeper: hiddenapi: Accessing hidden method Landroid/os/SystemProperties;->addChangeCallback(Ljava/lang/Runnable;)V (runtime_flags=0, domain=platform, api=unsupported) from Landroidx/compose/ui/platform/AndroidComposeView$Companion; (domain=app, TargetSdkVersion=37) using reflection: allowed
+10-30 19:41:46.813   710   728 I ActivityTaskManager: Displayed com.dreamkeeper/.MainActivity for user 0: +1s788ms
+10-30 19:41:46.866   710   834 I ImeTracker: com.dreamkeeper:a063110b: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false userId 0 displayId 0
+10-30 19:41:46.872   710  5595 I ImeTracker: com.dreamkeeper:92905d7b: onRequestHide at ORIGIN_SERVER reason HIDE_SOFT_INPUT fromUser false userId 0 displayId 0
+10-30 19:41:46.872   710  5595 I ImeTracker: com.dreamkeeper:92905d7b: onCancelled at PHASE_SERVER_SHOULD_HIDE
+10-30 19:41:46.879  1399  1399 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1446 onStartInput(EditorInfo{EditorInfo{packageName=com.dreamkeeper, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+10-30 19:41:46.882   710  1252 W PackageConfigPersister: App-specific configuration not found for packageName: com.dreamkeeper and userId: 0
+10-30 19:41:46.889 24582 24582 I ImeTracker: com.dreamkeeper:a063110b: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+10-30 19:41:47.194   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:pidof com.dreamkeeper'
+10-30 19:41:47.321   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:dumpsys package com.dreamkeeper'
+10-30 19:41:47.338  3335 17758 I artd    : GetBestInfo: /data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk has no usable artifacts
+10-30 19:41:47.471   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:run-as com.dreamkeeper ls files/audio'
+10-30 19:41:48.687   710  5595 D CoreBackPreview: Window{854e9d6 u0 com.dreamkeeper/com.dreamkeeper.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@6abbd0d, mPriority=0, mIsAnimationCallback=true, mOverrideBehavior=0}
+10-30 19:41:50.496   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:pidof com.dreamkeeper'
+10-30 19:41:50.612   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:dumpsys package com.dreamkeeper'
+10-30 19:41:50.623  3335 17758 I artd    : GetBestInfo: /data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk has no usable artifacts
+10-30 19:41:50.765   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:run-as com.dreamkeeper ls files/audio'
+10-30 19:41:51.395 24582 24646 D ProfileInstaller: Installing profile for com.dreamkeeper
+--- FATAL count=0
+--- top activity
+    topResumedActivity=ActivityRecord{194378932 u0 com.dreamkeeper/.MainActivity t135}
+--- press 说梦 a second time (must not loop dialogs)
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-06-B-denied-twice.png serial=emulator-5554 bytes=72258 dims=1080x2400 sha256=0A926628CB39CA9B7DD46FDB883F59F6FCD4E2B18CEA96A6B5DB1ADC9B8F8D53
+    topResumedActivity=ActivityRecord{194378932 u0 com.dreamkeeper/.MainActivity t135}

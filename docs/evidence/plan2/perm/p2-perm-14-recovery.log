@@ -1,0 +1,20 @@
+apk_sha256=3979f0f61160cdc4
+device_date=Fri Oct 30 19:43:53 CST 2026
+rerun=bash docs/evidence/plan2/e2e/run-perm-recover.sh
+=== shared device_date
+Fri Oct 30 19:43:53 CST 2026
+=== grant state (must be granted=true)
+      android.permission.RECORD_AUDIO
+        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+=== appops
+Uid mode: RECORD_AUDIO: foreground
+RECORD_AUDIO: allow; time=+58s207ms ago; rejectTime=+25s78ms ago; duration=+2s744ms
+=== record 2 s at 19:43:59
+Fri Oct 30 19:44:00 CST 2026
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-15-recovery-followup.png serial=emulator-5554 bytes=100485 dims=1080x2400 sha256=293B64A1C6B56478833E69452A58F8C80E9840A815EC5272B99EA1D6BD634CBC
+--- newest wav
+total 876
+-rw------- 1 u0_a237 u0_a237  65228 2026-10-30 19:43 0b0b270e-977f-41b2-8938-03ccc3c43ac4.wav
+--- FATAL count=0
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-16-recovery-done.png serial=emulator-5554 bytes=95618 dims=1080x2400 sha256=4D30455C9C8AAC9E02994CC9EE80D29D4DD4D123289C0E2DEA869C37897E1DCA
+Fri Oct 30 19:44:04 CST 2026

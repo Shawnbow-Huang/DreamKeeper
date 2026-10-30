@@ -1,0 +1,32 @@
+apk_sha256=3979f0f61160cdc4
+device_date=Fri Oct 30 19:41:22 CST 2026
+rerun=bash docs/evidence/plan2/e2e/run-perm-a.sh
+=== shared device_date (all three paths use this line)
+Fri Oct 30 19:41:22 CST 2026
+=== BEFORE (idle)
+  pidof        : 24436
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  audio files  : 3
+=== start recording, then revoke WHILE recording
+--- during recording (isForeground proof)
+    isForeground=true foregroundId=42 types=0x00000080 foregroundNoti=Notification(channel=recording shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT|ONLY_ALERT_ONCE|FOREGROUND_SERVICE color=0x00000000 category=service actions=1 vis=PRIVATE)
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-01-A-recording.png serial=emulator-5554 bytes=84898 dims=1080x2400 sha256=A4A724A1AC783FF8811CD099AC332182BA65893D1520ABB648FA16132FFE2015
+--- revoke at 19:41:29
+revoke_exit=0
+=== AFTER revoke (still inside the 6 s press window)
+  pidof        : 
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  audio files  : 4
+Fri Oct 30 19:41:28 CST 2026
+=== AFTER press window closed
+  pidof        : 
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  audio files  : 4
+--- logcat since -c (FATAL / AndroidRuntime / SecurityException / AudioRecord)
+10-30 19:41:27.208   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:pm revoke com.dreamkeeper android.permission.RECORD_AUDIO'
+10-30 19:41:27.227   710   770 I ActivityManager: Killing 24436:com.dreamkeeper/u0a237 (adj 0): permissions revoked
+10-30 19:41:27.234   710  7696 W AppOps  : Operation not started: uid=10237 pkg=com.dreamkeeper(null) op=RECORD_AUDIO
+--- logcat: any FATAL at all?  count=0
+--- top activity after revoke
+      topResumedActivity=ActivityRecord{84931524 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t2}
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-02-A-after-revoke.png serial=emulator-5554 bytes=1385653 dims=1080x2400 sha256=4801AF16E23A54AE5B9F6435925F687222A6CE6B7E7BD8F78D282087FC56F41E

@@ -38,3 +38,8 @@ __pycache__/
 
 # Plan 2 采集脚本产生的临时 raw/log（不进库）
 docs/evidence/plan2/.p2-*
+
+# SQLite 临时旁文件不做证据
+*.db-shm
+*.db-wal
+*.db-journal

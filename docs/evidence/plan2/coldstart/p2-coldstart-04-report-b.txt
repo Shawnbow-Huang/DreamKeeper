@@ -1,0 +1,14 @@
+apk_sha256=3979f0f61160cdc4
+device_date=Fri Oct 30 19:47:26 CST 2026
+rerun=powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-logcat.ps1 -Runs 3 -MaxStartMs 2000 -OutFile docs/evidence/plan2/coldstart/p2-coldstart-03-logcat-b.txt
+device_date_before: Fri Oct 30 19:47:26 CST 2026
+ADB: C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe serial=emulator-5554 mode=cold-start x3
+RUN 1: status=ok TotalTime=1813ms
+RUN 2: status=ok TotalTime=1955ms
+RUN 3: status=ok TotalTime=1796ms
+LOGCAT: docs/evidence/plan2/coldstart/p2-coldstart-03-logcat-b.txt lines=1523 bytes=312803
+CRASHES: 0
+LAUNCH: Displayed=3 statuses=ok,ok,ok
+STARTUP: runs=1813,1955,1796 min=1796ms median=1813ms max=1955ms
+RESULT: OK
+device_date_after: Fri Oct 30 19:47:37 CST 2026

@@ -1,0 +1,30 @@
+apk_sha256=3979f0f61160cdc4
+device_date=Fri Oct 30 19:38:56 CST 2026
+rerun=bash docs/evidence/plan2/e2e/run-live-take.sh
+Fri Oct 30 19:38:56 CST 2026
+--- existing wavs before press
+b5249a66-76b0-4a15-8c0b-0535edc57f45.wav
+--- during press (new file appears)
+5a182061-fd4a-49fc-9054-8a6f8d9f8e8d.wav
+b5249a66-76b0-4a15-8c0b-0535edc57f45.wav
+new_file=5a182061-fd4a-49fc-9054-8a6f8d9f8e8d.wav
+--- isForeground (must be true BEFORE t1)
+    isForeground=true foregroundId=42 types=0x00000080 foregroundNoti=Notification(channel=recording shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT|ONLY_ALERT_ONCE|FOREGROUND_SERVICE color=0x00000000 category=service actions=1 vis=PRIVATE)
+    startRequested=true delayedStop=false stopIfKilled=true callStart=true lastStartId=1
+--- t1
+Fri Oct 30 19:38:59 CST 2026
+58348
+14305.54 82237.16
+--- t2
+Fri Oct 30 19:39:02 CST 2026
+128748
+14307.75 82247.54
+RESULT: OK path=docs/evidence/plan2/e2e/p2-e2e-11-live-take-mid.png serial=emulator-5554 bytes=86155 dims=1080x2400 sha256=0A08673199D8FFF6A01D4D42D762EDE6FAC541D8856ABDAEFC1051992C7FA38A
+--- after release
+Fri Oct 30 19:39:05 CST 2026
+160748
+ 52 49 46 46 e4 73 02 00 57 41 56 45 66 6d 74 20
+ 10 00 00 00 01 00 01 00 80 3e 00 00 00 7d 00 00
+ 02 00 10 00 64 61 74 61 c0 73 02 00
+RESULT: OK path=docs/evidence/plan2/e2e/p2-e2e-12-live-take-followup.png serial=emulator-5554 bytes=100208 dims=1080x2400 sha256=089FBEE1978AD23785CA0069A16790E43C02037E45A19C1134C95630A2545C81
+wav=5a182061-fd4a-49fc-9054-8a6f8d9f8e8d.wav

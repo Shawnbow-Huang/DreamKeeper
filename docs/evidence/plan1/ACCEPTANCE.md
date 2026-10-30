@@ -92,3 +92,52 @@
 2. **`task9-search-punct.png` 抓过两版**：第一版把系统输入法（白键盘）一起截了进去，且输入的是「电!!!」（仍会命中「电」）；第二版清空后只输入 `!!!`，并先按返回键收起输入法再抓，文件已被第二版覆盖（sha `C2C4136B…`）。
 3. **标签页不做「按标签筛梦」**：Task 9 范围是标签管理（改/并/删），点胶囊只弹「按标签筛梦还没做，之后会有」；筛选留给 Plan 2 的检索功能。
 4. **§14.7 的采样方式换过**：原计划的「空闲 5 分钟前后各采一次 delta」两次实现都因解析 bug 没读到表行，改用累计计数器口径（见 `task9-14-7-network.txt` 第三、四节），并把这件事写在证据文件里而不是藏起来。
+
+## 3b 音频证据表（Plan 2 / Task 9 复核，2026-10-30）
+
+说明一：本节按 design **v1.5** 的 §14 口径复核。v1.5 的 §14 共 **8** 条，其中 §14.8（Plan 3 的检索/相似梦）不在 Plan 2 范围，状态见 3c。
+说明二：§14.2 已按 v1.5 改口径——**段间不补静音**（D153），要证的是「电话前后的话都在、且段内位置不变」，不是「补齐空隙」。
+
+判据（简报 0.2/0.4/0.5）：W2b 按字节验头（`riffSize==bytes-8`、`dataSize==bytes-44`、`rem=(bytes-44)%32==0`、整 44 字节 canonical）；W2c 容器可解以 `ffmpeg -v warning` 的 stderr 为准，只允许 `Guessed Channel Layout: mono` 一行；`Δms` 只作附注不作判据（头正确时 ffprobe 与公式同源，属循环论证）；`RMS dBFS` 只记录不判。
+本机是模拟器且启动参数无 `-allow-host-audio`（`emulator -avd … -no-snapshot -no-audio` 之外的音频路由全关），录不到真实人声，所以机制类判据全绿也只给 **PASS-ENV**；「合格」需真机复跑。
+
+| wav | bytes(t1)/bytes(t2) | RIFF/data 字段 | dataSize==bytes-44 | (bytes-44)/32 ms | ffprobe duration | Δms | RMS dBFS | 信号来源 | rem | 结论 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `p2-wav-01.wav` | 32044/32044 | riff=0x7d24 data=0x7d00 | ✓ | 1000.0 | 1.000000 | +0.0 | -inf | fixture（python/代码两份同 sha） | 0 | PASS-ENV |
+| `p2-followup-appended.wav` | 121644/153644 | riff=0x25824 data=0x25800 | ✓ | 4800.0 | 4.800000 | +0.0 | -76.74 | seam（模拟器灌零） | 0 | PASS-ENV |
+| `p2-scan-02-repaired.wav` | 137644/137644 | riff=0x219a4 data=0x21980 | ✓ | 4300.0 | 4.300000 | +0.0 | -76.75 | seam（模拟器灌零） | 0 | PASS-ENV |
+| `b5249a66-76b0-4a15-8c0b-0535edc57f45.wav` | 124844/185644 | riff=0x2d524 data=0x2d500 | ✓ | 5800.0 | 5.800000 | +0.0 | -76.95 | seam（模拟器灌零） | 0 | PASS-ENV |
+| `p2-e2e-live-take.wav` | 58348/128748 | riff=0x273e4 data=0x273c0 | ✓ | 5022.0 | 5.022000 | +0.0 | -76.90 | seam（模拟器灌零） | 0 | PASS-ENV |
+| `2fe64b54-dab2-4716-9138-443438ad0c8c.wav` | 96396/192396 | riff=0x2ef84 data=0x2ef60 | ✓ | 6011.0 | 6.011000 | +0.0 | -76.92 | seam（模拟器灌零） | 0 | PASS-ENV |
+| `3fc451d7-7530-4ef1-9074-7f3a25d684b7.wav` | 80204/80204 | riff=0x13944 data=0x13920 | ✓ | 2505.0 | 2.505000 | +0.0 | -inf | seam（appops ignore → audioserver silencing） | 0 | PASS-ENV |
+
+逐行附注（均由 `docs/evidence/plan2/e2e/build-3b-table.py` 从真实字节重算，可复跑）：
+- `p2-wav-01.wav`：bytes=32044、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 0/16000
+- `p2-followup-appended.wav`：bytes=153644、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 65950/76800
+- `p2-scan-02-repaired.wav`：bytes=137644、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 58878/68800
+- `b5249a66-76b0-4a15-8c0b-0535edc57f45.wav`：bytes=185644、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 75966/92800
+- `p2-e2e-live-take.wav`：bytes=160748、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 66399/80352
+- `2fe64b54-dab2-4716-9138-443438ad0c8c.wav`：bytes=192396、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 79390/96176
+- `3fc451d7-7530-4ef1-9074-7f3a25d684b7.wav`：bytes=80204、rem=0、canonical 头=True、ffmpeg stderr 1 行（非 mono 提示 0 行）、非零样本 0/40080
+
+`bytes(t1)/bytes(t2)` 的取值口径：t1 取「`isForeground=true` 之后、松手之前」的采样，t2 取回填完成后的稳态；fixture/回填/静音三行的 t1=t2 是构造使然（一次性写入或本就无增长），不是只采一次。
+活录速率旁证：`5a182061` 两次采样 Δbytes=70,400 / Δt=2.21 s = **31,855 B/s**，落在 `16000 Hz × 16 bit × 1 ch = 32,000 B/s` 的 ±2% 内。
+
+证据落盘：`docs/evidence/plan2/e2e/p2-e2e-00-index.md`（9.1 十步 + 9.3 崩溃恢复四阶段 + 活录两次采样）、`docs/evidence/plan2/audit/p2-audit-00-index.md`（7 文件 7 行的全库一致性，容差 0，`RESULT: GREEN`）、`docs/evidence/plan2/perm/p2-perm-00-index.md`（三路权限）、`docs/evidence/plan2/coldstart/p2-coldstart-00-index.md`（冷启动 9 次 + 近白闸门）。
+
+## 3c §14 状态更新（Plan 2 收尾）
+
+design v1.5 的 §14 共 8 条；本节只写「本轮（Plan 2 / Task 9）结论 + 归属」，不改 §1 的 Plan 1 历史结论。
+
+| §14 | 条目（v1.5 口径） | 本轮结论 | 归属 |
+|---|---|---|---|
+| §14.1 | 录音→转写→成梦的端到端主链路 | 音频侧端到端已实测通过（录 4 s → 追问页 → 补录 2 s → 收起 → 详情页 `0:05.8` 可播）；转写侧在模拟器恒不可用（中文离线包缺失），整条链路**不能判绿** | Plan 4（真机 + 中文离线包） |
+| §14.2 | 跨多次按压追加、段间不补静音（D153） | **音频层已证**：Task 5 的 `p2-followup-appended.wav` 4800 ms = 段一 3800 ms + 段二 1000 ms，第一段 PCM 未变（md5 `dc475bacad05bf86e6b2dec9afe7d725`），两段之间没有插入静音；本轮 e2e 复现同一形状（5800 ms = 3900 + 1900）。**通话场景仍缺**（模拟器上无法制造系统级通话打断） | 音频层结案；通话场景归 Plan 4 |
+| §14.3 | 转写保真（check-faithful.py） | 未覆盖：模拟器无中文识别服务，`transcriptStatus` 7/7 为 `FAILED` | Plan 3（需 `scripts/check-faithful.py` 在真机跑通） |
+| §14.4 | 转写文本的编辑/校对（手动补字） | 详情页「手动补字」入口已见，但本轮未做输入与保存的实测 | Plan 3 |
+| §14.5 | 小说化/摘要 | 未覆盖，需造数（本轮没有可用转写文本） | Plan 4 |
+| §14.6 | 飞行模式下的行为 | 本轮可录、中文转写 Unavailable（Task 7 已证同一现象），§14.6 的**完整**判定（飞行模式 + 真机 + 离线包）仍未覆盖 | Plan 3 |
+| §14.7 | 无网络权限/无出网（负向） | 负向证据已有（`task9-14-7-network.txt`：manifest 无 `INTERNET`、计数表无该 uid）；真抓包仍未做 | 负向证据结案；真抓包归 Plan 3 |
+| §14.8 | 检索 / 相似梦 | 不在 Plan 2 范围 | Plan 3 |
+
+本轮偏差（编号接 Task 8 的 D209，从 **D210** 起）与逐项细节见 `.superpowers/sdd/2026-10-30-audio-and-transcription/task-9-report.md` 的「偏差」一节。

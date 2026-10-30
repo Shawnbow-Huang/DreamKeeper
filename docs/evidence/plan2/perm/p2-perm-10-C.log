@@ -1,0 +1,68 @@
+apk_sha256=3979f0f61160cdc4
+device_date=Fri Oct 30 19:42:51 CST 2026
+rerun=bash docs/evidence/plan2/e2e/run-perm-c.sh
+=== shared device_date
+Fri Oct 30 19:42:51 CST 2026
+=== BEFORE (granted=true but appops=ignore)
+  pidof        : 24793
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  appops RECORD: Uid mode: RECORD_AUDIO: foreground
+RECORD_AUDIO: allow; time=+1m26s779ms ago; duration=0
+  audio files  : 4
+=== press 2.5 s at 19:42:57
+Fri Oct 30 19:42:58 CST 2026
+=== AFTER
+  pidof        : 24793
+  pkg RECORD   : android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+  appops RECORD: Uid mode: RECORD_AUDIO: foreground
+RECORD_AUDIO: allow; time=+3s838ms ago; duration=+2s744ms
+  audio files  : 5
+RESULT: OK path=docs/evidence/plan2/perm/p2-perm-11-C-appops-ignore.png serial=emulator-5554 bytes=99946 dims=1080x2400 sha256=8C2002F71C5394E71DC9F84F6B77A82D26C068232E8513B615DB8053A9EBA0FD
+--- logcat slice (exception class hunt)
+10-30 19:42:51.574 24793 24793 W com.dreamkeeper: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, alderlake, pantherlake, default
+10-30 19:42:51.644   710   728 V WindowManager: Sent Transition (#238) createdAt=10-30 19:42:51.510 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=136 effectiveUid=10237 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=com.dreamkeeper/.MainActivity } baseActivity=ComponentInfo{com.dreamkeeper/com.dreamkeeper.MainActivity} topActivity=ComponentInfo{com.dreamkeeper/com.dreamkeeper.MainActivity} origActivity=null realActivity=ComponentInfo{com.dreamkeeper/com.dreamkeeper.MainActivity} realActivityIsAppLockEnabled=false numActivities=1 lastActiveTime=14536981 supportsMultiWindow=true supportsMultiWindowWithoutConstraints=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{b0bf909 Task{9e4a8c8 #136 type=standard A=10237:com.dreamkeeper}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 0 - 0, 0) topActivityInfo=ActivityInfo{feff70e com.dreamkeeper.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isInteractive=false isVisible=false isVisibleRequested=false isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=false lastNonFullscreenBounds=null leafTaskBoundsFromOptions= false capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=503 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false isLeafTask= true eligibleForLetterboxEducation= false isLetterboxEducationEnabled= true isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityAppBounds=Rect(0, 0 - 1080, 2400) isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null topNonResizableActivityAspectRatio=-1.0} topActivityMainWindowFrame=null isAppBubble=false}, pipChange = null, remoteTransitionInfo = null, displayChanges = null, requestedLocation = null, userChange = null, windowingLayerChange = null, fullscreenRequestChange = null, flags = 0, debugId = 238 }
+10-30 19:42:51.644   710   728 V WindowManager:         {WCT{RemoteToken{b0bf909 Task{9e4a8c8 #136 type=standard A=10237:com.dreamkeeper}}} m=OPEN f=MOVE_TO_TOP|FLAG_CHANGED_INTERACTIVE leash=Surface(name=Task=136#2479)/@0x8d590c2 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1 winMode=1 userId=0},
+10-30 19:42:51.669   710  1250 W WindowManager: Exception thrown during dispatchAppVisibility Window{854e9d6 u0 com.dreamkeeper/com.dreamkeeper.MainActivity EXITING}
+10-30 19:42:51.685   710   723 E WindowOrganizerController: Attempting to externally change a non-organized container: Task{913a0dd #135 type=standard A=10237:com.dreamkeeper}={handlePackageUpdate:false,} playercount=2 taskorg=android.window.ITaskOrganizer$Stub$Proxy@c6d8261
+10-30 19:42:51.947 24793 24793 D nativeloader: Configuring clns-9 for other apk /data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk. target_sdk_version=37, uses_libraries=, library_path=/data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/lib/x86_64:/data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.dreamkeeper
+10-30 19:42:51.961 24793 24793 V GraphicsEnvironment: com.dreamkeeper is not listed in per-application setting
+10-30 19:42:52.292   710  1250 D CoreBackPreview: Window{202af20 u0 com.dreamkeeper/com.dreamkeeper.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@8339d4c, mPriority=-1, mIsAnimationCallback=false, mOverrideBehavior=0}
+10-30 19:42:52.819 24793 24798 I com.dreamkeeper: Compiler allocated 5250KB to compile void android.view.ViewRootImpl.performTraversals(long)
+10-30 19:42:53.346   710  1250 D WindowManager: setClientSurface Surface(name=VRI-com.dreamkeeper/com.dreamkeeper.MainActivity#2489)/@0xcaf5195 for 202af20 com.dreamkeeper/com.dreamkeeper.MainActivity
+10-30 19:42:53.497 24793 24793 I com.dreamkeeper: hiddenapi: Accessing hidden method Landroid/os/SystemProperties;->addChangeCallback(Ljava/lang/Runnable;)V (runtime_flags=0, domain=platform, api=unsupported) from Landroidx/compose/ui/platform/AndroidComposeView$Companion; (domain=app, TargetSdkVersion=37) using reflection: allowed
+10-30 19:42:53.504   710   728 I ActivityTaskManager: Displayed com.dreamkeeper/.MainActivity for user 0: +1s991ms
+10-30 19:42:53.558   710   834 I ImeTracker: com.dreamkeeper:c7ccb311: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false userId 0 displayId 0
+10-30 19:42:53.565   710  1250 I ImeTracker: com.dreamkeeper:d5e12ae0: onRequestHide at ORIGIN_SERVER reason HIDE_SOFT_INPUT fromUser false userId 0 displayId 0
+10-30 19:42:53.565   710  1250 I ImeTracker: com.dreamkeeper:d5e12ae0: onCancelled at PHASE_SERVER_SHOULD_HIDE
+10-30 19:42:53.567  1399  1399 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1446 onStartInput(EditorInfo{EditorInfo{packageName=com.dreamkeeper, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+10-30 19:42:53.570   710  1250 W PackageConfigPersister: App-specific configuration not found for packageName: com.dreamkeeper and userId: 0
+10-30 19:42:53.578 24793 24793 I ImeTracker: com.dreamkeeper:c7ccb311: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+10-30 19:42:53.693   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:pidof com.dreamkeeper'
+10-30 19:42:53.845   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:dumpsys package com.dreamkeeper'
+10-30 19:42:53.862  3335  3335 I artd    : GetBestInfo: /data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk has no usable artifacts
+10-30 19:42:53.995   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:cmd appops get com.dreamkeeper RECORD_AUDIO'
+10-30 19:42:54.134   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:run-as com.dreamkeeper ls files/audio'
+10-30 19:42:54.298   552   611 D AudioFlinger: mixer(0x743eb2fa8790) throttle end: throttle time(36)
+10-30 19:42:54.326   710  1798 D CoreBackPreview: Window{202af20 u0 com.dreamkeeper/com.dreamkeeper.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@e956e0a, mPriority=0, mIsAnimationCallback=true, mOverrideBehavior=0}
+10-30 19:42:55.392   710  1798 I ActivityManager: Background started FGS: Allowed [callingPackage: com.dreamkeeper; callingUid: 10237; uidState: TOP ; uidBFSL: [BFSL]; BFGS denied: false; intent: Intent { act=com.dreamkeeper.action.START xflg=0x4 cmp=com.dreamkeeper/.service.RecordingService (has extras) }; code:PROC_STATE_TOP; tempAllowListReason:<null>; allowWiu:12; targetSdkVersion:37; callerTargetSdkVersion:37; startForegroundCount:0; bindFromPackage:null; isBindService:false]
+10-30 19:42:55.414   552 12648 D AudioFlinger: onStateChanged: pid:24793  uid:10237  state:unfrozen - no freeze activity
+10-30 19:42:55.414 24793 24793 D AudioSystem: getService: IAudioFlingerService retrieved: 0x7b3a2eaaced0  IAudioFlinger cached: 0x7b3a6ea50930
+10-30 19:42:55.423   552 24855 I AudioFlinger: AudioFlinger's thread 0x743eb2e0ca38 tid=24855 ready to run
+10-30 19:42:55.712 24793 24793 W com.dreamkeeper: Verification of void androidx.compose.material3.internal.ChildSemanticsNodeElement.inspectableProperties(androidx.compose.ui.platform.InspectorInfo) took 257.404ms (69.93 bytecodes/s) (0B arena alloc)
+10-30 19:42:56.398 24793 24798 I com.dreamkeeper: Compiler allocated 6215KB to compile kotlin.Unit com.dreamkeeper.ui.record.RecordScreenKt.RecordScreen$lambda$24(boolean, boolean, androidx.compose.runtime.State, boolean, boolean, com.dreamkeeper.ui.record.RecordViewModel, androidx.compose.ui.hapticfeedback.HapticFeedback, com.dreamkeeper.ui.nav.RecordEntry, androidx.compose.runtime.MutableState, androidx.compose.runtime.MutableLongState, androidx.compose.runtime.MutableState, androidx.compose.runtime.State, boolean, java.lang.String, kotlin.jvm.functions.Function0, android.content.Context, kotlin.jvm.functions.Function0, androidx.compose.runtime.MutableState, androidx.compose.foundation.layout.BoxWithConstraintsScope, androidx.compose.runtime.Composer, int)
+10-30 19:42:57.828 24793 24860 D ProfileInstaller: Installing profile for com.dreamkeeper
+10-30 19:42:58.319   710   781 I AppsFilter: interaction: PackageSetting{2ff8974 com.dreamkeeper/10237} -> PackageSetting{1891869 com.google.android.as/10149} BLOCKED
+10-30 19:42:58.985   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:pidof com.dreamkeeper'
+10-30 19:42:59.103   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:dumpsys package com.dreamkeeper'
+10-30 19:42:59.118  3335  3335 I artd    : GetBestInfo: /data/app/~~iDWZXtzhF39xVHuPr9dsrQ==/com.dreamkeeper-1bV80nlS7MpeFDOS2TFekg==/base.apk has no usable artifacts
+10-30 19:42:59.207   710   763 V DisplayPowerController[0]: Brightness [0.01] reason changing to: 'override(com.dreamkeeper/com.dreamkeeper.MainActivity)', previous reason: 'manual'.
+10-30 19:42:59.208   710   763 I DisplayPowerController[0]: BrightnessEvent: brt=0.01(17.0%), nits=-1.0, lux=-1.0, reason=override(com.dreamkeeper/com.dreamkeeper.MainActivity), strat=OverrideBrightnessStrategy, state=ON, stateReason=KEY, policy=BRIGHT, flags=, initBrt=0.39763778, rcmdBrt=NaN, preBrt=NaN, preLux=0.0, wasShortTermModelActive=false, autoBrightness=false (default), unclampedBrt=0.01, hbmMax=1.0, hbmMode=off, thrmMax=1.0, rbcStrength=0, powerFactor=1.0, physDisp=Built-in Screen(local:4619827259835644672), logicalId=0, slowChange=false, rampSpeed=0.70472443, colorTemp=NaN, thermalStatus=none
+10-30 19:42:59.255   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:cmd appops get com.dreamkeeper RECORD_AUDIO'
+10-30 19:42:59.417   562   562 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:run-as com.dreamkeeper ls files/audio'
+--- FATAL count=0
+--- top activity
+    topResumedActivity=ActivityRecord{52811115 u0 com.dreamkeeper/.MainActivity t136}
+--- newest wav size (if any)
+-rw------- 1 u0_a237 u0_a237 160748 2026-10-30 19:39 5a182061-fd4a-49fc-9054-8a6f8d9f8e8d.wav
+-rw------- 1 u0_a237 u0_a237 185644 2026-10-30 19:36 b5249a66-76b0-4a15-8c0b-0535edc57f45.wav
+-rw------- 1 u0_a237 u0_a237  93356 2026-10-30 19:41 dfdca4e7-df47-4f00-b67f-39ca243d59b4.wav

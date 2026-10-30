@@ -1,0 +1,16 @@
+files=7 audioRows=7 union=7
+
+id                                        bytes   dataSize formula_ms     db_ms      rem verdict
+0b0b270e-977f-41b2-8938-03ccc3c43ac4      65228      65184      2037      2037        0 PASS
+1dbe3423-4170-43ed-9559-b283f0988a8f      80332      80288      2509      2509        0 PASS
+2fe64b54-dab2-4716-9138-443438ad0c8c     192396     192352      6011      6011        0 PASS
+3fc451d7-7530-4ef1-9074-7f3a25d684b7      80204      80160      2505      2505        0 PASS
+5a182061-fd4a-49fc-9054-8a6f8d9f8e8d     160748     160704      5022      5022        0 PASS
+b5249a66-76b0-4a15-8c0b-0535edc57f45     185644     185600      5800      5800        0 PASS
+dfdca4e7-df47-4f00-b67f-39ca243d59b4      93356      93312      2916      2916        0 PASS
+
+five_state: lt44=0 eq44=0 odd_tail=0 row_no_file=0 file_no_row=0 sum=7 union=7 OK
+  note: brief 0.11 literal "five states sum == union" is unsatisfiable for healthy pairs;
+        the exhaustive partition used here is healthy + the five anomaly states.
+  healthy=7 checked=7 skipped_open=0 red=0
+RESULT: GREEN
