@@ -1,0 +1,87 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T16:19:47Z
+REPLAY=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" --rerun-tasks --console=plain
+
+# p3-wire-01-green（Task 9b 步骤 2：实现 → 3/3 绿）
+
+实现：DetailViewModel.generate(kind) 先判 Running 防重入，再做 ViewModel 闸门（transcriptStatus != OK / 空原文 → Failed，runner 0 调用），闸门先于 runner 判空；通过后置 Running(kind,1) 并调 GenerationRunner 对应入口；onProgress 更新 attempt；失败映射人话（Llm AUTH → 「没配 Key 或 Key 不对」、Protocol 原文），成功后 refreshConversation() 再回 Idle。retryGeneration() 从 Failed.kind 走同一入口。
+结果：3 tests completed, 0 failed（JUnit XML: tests="3" skipped="0" failures="0" errors="0"）。
+
+---- raw gradle output ----
+> Task :app:syncPromptAssets
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugRFile
+> Task :app:compileDebugNavigationResources
+> Task :app:javaPreCompileDebug
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugUnitTestManifest
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:kspDebugKotlin
+> Task :app:processDebugResources
+> Task :app:packageDebugUnitTestForUnitTest
+
+> Task :app:compileDebugKotlin
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:148:52 'static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/MainActivity.kt:149:44 'static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt:168:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Dream'.
+w: file:///D:/DreamKeeper/android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt:135:14 'fun announceForAccessibility(p0: CharSequence!): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:compressDebugJavaRes
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+
+> Task :app:compileDebugUnitTestKotlin
+w: file:///D:/DreamKeeper/android/app/src/test/java/com/dreamkeeper/domain/DreamCalendarTest.kt:372:31 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:compressDebugUnitTestJavaRes
+> Task :app:extractDebugUnitTestJavaRes
+> Task :app:generateDebugUnitTestConfig
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/C:/Users/17383/.gradle/caches/modules-2/files-2.1/org.conscrypt/conscrypt-openjdk-uber/2.5.2/d858f142ea189c62771c505a6548d8606ac098fe/conscrypt-openjdk-uber-2.5.2.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :app:testDebugUnitTest
+
+[Incubating] Problems report is available at: file:///D:/DreamKeeper/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 25s
+35 actionable tasks: 35 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+
+---- raw JUnit XML ----
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-30T16:19:40.648Z" hostname="黄绍博的电脑" time="5.998">
+  <properties/>
+  <testcase name="phase maps idle running and failed" classname="com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" time="5.662"/>
+  <testcase name="retry after failure calls the same entry again" classname="com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" time="0.076"/>
+  <testcase name="both entries are hit with the dream id" classname="com.dreamkeeper.ui.detail.GenerationPhaseMappingTest" time="0.079"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

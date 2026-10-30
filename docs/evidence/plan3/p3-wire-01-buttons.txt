@@ -1,0 +1,42 @@
+APK_SHA256=bcc37defbce7db8d7e88ac902f3ad489469cca9d5cab376f3f6e8d9641a5cd1f
+DEVICE_TIME=Sat Oct 31 00:21:22 CST 2026
+REPLAY=adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk && adb -s emulator-5554 shell am force-stop com.dreamkeeper && adb -s emulator-5554 shell am start -n com.dreamkeeper/.MainActivity && adb -s emulator-5554 shell input tap 541 845 && adb -s emulator-5554 shell input tap 540 300 && adb -s emulator-5554 shell input tap 415 252
+
+# p3-wire-01-buttons（Task 9b 步骤 4：无小说稿的种子梦，NovelTab 顶部两按钮可见）
+
+PNG=docs/evidence/plan3/p3-wire-01-buttons.png
+PNG_SHA256=AF5DB525D8F9F3A8F4426D6A570D387C4055A055077D6DD83154CDC58C13DC6C
+PNG_BYTES=109320
+PNG_DIMS=1080x2400
+DEVICE=emulator-5554（sdk_gphone64_x86_64）
+DREAM=seed-dream-4（2026-10-22，rawTranscript「一直在下楼梯，每一层都一样。」，novelText=NULL，novel_version=0，novel_versions 空）
+导航=启动 → 2026年10月日历 tap(541,845) → 当日首行 tap(540,300) → 详情「小说化」tab tap(415,252)
+按钮=「原样整理」bounds [42,348][314,462]、「小说化」bounds [335,348][571,462]（UI dump 原文，clickable=true，无遮挡）
+
+---- 构建 / 安装 / 拉取校验原文 ----
+BUILD_APK_SHA256=bcc37defbce7db8d7e88ac902f3ad489469cca9d5cab376f3f6e8d9641a5cd1f
+INSTALL_OUTPUT:
+Performing Streamed Install
+Success
+PM_PATH:
+DEV_PATH=/data/app/~~UQpiDqVc-qvFb8V1qBaWtA==/com.dreamkeeper-kUWkxbsHeTA3_1nC_gvAsw==/base.apk
+PULL_AND_HOST_SHA256:
+bcc37defbce7db8d7e88ac902f3ad489469cca9d5cab376f3f6e8d9641a5cd1f *.scratch-wire-pulled3.apk
+bcc37defbce7db8d7e88ac902f3ad489469cca9d5cab376f3f6e8d9641a5cd1f *android/app/build/outputs/apk/debug/app-debug.apk
+
+---- UI dump 原文（text 节点，来自 uiautomator dump）----
+"10月22日 周四"
+"原样"
+"小说化"
+"标签"
+"素材"
+"原样整理"
+"小说化"
+"一直在下楼梯，每一层都一样。"
+（clickable 按钮 bounds：原样整理 [42,348][314,462]；小说化 [335,348][571,462]）
+
+---- 截图工具原文 ----
+RESULT: OK path=docs/evidence/plan3/p3-wire-01-buttons.png serial=emulator-5554 bytes=109320 dims=1080x2400 sha256=AF5DB525D8F9F3A8F4426D6A570D387C4055A055077D6DD83154CDC58C13DC6C
+
+---- near-white 闸门原文（scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0）----
+RESULT: OK image=docs/evidence/plan3/p3-wire-01-buttons.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=AF5DB525D8F9F3A8F4426D6A570D387C4055A055077D6DD83154CDC58C13DC6C

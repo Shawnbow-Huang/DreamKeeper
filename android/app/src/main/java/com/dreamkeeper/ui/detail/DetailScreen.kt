@@ -27,9 +27,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -75,9 +78,11 @@ import com.dreamkeeper.data.db.NovelVersionEntity
 import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.Tag
+import com.dreamkeeper.llm.GenerationKind
 import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.theme.Ember
+import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.ErrorText
 import com.dreamkeeper.ui.theme.InkDim
 import com.dreamkeeper.ui.theme.InkFaint
@@ -162,6 +167,7 @@ fun DetailScreen(
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    val generationPhase by vm.generationPhase.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -199,6 +205,9 @@ fun DetailScreen(
                                 count = state.novelChangeCount,
                                 // §0.7：详情正文用最终稿（selected ?: maxVersion），不用 dreams.novelText。
                                 novelText = state.finalNovel?.novelText ?: state.dream?.novelText,
+                                hasNovelDraft = state.dream?.novelText != null ||
+                                    state.versions.isNotEmpty() ||
+                                    (state.dream?.novelVersion ?: 0) > 0,
                                 versions = state.versions,
                                 messages = state.messages,
                                 selectedVersion = state.dream?.novelSelectedVersion,
@@ -206,6 +215,10 @@ fun DetailScreen(
                                 revising = state.revising,
                                 reviseError = state.reviseError,
                                 revisionAck = state.revisionAck,
+                                generationPhase = generationPhase,
+                                onGenerateFaithful = vm::generateFaithful,
+                                onGenerateNovel = vm::generateNovel,
+                                onRetryGeneration = vm::retryGeneration,
                                 onSend = vm::revise,
                                 onSelectVersion = vm::selectVersion,
                             )
@@ -517,6 +530,12 @@ private fun BodyScroll(text: String, color: Color) {
 private fun NovelTab(
     count: Int,
     novelText: String?,
+    /**
+     * 是否已有小说稿。不能拿 [novelText] 判：`finalNovel` 在没有版本时会回退到
+     * `faithfulText` / `rawTranscript`（Task 9 的展示契约），这样每一条有原文的梦都会
+     * 被当成「已有稿」而永远不显示生成入口。
+     */
+    hasNovelDraft: Boolean,
     versions: List<NovelVersionEntity>,
     messages: List<NovelMessageEntity>,
     selectedVersion: Int?,
@@ -524,6 +543,10 @@ private fun NovelTab(
     revising: Boolean,
     reviseError: String?,
     revisionAck: Int,
+    generationPhase: GenerationPhase,
+    onGenerateFaithful: () -> Unit,
+    onGenerateNovel: () -> Unit,
+    onRetryGeneration: () -> Unit,
     onSend: (String) -> Unit,
     onSelectVersion: (Int) -> Unit,
 ) {
@@ -537,6 +560,15 @@ private fun NovelTab(
         if (revisionAck > 0) opinion = ""
     }
     Column(modifier = Modifier.fillMaxSize()) {
+        // Task 9b：只在「这篇还没有小说稿」时露出生成入口；有稿后只留版本线与改稿输入条。
+        if (!hasNovelDraft) {
+            GenerationActions(
+                phase = generationPhase,
+                onFaithful = onGenerateFaithful,
+                onNovel = onGenerateNovel,
+                onRetry = onRetryGeneration,
+            )
+        }
         // brief 0.7：N 从 tab 标题挪到内容顶部这一行；「补写 N 处」的字样仍与 D41 一致
         if (count > 0) {
             Text(
@@ -586,6 +618,89 @@ private fun NovelTab(
             error = reviseError,
             placeholder = if (awaitingReply) "回它一句" else "说说哪里想改…",
         )
+    }
+}
+
+/**
+ * 没有小说稿时 NovelTab 顶部的生成入口（Task 9b / D356）。
+ *
+ * 三态只影响这一块：Idle 只有两枚按钮；Running 显示正在哪条链的第几档（按钮禁用防重入）；
+ * Failed 给「没生成成：{人话}」+「重试」。重试入口由 ViewModel 记着失败时的 kind，所以
+ * 「原样整理」失败只会重试原样整理，「小说化」失败只会重试小说化。
+ *
+ * 有稿后整块不出现：版本线 + 改稿输入条已经能表达「继续改这一版」，再放生成按钮会让人
+ * 误以为会覆盖当前选中版。
+ */
+@Composable
+private fun GenerationActions(
+    phase: GenerationPhase,
+    onFaithful: () -> Unit,
+    onNovel: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    val running = phase is GenerationPhase.Running
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onFaithful,
+                enabled = !running,
+                modifier = Modifier.height(40.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = EmberDeep,
+                    contentColor = Paper,
+                    disabledContainerColor = Line,
+                    disabledContentColor = InkFaint,
+                ),
+            ) {
+                Text("原样整理", style = MaterialTheme.typography.labelLarge)
+            }
+            OutlinedButton(
+                onClick = onNovel,
+                enabled = !running,
+                modifier = Modifier.height(40.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Ember,
+                    disabledContentColor = InkFaint,
+                ),
+            ) {
+                Text("小说化", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        when (phase) {
+            GenerationPhase.Idle -> Unit
+
+            is GenerationPhase.Running -> Text(
+                text = if (phase.kind == GenerationKind.FAITHFUL) {
+                    "正在原样整理…（第 ${phase.attempt} 步）"
+                } else {
+                    "正在小说化…（第 ${phase.attempt} 步）"
+                },
+                modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = Ember,
+            )
+
+            is GenerationPhase.Failed -> Row(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "没生成成：${phase.reason}",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ErrorText,
+                )
+                TextButton(onClick = onRetry, modifier = Modifier.height(40.dp)) {
+                    Text("重试", color = Ember, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
     }
 }
 

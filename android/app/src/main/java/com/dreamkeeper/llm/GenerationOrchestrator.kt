@@ -75,7 +75,7 @@ class GenerationOrchestrator(
     private val apiKey: () -> String = { "" },
     /** 标签名列表（§0.5 的「标签 / 选填」槽）；空列表表示不传这一槽。 */
     private val tagsFor: suspend (String) -> List<String> = { emptyList() },
-) {
+) : GenerationRunner {
     /** 每个 dream 一把锁：同一梦的两次生成不能交错写 `novel_versions`（§0.9 / D321）。 */
     private val locks = ConcurrentHashMap<String, Mutex>()
 
@@ -89,9 +89,9 @@ class GenerationOrchestrator(
      *
      * [onProgress] 是给 UI 的每调用细粒度回调（阶段, 档序号）；构造参数里的同名回调是全局观察点。
      */
-    suspend fun generateFaithful(
+    override suspend fun generateFaithful(
         dreamId: String,
-        onProgress: ((GenerationStage, Int) -> Unit)? = null,
+        onProgress: ((GenerationStage, Int) -> Unit)?,
     ): GenerationResult {
         val mutex = locks.getOrPut(dreamId) { Mutex() }
         if (!mutex.tryLock()) return protocol(GenerationKind.FAITHFUL, BUSY)
@@ -113,9 +113,9 @@ class GenerationOrchestrator(
      *
      * 这是**单次**：失败不重试、不降级（设计 §6 的降级链只属于忠实整理）。
      */
-    suspend fun generateNovel(
+    override suspend fun generateNovel(
         dreamId: String,
-        onProgress: ((GenerationStage, Int) -> Unit)? = null,
+        onProgress: ((GenerationStage, Int) -> Unit)?,
     ): GenerationResult {
         val mutex = locks.getOrPut(dreamId) { Mutex() }
         if (!mutex.tryLock()) return protocol(GenerationKind.NOVEL, BUSY)

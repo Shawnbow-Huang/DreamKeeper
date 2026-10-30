@@ -1,0 +1,28 @@
+APK_SHA256=bcc37defbce7db8d7e88ac902f3ad489469cca9d5cab376f3f6e8d9641a5cd1f
+DEVICE_TIME=Sat Oct 31 00:21:22 CST 2026
+REPLAY=adb -s emulator-5554 shell input tap 178 405（「原样整理」中心；设备未配置 DeepSeek Key）&& adb -s emulator-5554 exec-out uiautomator dump /dev/tty && powershell -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-wire-02-failed.png
+
+# p3-wire-02-failed（Task 9b 步骤 4：不配 Key 点「原样整理」→ 失败文案 + 重试）
+
+PNG=docs/evidence/plan3/p3-wire-02-failed.png
+PNG_SHA256=E5988A122969E8F41747BB2A8E7970BE48980E295DF67C518E901B07E1EBC81D
+PNG_BYTES=121091
+PNG_DIMS=1080x2400
+DEVICE=emulator-5554（sdk_gphone64_x86_64）
+APK_SHA256（安装/拉取校验见 p3-wire-01-buttons.txt）=bcc37defbce7db8d7e88ac902f3ad489469cca9d5cab376f3f6e8d9641a5cd1f
+KEY_STATE=设置页「还没配置」（清除后，未配 Key）
+DREAM=seed-dream-4（2026-10-22）
+交互=NovelTab「原样整理」tap(178,405) → 4s 后 dump + 截图
+
+---- UI dump 原文（失败文案 + 重试）----
+"没生成成：没配 Key 或 Key 不对"（TextView，bounds [42,500][925,553] 附近）
+"重试"（TextView，bounds [925,500][999,553]；clickable 父容器 bounds [886,464][1038,578]）
+"原样整理" bounds [42,348][314,474]
+"小说化" bounds [335,348][571,474]
+正文仍显示 rawTranscript 回退：「一直在下楼梯，每一层都一样。」（截图内可见）
+
+---- 截图工具原文 ----
+RESULT: OK path=docs/evidence/plan3/p3-wire-02-failed.png serial=emulator-5554 bytes=121091 dims=1080x2400 sha256=E5988A122969E8F41747BB2A8E7970BE48980E295DF67C518E901B07E1EBC81D
+
+---- near-white 闸门原文（scripts/check-near-white.ps1 -TopOffset 100 -MaxRatio 0）----
+RESULT: OK image=docs/evidence/plan3/p3-wire-02-failed.png dims=1080x2400 samples=69120 nearWhite=0 ratio=0.0000% center=#0B0E13 sha256=E5988A122969E8F41747BB2A8E7970BE48980E295DF67C518E901B07E1EBC81D

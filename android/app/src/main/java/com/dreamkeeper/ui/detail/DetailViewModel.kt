@@ -8,13 +8,14 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.FinalNovel
 import com.dreamkeeper.data.db.NovelMessageEntity
 import com.dreamkeeper.data.db.NovelVersionEntity
+import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.MediaAsset
 import com.dreamkeeper.domain.Tag
 import com.dreamkeeper.llm.GenerationFailure
 import com.dreamkeeper.llm.GenerationKind
-import com.dreamkeeper.llm.GenerationOrchestrator
-import com.dreamkeeper.llm.GenerationStage
+import com.dreamkeeper.llm.GenerationRunner
+import com.dreamkeeper.llm.LlmException
 import com.dreamkeeper.llm.ReviseOrchestrator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -83,11 +84,11 @@ class DetailViewModel(
     audioStore: WavStore? = null,
     playerFactory: () -> MediaPlayer = { MediaPlayer() },
     /**
-     * 生成入口（Task 8）。默认 null 是为了不破既有单测与预览——没有容器时详情页只读不生成。
+     * 生成入口（Task 8 / Task 9b）。默认 null 是为了不破既有单测与预览——没有容器时详情页只读不生成。
      * 不在这里 new 一个全局单例：编排器依赖网络/价卡/数据库，只有 [com.dreamkeeper.di.AppContainer]
-     * 知道怎么装配它们。
+     * 知道怎么装配它们。类型是 [GenerationRunner] 而不是具体编排器：按钮只需要两个 suspend 入口。
      */
-    private val orchestrator: GenerationOrchestrator? = null,
+    private val orchestrator: GenerationRunner? = null,
     /** 对话改稿入口（Task 9）。默认 null 同样只为不破既有两参单测；生产由根容器注入。 */
     private val revise: ReviseOrchestrator? = null,
 ) : ViewModel() {
@@ -169,40 +170,95 @@ class DetailViewModel(
         return repo.updateManualTranscript(dream.id, expectedMs, text)
     }
 
-    // ------------------------------------------------------------ 生成入口（Task 8）
+    // ------------------------------------------------------------ 生成入口（Task 8 / 9b）
 
-    private val _generation = MutableStateFlow<GenerationPhase>(GenerationPhase.Idle)
+    private val _generationPhase = MutableStateFlow<GenerationPhase>(GenerationPhase.Idle)
 
     /** 当前生成进度。成功后回到 [GenerationPhase.Idle]——正文已经由 `state` 的 Flow 刷新。 */
-    val generation: StateFlow<GenerationPhase> = _generation.asStateFlow()
+    val generationPhase: StateFlow<GenerationPhase> = _generationPhase.asStateFlow()
 
     fun generateFaithful() = generate(GenerationKind.FAITHFUL)
 
     fun generateNovel() = generate(GenerationKind.NOVEL)
 
     /**
-     * 同一时刻只允许一条生成链（UI 防重入；真正的并发保护在编排器的 per-dream 锁里）。
-     * 失败原因直接映射成用户可读串：Llm 给错误分类，Gate 给没过闸门的具体条目。
+     * 失败后「重试」：仍走失败时的同一个入口，不换方法、不新建一份状态。
+     * 只看得到 [GenerationPhase.Failed]——运行中/空闲时点它没有意义。
+     */
+    fun retryGeneration() {
+        val failed = _generationPhase.value as? GenerationPhase.Failed ?: return
+        generate(failed.kind)
+    }
+
+    /**
+     * 两个按钮共用的唯一路径。
+     *
+     * 先在本层拦「转写没完成 / 原文是空的」：这两态没有任何可整理的字，发出去只会白花一次
+     * 请求；`GenerationOrchestrator` 的 `generatable` 是第二道闸，不替代这一层。
+     * 成功不自己拼结果，只重读版本线（与 Task 9 的改稿走同一条 `refreshConversation`）。
      */
     private fun generate(kind: GenerationKind) {
-        val orchestrator = orchestrator ?: return
-        if (_generation.value is GenerationPhase.Running) return
-        _generation.value = GenerationPhase.Running(kind, 1)
+        if (_generationPhase.value is GenerationPhase.Running) return
+        val dream = state.value.dream ?: return
+        if (dream.transcriptStatus != TranscriptStatus.OK) {
+            _generationPhase.value = GenerationPhase.Failed(
+                kind,
+                "转写还没完成，先把原文补上再生成",
+            )
+            return
+        }
+        if (dream.rawTranscript.trim().isEmpty()) {
+            _generationPhase.value = GenerationPhase.Failed(
+                kind,
+                "原文是空的，先补上字再生成",
+            )
+            return
+        }
+        // 闸门先于 runner 判空：没有容器时也不能把「转写没完成」悄悄吞成 Idle。
+        val runner = orchestrator ?: return
+        val id = dream.id.ifBlank { dreamId }
+        _generationPhase.value = GenerationPhase.Running(kind, 1)
         viewModelScope.launch {
-            val progress: (GenerationStage, Int) -> Unit = { _, attempt ->
-                _generation.value = GenerationPhase.Running(kind, attempt)
-            }
             val result = when (kind) {
-                GenerationKind.FAITHFUL -> orchestrator.generateFaithful(dreamId, progress)
-                GenerationKind.NOVEL -> orchestrator.generateNovel(dreamId, progress)
+                GenerationKind.FAITHFUL -> runner.generateFaithful(id) { _, attempt ->
+                    onGenerationProgress(kind, attempt)
+                }
+                GenerationKind.NOVEL -> runner.generateNovel(id) { _, attempt ->
+                    onGenerationProgress(kind, attempt)
+                }
             }
-            _generation.value = when (val failure = result.failure) {
-                null -> GenerationPhase.Idle
-                is GenerationFailure.Llm -> GenerationPhase.Failed(kind, failure.kind.name)
-                is GenerationFailure.Gate -> GenerationPhase.Failed(kind, failure.detail)
-                is GenerationFailure.Protocol -> GenerationPhase.Failed(kind, failure.message)
+            val failure = result.failure
+            if (failure != null) {
+                _generationPhase.value = GenerationPhase.Failed(kind, humanReason(failure))
+            } else {
+                refreshConversation()
+                _generationPhase.value = GenerationPhase.Idle
             }
         }
+    }
+
+    /** 进度只更新同一入口的 `attempt`；已经失败/切走的旧回调不许把状态拉回来。 */
+    private fun onGenerationProgress(kind: GenerationKind, attempt: Int) {
+        val current = _generationPhase.value
+        if (current is GenerationPhase.Running && current.kind == kind) {
+            _generationPhase.value = current.copy(attempt = attempt)
+        }
+    }
+
+    /** 失败文案给人看，不把枚举名甩到界面上（D363）。 */
+    private fun humanReason(failure: GenerationFailure): String = when (failure) {
+        is GenerationFailure.Llm -> when (failure.kind) {
+            LlmException.Kind.AUTH -> "没配 Key 或 Key 不对"
+            LlmException.Kind.NETWORK -> "网络没通"
+            LlmException.Kind.TIMEOUT -> "等太久了，模型没回"
+            LlmException.Kind.RATE_LIMIT -> "请求太密，歇一会儿再试"
+            LlmException.Kind.SERVER -> "模型服务那边出错了"
+            LlmException.Kind.BAD_REQUEST -> "这次请求模型不认"
+            LlmException.Kind.EMPTY_CONTENT -> "模型回了空内容"
+            LlmException.Kind.INVALID_JSON -> "模型回的内容读不懂"
+        }
+        is GenerationFailure.Gate -> "这条梦现在还不能生成：${failure.detail}"
+        is GenerationFailure.Protocol -> failure.message
     }
 
     // ------------------------------------------------------------ 对话改稿（Task 9）
