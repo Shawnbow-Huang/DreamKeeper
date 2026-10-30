@@ -222,6 +222,7 @@ class RecorderCore(
 - Create `android/app/src/main/java/com/dreamkeeper/service/RecordingSession.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/service/RecordingNotifications.kt`
 - Modify `android/app/src/main/java/com/dreamkeeper/di/AppContainer.kt`
+- Create `android/app/src/main/res/drawable/ic_notification.xml`
 - Create `android/app/src/test/java/com/dreamkeeper/service/RecordingCommandTest.kt`
 
 **Interfaces**
@@ -258,17 +259,38 @@ class RecordingService : Service() {
 }
 ```
 
+**接口补充（Lead 按两位专家预审钉死，覆盖上面代码块里没写死的部分）**
+```kotlin
+/** 3.2/3.3 唯一被测对象：纯函数，不碰 Android。 */
+sealed interface RecordingCommand {
+    data class Start(val dreamId: String) : RecordingCommand
+    data object Stop : RecordingCommand
+    data object Cancel : RecordingCommand
+}
+
+object RecordingCommands {
+    /** 非法输入（例如 START 缺 dreamId、未知 action）返回 null，调用方只 fail + stopSelf，不改状态。 */
+    fun parse(action: String?, dreamId: String?): RecordingCommand?
+}
+```
+- `RecordingSnapshot`（session）是**唯一真相**；`ui/record/RecordUiState.kt` 只是 UI 侧快照，Task 4 负责把 `session.state` 映射过去，**不许**两边各起一个计时器。
+- `RecordingPhase` / `RecordingSnapshot` / `RecordingCommand` / `RecordingCommands` 都落 `RecordingSession.kt`；`RecordingService.kt` 只有 Service 与通知装配。
+- 通知小图标用**新建**的 `res/drawable/ic_notification.xml`（`res/drawable/` 现在只有 `ic_launcher_dark.xml`，写 `R.drawable.ic_notification` 而没这个文件就是编译错）。
+- 通知 `ContentIntent` → `MainActivity` + `entry=NOTIFICATION`（`DreamRoute.Detail` 没有 deep link，点通知最多只能到首页/录音页；详情深链留给 Plan 3，见 D103），`PendingIntent` 必须带 `FLAG_IMMUTABLE`。
+
 **Steps**
-- [ ] 3.1 manifest 加**四条**权限，名字逐字写对：`android.permission.RECORD_AUDIO`、`android.permission.POST_NOTIFICATIONS`、`android.permission.FOREGROUND_SERVICE`、`android.permission.FOREGROUND_SERVICE_MICROPHONE`（漏一个就是启动时 `SecurityException`）；再加 `<service android:name=".service.RecordingService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false"/>`。 **服务只能由可见 Activity 起**。
-- [ ] 3.2 写 `RecordingCommandTest`（纯逻辑，先红）：`ACTION_START` 缺 `dreamId` → 命令非法且不改状态；`STOP` 在 IDLE 时幂等；`CANCEL` 后状态回 IDLE 且 `error == null`。
+- [ ] 3.1 manifest 加**四条**权限，名字逐字写对：`android.permission.RECORD_AUDIO`、`android.permission.POST_NOTIFICATIONS`、`android.permission.FOREGROUND_SERVICE`、`android.permission.FOREGROUND_SERVICE_MICROPHONE`（漏一个就是启动时 `SecurityException`）；四条插在 `<manifest>` 与 `<application>` 之间。再加 `<service android:name=".service.RecordingService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false"/>`，插在 `<application>` 内。**服务只能由可见 Activity 起**（`startForegroundService` 用 Activity 的 Context，不能用 applicationContext）。
+- [ ] 3.2 写 `RecordingCommandTest`（纯逻辑，先红）：`parse(START, null)` == null（缺 dreamId 即非法）；`parse(START, "d1")` == `Start("d1")`；`parse(STOP, null)` == `Stop`；`parse(CANCEL, null)` == `Cancel`；`parse("whatever", "d1")` == null；`parse(null, null)` == null。**断言不许读 Service 状态**（Service 在 JVM 测里跑不了）。
 - [ ] 3.3 实现命令解析（抽成 `RecordingCommand` 纯函数，Service 只做副作用）→ 绿。
-- [ ] 3.4 实现 Service：`onStartCommand` 里 **先** `ServiceCompat.startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)`，**再**建 `AudioRecord` 并 `startRecording()`（顺序反了在 12+ 上直接抛 `ForegroundServiceDidNotStartInTimeException`）；权限不足 → `snapshot.fail("没有录音权限")` 并 `stopSelf()`；返回 `START_NOT_STICKY`。
+- [ ] 3.4 实现 Service 的 `onStartCommand`，顺序**钉死**：① 解析命令（非法 → `stopSelf()`，什么都不改）；② `RecordingCommands` 给出 START 时**先查 `RECORD_AUDIO`**，没有 → `snapshot.fail("没有录音权限")` + `stopSelf()`，**不调** `startForeground`（14+ 用 microphone 型且无权限时 `startForeground` 自己抛 `SecurityException`）；③ `recordingSession.begin(dreamId, filePath)`、`WavStore.create` 落占位头；④ `RecordingNotifications.ensureChannel()` **先建渠道**；⑤ `ServiceCompat.startForeground(42, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)`；⑥ 才 `AudioRecord` + `startRecording()`；返回 `START_NOT_STICKY`。
+- [ ] 3.4d 录音中途被吊销权限：`AudioRecord` 读循环捕获 `SecurityException` / `read()` 返负 → `snapshot.fail("录音权限被收回")` + 收尾（`finish()` 回填 + `stopSelf()`），不许把异常吞掉留在录音态。
 - [ ] 3.4b `AudioRecord` 参数**钉死**：`MediaRecorder.AudioSource.VOICE_RECOGNITION`、`16_000`、`AudioFormat.CHANNEL_IN_MONO`、`AudioFormat.ENCODING_PCM_16BIT`；buffer 取 `max(AudioRecord.getMinBufferSize(...), 3200)`；读循环放**专用线程**并先 `Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)`；写文件**不套 `BufferedOutputStream`**（多一次拷贝、崩溃时丢缓冲）；每约 1 秒 `fd.sync()` 一次。
 - [ ] 3.4c `RecordingService` 把 `RecorderCore.run` 的 `onChunk(bytes, amplitudeDb)` 转成状态：`session.update(elapsedMs = bytes / 32, amplitude = (amplitudeDb + 60) / 60f)`（`silenceFloorDb = -60`，见 Task 2 的振幅契约；**不许**另起定时器或随机数算振幅，也不许在这里再算一次 RMS）。
-- [ ] 3.5 实现通知：常驻、低优先级、`ContentIntent` 回详情、`ACTION_STOP` 按钮；channel 在 `RecordingNotifications` 里建（`IMPORTANCE_LOW`，锁屏可见性 `VISIBILITY_PRIVATE`）。
+- [ ] 3.5 实现通知：常驻、`IMPORTANCE_LOW`、锁屏 `VISIBILITY_PRIVATE`、`setOngoing(true)`；`ContentIntent` → `MainActivity` + `entry=NOTIFICATION` + `FLAG_IMMUTABLE`；`ACTION_STOP` 走 `PendingIntent.getService(...)` 指向本 Service 的 STOP；渠道在 `RecordingNotifications.ensureChannel()` 里建。
 - [ ] 3.6 `AppContainer` 加 `audioStore`（`WavStore(filesDir/audio)`）与 `recordingSession`。
-- [ ] 3.7 构建 + 安装，**从可见页面起服务**（首页点「说梦」→ 按住 3 秒 → 松手）：通知出现、`dumpsys activity services com.dreamkeeper` 有该服务（`started=true`）、logcat 无 FATAL。**不要**用 `adb shell am start-foreground-service …` 去验 microphone 型 FGS——Android 14+ 禁止后台启动，必然抛 `ForegroundServiceStartNotAllowedException`，只会白烧一轮排障。
-- [ ] 3.8 证据：`p2-fgs-01-notify.png`（通知栏截图）、`p2-fgs-01-services.txt`（`dumpsys activity services`）、`p2-fgs-01-perms.txt`（`dumpsys package com.dreamkeeper | Select-String FOREGROUND_SERVICE|RECORD_AUDIO`）。
+- [ ] 3.7 构建 + 安装，**从可见页面起服务**：`adb shell am start -n com.dreamkeeper/.MainActivity`（shell 起 Activity 不受后台启动限制）→ 首页点「说梦」→ `adb shell input swipe 540 1600 540 1600 3000` 或手按住 3 秒 → 松手。判据四连：① `dumpsys activity services com.dreamkeeper` 同一段里 `started=true` 且 `isForeground=true` 且 `foregroundId=42` 且类型含 `microphone`；② `dumpsys notification --noredact` 里 id=42、`flags` 含 `0x40`、ongoing；③ 两次 `run-as com.dreamkeeper stat -c %s files/audio/<id>.wav` 间隔 ≥3 s，`Δbytes/Δt` 落在 32000 B/s ±2%（这是「AudioRecord 真在供数」的唯一自动判据）；④ `logcat -d` 里 `FATAL` / `ForegroundServiceStartNotAllowed` / `DidNotStartInTime` 全空。**不要**用 `adb shell am start-foreground-service …`（shell 是后台，14+ 必抛 `ForegroundServiceStartNotAllowedException`），证据目录里也不许出现该命令的失败日志。
+- [ ] 3.8 证据（存 `docs/evidence/plan2/`）：`p2-fgs-01-notify.png`（`cmd statusbar expand-notifications` 后截图）、`p2-fgs-01-services.txt`（`dumpsys activity services com.dreamkeeper`）、`p2-fgs-01-notify-dump.txt`（`dumpsys notification --noredact` 里本包那段）、`p2-fgs-01-perms.txt`（`dumpsys package com.dreamkeeper | Select-String RECORD_AUDIO|FOREGROUND_SERVICE`）、`p2-fgs-01-bytes.txt`（两次 `stat` 的原始输出）。
+- [ ] 3.10 权限三分支要在 UI 侧各停在各处（本条只做 Service 侧与文案约定，界面接入在 Task 4）：① 还能问 → 停在录音页、**不调** `startForegroundService`，文案「需要麦克风权限才能录梦」+「再试一次」；② 永久拒绝（已拒且 `!shouldShowRequestPermissionRationale`）→ 停在录音页，只给「去设置」（`ACTION_APPLICATION_DETAILS_SETTINGS` + `package:com.dreamkeeper`）；③ 33+ 通知权限被关 → **不拦录音**（FGS 照起、录音照走，只是通知栏看不到、也就没有停止按钮），文案写明这一点并提示去开通知。
 - [ ] 3.9 提交：`feat(record): 前台录音服务（microphone 类型、通知、START/STOP/CANCEL）`
 
 **Expected**：通知出现在状态栏；服务列表里有 `RecordingService` 且由可见页面启动；四条权限都在 `dumpsys package` 里；崩溃 0。
@@ -542,6 +564,10 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D99 | `PcmSink` 直接复用 `WavWriter` | 加一层适配（`bytesWritten` 是 `val`、`WavWriter` 也没有 `sync()`）；`join()` 从接口里去掉（`run` 同步返回、没有读线程） | Mobile App Builder：两者签名不兼容，直传编译不过；`join` 无出处会让实现者自己发明线程模型 | 以为的坑 |
 | D100 | 只写「振幅条读 `onChunk` 的 dBFS」 | 钉死 `20*log10(rms/32768)`、全零块取 `silenceFloorDb`、值域 `[-60, 0]`、UI 映射 `(db+60)/60` | Mobile App Builder：全零块 `log10(0) = -Infinity`，Kotlin 的 `(-Infinity).toInt()` 返回 `Int.MIN_VALUE` 且不抛，振幅条会恒空 | 实测结论 |
 | D101 | rebase 写成「已写字节数一并前移」 | 改成保留独立的 `baseBytes` 参与减法，**不动** `sink.bytesWritten()` | Voice AI：只前移时间原点会让 deficit 变成负值、整段时间窗漏补；只归零字节计数会一次补出与已录等长的静音 | 实测结论 |
+| D102 | Task 3 的 3.4 同时要求「先 startForeground」和「权限不足 → fail + stopSelf」 | 钉死顺序：先查权限（不足则不 startForeground，直接 fail + stopSelf）→ 建渠道 → startForeground → 建 AudioRecord | Mobile App Builder：14+ 用 microphone 型且无 RECORD_AUDIO 时，`startForeground` 自己就抛 SecurityException，字面照抄会先崩后报 | 实测结论 |
+| D103 | 通知 `ContentIntent` 说「回详情」 | 改成 `MainActivity` + `entry=NOTIFICATION`（+`FLAG_IMMUTABLE`），详情深链留 Plan 3 | Mobile App Builder：`DreamRoute.Detail` 没有 deep link、`MainActivity` 只认 `dk_prefill_search`，写「回详情」实际只会打开首页 | 以为的坑 |
+| D104 | `RecordingCommand` 只在 3.2/3.3 里被提到，没有签名也没有文件 | 钉成 `sealed interface RecordingCommand { Start/Stop/Cancel }` + `RecordingCommands.parse(action, dreamId): RecordingCommand?`，落 `RecordingSession.kt` | Mobile App Builder：3.2 的断言目前没有可编译契约，实现者会各自发明「非法」的表示 | 以为的坑 |
+| D105 | 3.7 只写「通知出现、服务存在、无 FATAL」 | 改成四连判据：`started=true`+`isForeground=true`+`foregroundId=42`+类型含 microphone；通知 id=42 且 flags 含 0x40；两次 stat 的字节速率 32000 B/s ±2%；logcat 三类关键字全空 | Evidence Collector：只有 `started=true` 只是 startService 成功，证明不了前台服务与 AudioRecord 在供数 | 实测结论 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
