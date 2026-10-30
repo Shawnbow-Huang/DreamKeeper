@@ -101,7 +101,8 @@ GenerationJob(id, dreamId, stage, attemptNo, error, createdAt)   // v1 无此表
   剥头 = 按行扫到第二个 `---` 为止，再剥紧邻的 `<!-- -->` 注释块；**不许** `split("---")`（正文里有分隔线和代码围栏）。
 - 送模型的正文从 `## 输入` 起；单测断言送出串**不含** `promptId:`、不含 `<!--`。
 - 变量填充用 9 个【…】槽替换（无 `{{}}` 语法），每个提示词一张槽位表，缺槽直接抛错（不许静默留空）。
-- `prompt_versions` 记账：`(kind, version, promptHash)` 唯一；哈希漂移 = 新增一行 + WARN，**不覆盖旧行**。
+- 提示词版本**不记账**：以 `prompts/*.md` 的文件 sha256 为唯一真源（D267/D285），不建 `prompt_versions` 表；
+  哈希漂移只在 logcat 打 WARN，不写库。
 
 ## 6. 生成链路
 
@@ -545,6 +546,17 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D272 | T4-6：`scripts/check-migrate.py` 落仓库；首三行改用 `APK_SHA256` + `OLD_APK_SHA256`（两只 APK） | 迁移证据天然有两只包；README §2 只规定单 APK，属形态差异 |
 | D273 | T4-7：`app/build.gradle.kts` 把 `p3-cost-01-vectors.json` 登记为 test input | D266：不登记则改 JSON 后 `testDebugUnitTest` 报 UP-TO-DATE，测试根本没跑 |
 | D274 | T4-8：设备侧「只拉 `.db`」是假红，必须三件一起拉 | 实测 `databases/dreamkeeper.db` 只有 4096 B、0 表、`user_version=0`，数据在 201,912 B 的 `-wal` 里；emulator API 37 无 sqlite3 二进制 |
+| D275 | T4-9：种子 `seed-dream-1` 的 title/novelText 是宿主 `sqlite3` 改已 pull 的库再推回，不是从 v1 UI 编辑 | v1 详情页没有标题/正文编辑入口（「编辑」只弹「编辑还没做」）；推回前已 checkpoint（.db 57344 B、-wal 0 B），`updatedAt` 未动，所以这行仍是「种子」而不是非种子行 |
+| D276 | T4-10：`DreamTagEntity.kt` 不在 Task 4 白名单内但改了（只加 `indices=[Index(["tagId"], name="index_dream_tags_tagId")]`） | Room 只有实体声明 indices 才会把索引写进 `2.json` 并在迁移后校验；手写 DDL 改实体不改，schema 校验必红 |
+| D277 | T4-11：派工书 §四.2 写「种子 4 条 + 7 条历史录音」，实测设备上并没有那 7 条 | 设备 dreams=4 行种子；基线改为「4 种子 + 1 条真实录制（`4f3b44fd…`，`rawAudioMs=2400`）+ 1 条宿主改过的种子」，共 5 行（`p3-mig-01` 标题与 D275 已同步更正） |
+| D278 | T4-12：升级前快照钩子没进 `DreamKeeperApp.kt`，接在 `AppContainer.database` 的 lazy 首次求值前 | 比启动序列更贴近「打开库之前」，且不依赖 Application 的初始化顺序 |
+| D279 | T4-13：`-wal`/`-shm` 已拉取核对但**不入库**（`.gitignore` 不做证据） | 两份 JSON 的 `files` 段各自记 bytes+sha256；空 WAL 下 `-shm` 头部全零属正常形态，不是拷贝造假 |
+| D280 | T4-14：证据头 `DEVICE_TIME` 对 02–05 是 21:44 批次统一补记，只有 01 用基线真实设备时刻 21:28:03 | 与 D251 同口径：该字段只表示「证据何时取」，不影响内容复现；真实执行时刻见各文件正文 |
+| D281 | T4-15：v1 APK（`.scratch/p3-v1.apk`）被 gitignore，包体不入库 | `p3-mig-05` 的 REPLAY 需先自备该包；其 sha256 前 16 位 `5ff054986f19fc9c` == 头部 `OLD_APK_SHA256`，构建自 plan3-generation HEAD |
+| D282 | T4-16：`p3-mig-04-newtables.txt` 原只有变异反证的红，恢复后的绿补在文末；`cmp` 原始输出当时未落盘 | DAO 往返本就由 `fourNewTablesRoundTripChineseAndNewlines` 覆盖；补记归属避免「04 缺 §0.13 要求」的误判 |
+| D283 | T4-17：新增 `scripts/check-schema-verbatim.py` 与 `p3-mig-07/08`，把「全量 28 类/289 例」与「SQL 逐字 6/6+8/8」从被忽略日志搬进仓库 | 落在 `.scratch/` 的结论在 clean checkout 无法复现；复跑 `python scripts/check-schema-verbatim.py`（A 6/6、B 8/8、C 全 True） |
+| D284 | T6-1：`.gitattributes` 增 `prompts/*.md text eol=lf`（超出 Task 6 Files 白名单） | 仓库 `core.autocrlf=true`；实测 fresh clone 后三份提示词 sha256 从 `5b9702ee/f189dad8/2ebba630` 变成 `9bfb94b9/663bc09d/28685592`（CRLF 291/332/314 行），Task 6 的哈希断言必炸 |
+| D285 | T6-2：作废 §5「`prompt_versions` 记账」这半句 | 与 D267 及 `DreamDatabase.kt:15`（提示词以文件为唯一真源）冲突；漂移只打 logcat WARN，不写库 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
@@ -577,3 +589,28 @@ T3  不调用模型                                   → faithfulText = rawTran
 - 截图 `p3-key-05-configured.png`：设置页显示 `已保存（还没验证）` + 掩码 `sk-…3056`；四张截图近白 `nearWhite=0`。
 - D245 是本轮最有价值的发现：**`am start --es` 传敏感值会把明文写进 adbd 的 logcat**——以后所有「传 Key / 传口令」的证据脚本都不许走 intent extra。
 - 结论：**Task 2 验收通过**。未验证项按报告 §4 保留（真机 TEE、`bmgr` 真跑、切进程原子性、非 ASCII Key、联网校验属 Task 5）。
+
+---
+
+### Task 3 验收（Lead 追溯，2026-10-30）
+
+- 交付：Task 3 实现六个提交（`0218952` → `8af057e`，末条 `8af057e` 为证据与向量侧车）；证据 `p3-cost-00`–`p3-cost-06` 共 8 个文件全部入库。
+- Lead 独立复跑（Task 4 期间补做）：`python scripts/check-cost.py --vectors docs/evidence/plan3/p3-cost-01-vectors.json` → `rows=14 mismatches=0`、exit 0；`--self-test` → `rows=6 mismatches=0`、exit 0。
+- 证据锚点：vectors sha256 `cf8b2431…6440e`；APK 13342382 B sha256 `661d1d6b…ac093`，包内 `assets/pricing/deepseek.json` sha256 `becbdd14…1744d`。
+- 当时测试基线：**26 类 / 284 例 / 0 失败**（XML 统计）；Task 4 的 28/289 比它多 2 类 5 例，增量全部来自 Task 4 新增（`MigrationTest`、`DreamRepositoryNovelSelectedTest`）。
+- 未完成项：`--db-copy` 只能写 PENDING（D261），真跑排到 Task 10；`deepseek-flash` 价卡数值待二次核对（D259）。
+- 结论：**Task 3 追溯验收通过**（本任务当时漏写验收段，补此段闭合交付链）。
+
+---
+
+### Task 4 验收（Lead，2026-10-30）
+
+- 交付：`c800a87`（31 文件 +3088/−10，全部在白名单内）+ `d681247`（`p3-mig-06` 负向对照入库）+ `b2054ba`（证据补件 7 文件 +176/−5）。
+- Lead 独立复跑：`:app:testDebugUnitTest --rerun-tasks` 全绿，XML **28 类 / 289 例 / 0 失败 / 0 错误 / 0 跳过**（`p3-mig-07-full-tests.txt`）；`MigrationTest` 单跑 3/3 PASS。
+- 设备侧逐字节复核（evidence collector 独立做，Lead 复读）：装机包 sha256 `661d1d6b…ac093` == 证据 APK；设备 `databases/dreamkeeper.db` sha256 `30e8566c…230e` 与入库 `p3-mig-02-after.db` 相同；`files/db-backup/dreamkeeper-v1-20261030-214235.db` sha256 `ea73f2a4…c87e` 与入库 baseline 相同；live dump 对 baseline `--diff` → `RESULT: GREEN`。
+- 迁移口径：`tables 5→9`、`user_version 1→2`、`dreams rows 5` 逐列 20 列等值、`updatedAt` 5/5 不变、两新列 10/10 为 NULL、`identity_hash 3150a0bc…→166666e5…`、integrity ok、FK 0。
+- 变异反证：删 `novel_messages` 的 CREATE+索引 → 3/3 红（`Migration didn't properly handle: novel_messages(com.dreamkeeper.data.db.NovelMessageEntity)`）；恢复后 3/3 绿（`p3-mig-04`）。负向数据对照：改 `seed-dream-1` 的 title → `RESULT: RED: 1 处不一致`、exit 1（`p3-mig-06`）。
+- SQL 同源：`MIGRATION_1_2` 的 8 条 CREATE 与 `2.json` 的 8 条新增**逐字一致**（A 6/6、B 8/8，`p3-mig-08-sql-verbatim.txt`）；`create()` 挂 `addMigrations` 1 次、`fallbackToDestructiveMigration` 代码调用 **0 处**（只在注释里出现 2 次字样）。
+- 降级：装回 v1 包 → `IllegalStateException: A migration from 2 to 1 was required but not found`（`p3-mig-05`）；唯一兜底是升级前 `files/db-backup/` 副本（D270）。
+- PENDING（不阻断验收，均有 D 号/归属）：release 包升级与物理真机（不可 `run-as`）、迁移耗时（§14.5 归 Plan 4）、WAL-resident 形态、`p3-mig-05` 的 v1 包需自备（D281）、`DbBackup` 四分支单测（Lead 指派 Mobile App Builder 补测中）。
+- 结论：**Task 4 验收通过**（迁移逻辑 + 证据链闭合；上面 PENDING 项不改变「数据一字不丢」的结论）。
