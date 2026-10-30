@@ -312,7 +312,8 @@ interface DreamDao {
         UPDATE dreams
         SET novelText = :novelText,
             novelChangeLog = :novelChangeLog,
-            generationStage = COALESCE(:generationStage, generationStage)
+            generationStage = COALESCE(:generationStage, generationStage),
+            faithfulText = COALESCE(:faithfulText, faithfulText)
         WHERE id = :id
     """)
     suspend fun updateNovelAfterGeneration(
@@ -320,5 +321,6 @@ interface DreamDao {
         novelText: String?,
         novelChangeLog: String?,
         generationStage: String?,
+        faithfulText: String?,
     ): Int
 }

@@ -245,6 +245,7 @@ class GenerationOrchestrator(
             ),
             changeLogJson = null,
             stage = stage.name,
+            faithfulTextForDream = call.response.content,
         )
         store.recordJob(job(run.dreamId, stage, attemptOf(stage), error = null))
         return GenerationResult(
@@ -269,13 +270,16 @@ class GenerationOrchestrator(
         onProgress: ((GenerationStage, Int) -> Unit)?,
     ): GenerationResult {
         emit(GenerationKind.NOVEL, GenerationStage.T0, 1, onProgress)
-        val base = dream.faithfulText?.takeIf { it.isNotBlank() } ?: dream.rawTranscript
+        // §0.4 两槽分离：【原始转写】永远是 rawTranscript；【理顺稿】优先用忠实链落库的 faithfulText，
+        // 没有才回退原文（回退时两槽同值，与 Plan 3 行为一致）。
+        val raw = dream.rawTranscript
+        val polished = dream.faithfulText?.takeIf { it.isNotBlank() } ?: raw
         val tags = tagsFor(dream.id).takeIf { it.isNotEmpty() }?.joinToString(TAG_SEPARATOR)
         val rendered = prompts.render(
             PromptSpecs.NOVEL.promptId,
             mapOf(
-                SLOT_RAW to base,
-                SLOT_POLISHED to base,
+                SLOT_RAW to raw,
+                SLOT_POLISHED to polished,
                 SLOT_TAGS to tags,
             ),
         )
@@ -307,7 +311,7 @@ class GenerationOrchestrator(
         // body 是唯一必需项：空正文收下只会把 dreams.novelText 清空。
         if (body.isEmpty()) return protocol(GenerationKind.NOVEL, "响应缺少正文")
 
-        val changeLog = filterChangeLog(json.optJSONArray("changeLog"), base)
+        val changeLog = filterChangeLog(json.optJSONArray("changeLog"), listOf(polished, raw))
         val version = store.commitSuccess(
             dreamId = run.dreamId,
             draft = draft(
@@ -332,7 +336,7 @@ class GenerationOrchestrator(
             attempts = run.attempts,
             costMicroYuan = run.costMicroYuan,
             failure = null,
-            faithfulText = base,
+            faithfulText = polished,
             title = json.optString("title").ifBlank { null },
             mood = json.optString("mood").ifBlank { null },
         )
@@ -588,7 +592,7 @@ class GenerationOrchestrator(
      * 找不到就丢弃并计数；全部丢光也照样写入 `[]`（不能写成 null，否则「生成成功但没清单」
      * 和「旧版清单」在库里分不开）。
      */
-    private fun filterChangeLog(raw: JSONArray?, base: String): ChangeLog {
+    private fun filterChangeLog(raw: JSONArray?, bases: List<String>): ChangeLog {
         if (raw == null) return ChangeLog("[]", kept = 0, dropped = 0)
         val keptArray = JSONArray()
         var kept = 0
@@ -597,7 +601,7 @@ class GenerationOrchestrator(
             val item = raw.optJSONObject(index)
             val quote = item?.optString("quote").orEmpty()
             val codePoints = quote.codePointCount(0, quote.length)
-            if (item != null && codePoints in MIN_QUOTE..MAX_QUOTE && base.contains(quote)) {
+            if (item != null && codePoints in MIN_QUOTE..MAX_QUOTE && bases.any { it.contains(quote) }) {
                 keptArray.put(
                     JSONObject()
                         .put("type", item.optString("type"))

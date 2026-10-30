@@ -30,12 +30,15 @@ interface GenerationStore {
      *
      * - [changeLogJson]：小说化的变更清单 JSON 数组文本；忠实链传 `null`。
      * - [stage]：写 `dreams.generationStage`；小说化传 `null` 表示不动这一列（D320 只在成功时写）。
+     * - [faithfulTextForDream]：忠实链传整理后的正文，同事务写 `dreams.faithfulText`
+     *   （Plan 4 T3；小说化/改稿传 `null` 表示不动这一列）。
      */
     suspend fun commitSuccess(
         dreamId: String,
         draft: NovelVersionEntity,
         changeLogJson: String?,
         stage: String?,
+        faithfulTextForDream: String? = null,
     ): Int
 
     /** 只写档位（T3 回退用）。实现复用同一条窄 UPDATE，先读行再把文本列原值写回。 */
@@ -99,6 +102,7 @@ class RoomGenerationStore(private val db: DreamDatabase) : GenerationStore {
         draft: NovelVersionEntity,
         changeLogJson: String?,
         stage: String?,
+        faithfulTextForDream: String?,
     ): Int = db.withTransaction {
         // 顺序不能反：版本号由 insertWithNextVersion 自增，窄 UPDATE 用落库后的最终正文。
         val saved = db.novelVersionDao().insertWithNextVersion(draft)
@@ -107,6 +111,7 @@ class RoomGenerationStore(private val db: DreamDatabase) : GenerationStore {
             novelText = saved.text,
             novelChangeLog = changeLogJson,
             generationStage = stage,
+            faithfulText = faithfulTextForDream,
         )
         saved.version
     }
@@ -120,6 +125,7 @@ class RoomGenerationStore(private val db: DreamDatabase) : GenerationStore {
             novelText = current.novelText,
             novelChangeLog = current.novelChangeLog,
             generationStage = stage,
+            faithfulText = null,
         )
     }
 

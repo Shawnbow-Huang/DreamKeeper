@@ -459,6 +459,80 @@ class GenerationOrchestratorTest {
         append("],\"mood\":\"怅然\"}")
     }
 
+    // ------------------------------------------------------------ T3 忠实稿基座
+
+    @Test
+    fun `忠实链成功时同事务把整理稿写进 dreams_faithfulText`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity())
+
+        val result = newOrchestrator(FakeLlm().apply { enqueue(ok(CLEAN_T1)) }, RoomGenerationStore(db))
+            .generateFaithful(DREAM_ID)
+
+        assertNull(result.failure)
+        val stored = db.dreamDao().getById(DREAM_ID)!!
+        assertEquals("T3：忠实链成功必须落 dreams.faithfulText", CLEAN_T1, stored.faithfulText)
+        assertEquals(CLEAN_T1, stored.novelText)
+        assertEquals("T0", stored.generationStage)
+        assertEquals(1, db.novelVersionDao().maxVersion(DREAM_ID))
+    }
+
+    @Test
+    fun `小说化两槽分离且忠实稿为空时回退原始转写`() = runTest {
+        // 忠实稿是「理顺后的另一种写法」：与 RAW 语义同、文字不同，便于断言两槽不是同一个值。
+        val faithful = "梦里我在车站等车，等了很久车都没来，我数了三十次呼吸才醒。"
+        val llm = FakeLlm().apply { enqueue(ok(novelJson(body = "改写后的正文。", quotes = emptyList()))) }
+        newOrchestrator(llm, FakeStore(dreamDomain(faithful = faithful))).generateNovel(DREAM_ID)
+
+        val first = llm.requests[0].messages.single().content
+        assertTrue("原始槽必须放 rawTranscript 原文", first.contains(RAW))
+        assertTrue("理顺槽必须放 faithfulText", first.contains("车都没来"))
+        assertTrue("理顺槽不能等于原始转写", !faithful.contains(RAW))
+
+        // 第二跑：faithfulText 为空 → 两槽都回退原文。
+        val fallbackLlm = FakeLlm().apply { enqueue(ok(novelJson(body = "回退后的正文。", quotes = emptyList()))) }
+        newOrchestrator(fallbackLlm, FakeStore(dreamDomain(faithful = null))).generateNovel(DREAM_ID)
+        val second = fallbackLlm.requests[0].messages.single().content
+        assertEquals(
+            "fallback：两槽同值，原文整段出现两次（原始槽 + 理顺槽）",
+            2,
+            Regex(Regex.escape(RAW)).findAll(second).count(),
+        )
+    }
+
+    @Test
+    fun `changeLog 引文只在原始转写里也保留`() = runTest {
+        val faithful = "梦里我在车站等车，等了很久车都没来，我数了三十次呼吸才醒。"
+        val quoteOnlyInRaw = "数着三十次呼吸"
+        val llm = FakeLlm().apply {
+            enqueue(ok(novelJson(body = "改写后的正文。", quotes = listOf(quoteOnlyInRaw))))
+        }
+        val store = FakeStore(dreamDomain(faithful = faithful))
+
+        val result = newOrchestrator(llm, store).generateNovel(DREAM_ID)
+
+        assertEquals("引文在双基准里任一命中即保留", 1, result.changeLogKept)
+        assertEquals(0, result.changeLogDropped)
+        assertTrue(store.commits.single().changeLogJson!!.contains(quoteOnlyInRaw))
+    }
+
+    @Test
+    fun `changeLog 引文只在忠实稿里也保留`() = runTest {
+        val faithful = "梦里我在车站等车，等了很久车都没来，我数了三十次呼吸才醒。"
+        val quoteOnlyInFaithful = "车都没来"
+        assertFalse("题目要求引文只能在忠实稿里命中", RAW.contains(quoteOnlyInFaithful))
+        val llm = FakeLlm().apply {
+            enqueue(ok(novelJson(body = "改写后的正文。", quotes = listOf(quoteOnlyInFaithful))))
+        }
+        val store = FakeStore(dreamDomain(faithful = faithful))
+
+        val result = newOrchestrator(llm, store).generateNovel(DREAM_ID)
+
+        assertEquals(1, result.changeLogKept)
+        assertEquals(0, result.changeLogDropped)
+        assertTrue(store.commits.single().changeLogJson!!.contains(quoteOnlyInFaithful))
+    }
+
     // ---------------------------------------------------------------- fakes
 
     /** 只记账、按队列逐次返回的假网络。队列耗尽即失败（漏配调用会立刻暴露）。 */
@@ -489,6 +563,7 @@ class GenerationOrchestratorTest {
         val draft: NovelVersionEntity,
         val changeLogJson: String?,
         val stage: String?,
+        val faithfulText: String?,
     )
 
     /** 内存版 GenerationStore：只记录写入了什么，不模拟 SQL。 */
@@ -514,8 +589,9 @@ class GenerationOrchestratorTest {
             draft: NovelVersionEntity,
             changeLogJson: String?,
             stage: String?,
+            faithfulTextForDream: String?,
         ): Int {
-            commits += Commit(draft, changeLogJson, stage)
+            commits += Commit(draft, changeLogJson, stage, faithfulTextForDream)
             return nextVersion++
         }
 

@@ -338,7 +338,7 @@ suspend fun commitSuccess(
 3. 全量 + 证据 `p4-faithful-00-red.txt` / `01-green.txt` / `02-mutation.txt`。
 
 **Expected**
-- 加 4 例（并入现有类则类数不变；若新建类则 **45 类 / 399 例**，实施者先报 Lead 再定）。
+- 加 4 例并**并入 `GenerationOrchestratorTest`**（类数不变 → **44 类 / 399 例**，D431）。
 - `p3` 的 GenerationOrchestratorTest 全绿不退化。
 
 ## Task 4：「补一段」入口与原样 tab
@@ -358,7 +358,7 @@ suspend fun commitSuccess(
 4. 变异：去掉防重入 → 自动重跑用例如红；恢复。
 
 **Expected**
-- 全量 **46 类 / 405 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
+- 全量 **45 类 / 405 例 / 0 失败**（AppendEntryTest 6 例：追加入口/互斥/闸门/重试转写/跳过/旧 faithful 版切换）。
 - 设备：追加后 `rawTranscript` 严格追加、`transcriptMs == rawAudioMs`、faithful 新版本出现、旧版仍可选。
 
 ## Task 5：小说化显式触发与想法
@@ -381,7 +381,7 @@ suspend fun commitSuccess(
 5. D408：`novel_revise.v1.1` 分流 3 条规则 + 2 条解析用例（纯提问→ASK、明确改动→REVISE、拿不准→ASK）。
 
 **Expected**
-- 全量 **47 类 / 409 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
+- 全量 **46 类 / 409 例 / 0 失败**（PromptRepositoryTest 10 槽 +1 例、新增 NovelIdeaTest 3 例）。
 - 资产进包：`unzip -l app-debug.apk | grep prompts/` 含 v2.1 与 v1.1 旧版仍在。
 
 ## Task 6：可见性与体验缺陷
@@ -401,7 +401,7 @@ suspend fun commitSuccess(
 4. 变异：版本线不过滤 → 用例如红。
 
 **Expected**
-- 全量 **49 类 / 413 例 / 0 失败**。
+- 全量 **48 类 / 413 例 / 0 失败**。
 
 ## Task 7：发布就绪与终验
 
@@ -418,7 +418,7 @@ suspend fun commitSuccess(
 5. 看板 8/8、最后更新、下一步 Plan 5。
 
 **Expected**
-- 无新增单测（全量保持 Task 6 的 **49 类 / 413 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
+- 无新增单测（全量保持 Task 6 的 **48 类 / 413 例**）；release 与 API 证据入库；R1–R5 风险结论写进终审。
 
 ---
 
@@ -441,13 +441,17 @@ suspend fun commitSuccess(
 | D428 | T2 实测新增 13 例（6+7），计划冻结的 392 例少算 3 例 | 全量口径改为 44 类/395 例，T3–T7 顺延为 45/399、46/405、47/409、49/413、49/413 |
 | D429 | 尾段临时 WAV 若落 audio 目录，会被 AudioScan 当「孤儿录音」恢复成草稿 | 临时文件固定落 `cacheDir/stt-tail`，`finally` 删除；`AppContainer` 注入 `tempDir` |
 | D430 | `TailWav.sliceTo` 源文件短于 44 字节时无法构造合法 WAV | 抛 `IOException`（不是静默 0）；越界/空段才写合法空 WAV 返回 0，由调用方判失败 |
+| D431 | T3 的 4 例并入 `GenerationOrchestratorTest` 而非新建类，类数不变 | 记为 44 类/399 例；T4–T7 的类数预测同步减 1（45/405、46/409、48/413、48/413） |
+| D432 | `commitSuccess` 增第 5 个参数会破现有 FakeStore 实现 | 参数带默认值 `null`；测试的 FakeStore/Commit 同步扩列，生产调用点只忠实链传值 |
+| D433 | 忠实链 T3（保守档也失败）不建版本、不写 `dreams.faithfulText` | 返回 `text=input` 由调用方重跑；避免「失败也落库」，语义等价（raw 即正文） |
+| D434 | `filterChangeLog` 由单基准改双基准（理顺稿+原始转写） | quote 命中任一即保留；只在忠实稿里的引文不再被误丢（新增 2 例锁定） |
 | D422 | 2026-10-31 | T1 | `scripts/check-migrate.py` 的 `diff_2_3` 比较前需去 `i:`/`s:` 前缀 | 实测踩到：dump 值是 canon 字符串，`transcriptStatus == "OK"` 恒假 → 回填期望永远算成 0，真实数据必 RED。已加 `decanon()`；修后 fixture GREEN、负向 RED、v1→v2 回归逐字不变 |
 
 ## 10. 自审记录
 
 ### T0 契约冻结（Lead，2026-10-31）
 - 交付：`724d13e`（计划 404 行）、`71cd30b`（Voice AI 复核收紧）、本文档后续修订。
-- 结论：契约冻结，T1 开工；测试计数冻结为 49 类 / 410 例（终态）。
+- 结论：契约冻结，T1 开工；测试计数冻结为 48 类 / 413 例（终态；D431 顺延后）。
 
 ### Task 1 验收（Lead，2026-10-31）
 - **交付**：`6 个主文件 + 4 个测试文件 + 3.json + 5 份 p4-* 证据`（本提交）。主改动：`DreamEntity` 追加
@@ -483,6 +487,24 @@ suspend fun commitSuccess(
 - **证据**：`p4-append-03-tailwriter.txt`（host-only 头；含为什么/改法/测试/绿跑/变异原文/恢复 sha/全量/未覆盖）。
 - **PENDING**：设备真实追加录音（T4）、进程被杀后的启动补转写（T4/T7）、长录音性能（T7）。
 - **结论**：通过。偏差 D427–D430 已登记；下一步 T3（忠实稿基座与整段重跑）。
+
+### Task 3 验收（Lead，2026-10-31）
+
+- **交付**：本提交——`GenerationStore.commitSuccess` 增 `faithfulTextForDream`（与版本行同事务）、
+  `DreamDao.updateNovelAfterGeneration` 增 `COALESCE(:faithfulText, faithfulText)` 列、
+  `GenerationOrchestrator.novel()` 两槽分离、`filterChangeLog` 双基准；
+  `GenerationOrchestratorTest` +4 例；证据 `docs/evidence/plan4/p4-faithful-00-base.txt`。
+- **Lead 独立复跑**：targeted `--rerun-tasks` → `12 tests completed, 0 failed`（57s）；
+  全量 `--rerun-tasks` → **44 类 / 399 例 / 0 / 0 / 0**（1m14s）。
+- **契约核对**：忠实链成功同事务写 `dreams.faithfulText`（真 Room 断言）；小说化原始槽=rawTranscript、
+  理顺槽=faithfulText（空回退原文，两槽同值时原文出现 2 次）；changeLog 引文在任一基准命中即保留；
+  小说化/改稿仍传 `null` 表示不动该列。
+- **变异**：① `faithfulTextForDream = null` → 落库用例红（12/1，59s）；
+  ② `SLOT_RAW to polished` → 两槽分离用例红（12/1，57s）；恢复后 `GenerationOrchestrator.kt`
+  sha256 `07d2b7db…ce1e` 与备份逐字同。
+- **证据**：`p4-faithful-00-base.txt`（host-only 头；为什么/改法/4 例/绿跑/两处变异原文/恢复 sha/全量/未覆盖）。
+- **PENDING**：设备侧「重跑忠实链后原样 tab 显示新稿」（T4 一起验）；真实 LLM 下 faithful 与 raw 的差异质量（T7）。
+- **结论**：通过。偏差 D431–D434 已登记；下一步 T4（「补一段」入口与原样 tab）。
 
 每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。

@@ -1,0 +1,42 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T19:58:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.llm.GenerationOrchestratorTest" --rerun-tasks --console=plain
+
+# 为什么（T3）
+Plan 3 的忠实链只把整理稿写进 `novel_versions` 与 `dreams.novelText`，从不回写 `dreams.faithfulText`
+（D394 的可见性判断因此只能用版本行）。小说化的「理顺稿」槽也一直与「原始转写」槽传同一个值，
+等于把设计 §6.2「以理顺稿为底本」做成了「把原文抄两遍」。本任务把基座补正。
+
+# 改了什么
+- `dreams.faithfulText` 成为忠实链的落点：`GenerationStore.commitSuccess` 增第 5 个可选参数
+  `faithfulTextForDream`，与版本行、`novelText`、`generationStage` **同一个事务**写入；
+  `DreamDao.updateNovelAfterGeneration` 增一列 `faithfulText = COALESCE(:faithfulText, faithfulText)`
+  （传 null = 不动，小说化/改稿都传 null）。
+- `GenerationOrchestrator.novel()` 两槽分离：`【原始转写】= dream.rawTranscript`、
+  `【理顺稿】= dream.faithfulText`（空则回退原文）；`filterChangeLog` 改「双基准」：
+  quote 只要在理顺稿或原始转写的任一里逐字出现即保留。
+- 忠实链 T3（保守档也失败）不建版本、不写 `faithfulText`（返回 `text=input`，语义等价），
+  由调用方决定是否重跑；避免「失败也落库」。
+
+# 测试（+4 例，并入 GenerationOrchestratorTest：44 类 / 399 例）
+1. 忠实链成功 → 真 Room 里 `dreams.faithfulText == 整理稿`，且 `novelText`/版本号/stage 不变语义；
+2. 小说化两槽分离：原始槽=rawTranscript、理顺槽=faithfulText；faithfulText 为空时两槽同值（原文出现 2 次）；
+3. changeLog 引文只在原始转写里 → 保留（kept=1）；
+4. changeLog 引文只在忠实稿里 → 保留（kept=1）。
+
+# 绿跑
+targeted：12 tests completed, 0 failed（BUILD SUCCESSFUL 57s）
+全量：BUILD SUCCESSFUL 1m 14s；XML classes=44 tests=399 failures=0 errors=0 skipped=0（395 + 4）
+
+# 变异反证（必红，各跑一次后恢复）
+① `commitFaithful` 改传 `faithfulTextForDream = null`：
+   GenerationOrchestratorTest > 忠实链成功时同事务把整理稿写进 dreams_faithfulText FAILED
+   12 tests completed, 1 failed / BUILD FAILED in 59s
+② `SLOT_RAW to polished`（原始槽错用理顺稿）：
+   GenerationOrchestratorTest > 小说化两槽分离且忠实稿为空时回退原始转写 FAILED
+   12 tests completed, 1 failed / BUILD FAILED in 57s
+恢复后 `GenerationOrchestrator.kt` sha256=07d2b7dbc7f54d59b8e987aa1014f1f44c8c34534ec48c1c65ff7c788588ce1e
+  与变异前备份逐字相同。
+
+# 未覆盖
+设备侧「重跑忠实链后原样 tab 显示新稿」（T4 入口/UI 一起验）；真实 LLM 下 faithful 与 raw 的差异质量。
