@@ -302,9 +302,11 @@ object RecordingCommands {
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/ui/record/RecordScreen.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/ui/record/RecordViewModel.kt`
+- Create `android/app/src/main/java/com/dreamkeeper/service/RecordingStarter.kt`（把 `startForegroundService`/`stopService`/`cancel` 收成一个可注入接口，真实现放这里）
 - Modify `android/app/src/main/java/com/dreamkeeper/ui/record/RecordUiState.kt`
 - Modify `android/app/src/main/java/com/dreamkeeper/ui/DreamKeeperRoot.kt`（`Record` 空桩 → 真屏）
-- Modify `android/app/src/main/java/com/dreamkeeper/ui/MainActivity.kt`（运行时权限 + 锁屏可见 + intent → `RecordEntry`）
+- Modify `android/app/src/main/java/com/dreamkeeper/MainActivity.kt`（**注意不是在 `ui/` 下**：运行时权限、锁屏可见、intent → `RecordEntry`、`singleTop`）
+- Modify `android/app/src/main/AndroidManifest.xml`（`MainActivity` 加 `android:launchMode="singleTop"`）
 - Create `android/app/src/test/java/com/dreamkeeper/ui/record/RecordViewModelTest.kt`
 
 **Interfaces**
@@ -317,33 +319,73 @@ data class RecordUiState(
     val amplitude: Float = 0f,
     val error: String? = null,
     val loaded: Boolean = false,
+    val savedDreamId: String? = null,   // 落库成功才有值，用于导航
 )
+
+/** 只做「把命令发给 Service」，不持有业务状态，便于在 JVM 测试里换成假实现。 */
+interface RecordingStarter {
+    fun start(dreamId: String)
+    fun stop()
+    fun cancel()
+}
 
 class RecordViewModel(
     private val repository: DreamRepository,
     private val session: RecordingSession,
+    private val audioStore: WavStore,
+    private val starter: RecordingStarter,
+    private val hasPermission: () -> Boolean,
     private val clock: () -> Long,
 ) {
-    val state: StateFlow<RecordUiState>
-    fun onPressStart(entry: RecordEntry)     // 生成 dreamId → save(isDraft) → 起服务
-    fun onRelease()                          // 发 STOP
-    fun onCancel()
-    fun parseEntry(raw: String?): RecordEntry
+    val state: StateFlow<RecordUiState>          // 由 session.state 映射，Eagerly 或由测试直接断言 session
+    val permissionBlocked: StateFlow<Boolean>    // true = 缺 RECORD_AUDIO，UI 只显示「再试一次/去设置」
+    fun onPressStart(entry: RecordEntry)         // 无权限 → 不动任何东西；有权限 → 起服务
+    fun onRelease()                              // 发 STOP；启动 5 秒看门狗
+    fun onCancel()                               // 发 CANCEL + 删文件，不落库
+    fun parseEntry(raw: String?): RecordEntry    // entries.firstOrNull { it.name == raw } ?: HOME_BUTTON
 }
 ```
 
-**Steps**
-- [ ] 4.1 写 `RecordViewModelTest`（先红）：`parseEntry("LOCK_TILE")=LOCK_TILE`、`parseEntry(null)=HOME_BUTTON`、`parseEntry("bogus")=HOME_BUTTON`；`onPressStart` 后仓库里出现一条 `isDraft=true` 且 `rawAudioPath` 指向 `files/audio/<id>.wav` 的记录；`onPressStart` 期间 session 状态为 `RECORDING`。
-- [ ] 4.2 跑 → 红。
-- [ ] 4.3 实现 ViewModel → 绿。
-- [ ] 4.4 `MainActivity`：请求 `RECORD_AUDIO`（+ 33+ 的 `POST_NOTIFICATIONS`）；`setShowWhenLocked(true)`/`setTurnScreenOn(true)`，minSdk 26 分支补 `FLAG_SHOW_WHEN_LOCKED`；把 `intent.getStringExtra("entry")` 交给 `RecordRoute`。
-- [ ] 4.5 `RecordScreen`：全屏深色，中央大钮（`size(160.dp)`）**按住录、松手停**（`pointerInput` + `detectTapGestures(onPress/onRelease)`），计时文字由 `session.state.elapsedMs` 驱动（**不许自建计时器**）；振幅条读 `session.state.amplitude`（0..1，由 `RecorderCore.onChunk` 的 dBFS 归一化而来），**不许每帧随机**；底部「取消」48dp。
-- [ ] 4.6 `DreamKeeperRoot` 里 `DreamRoute.Record` 桩替换成真屏，`.route` 用 `RecordEntry.name`。
-- [ ] 4.7 构建安装 → 点首页「说梦」→ 按住 3 秒松手 → 截图三态。
-- [ ] 4.8 证据：`p2-ux-01-idle.png`、`p2-ux-02-recording.png`、`p2-ux-03-finishing.png`；`files/audio/` 里文件存在且 `stat -c %s` 两次不同（W1）。
-- [ ] 4.9 提交：`feat(record): 录音页按住录/松手停，RecordEntry 解析与开录前草稿`
+**参数与时机钉死（覆盖任何含糊处）**
+- `dreamId` 在**按下时**用 `UUID.randomUUID().toString()` 生成，路径 `audioStore.fileFor(dreamId)`（= `files/audio/<dreamId>.wav`）。
+- **按下不落库**：不 `save` 草稿。录像结束后（`phase == DONE` 且 `bytes > 0`）才 `repository.save(...)`，一次写全 `rawAudioPath`、`rawAudioMs = bytes / 32`、`transcriptStatus = PENDING`、`isDraft = true`。崩溃在「松手后、落库前」只会留下孤儿 WAV，由 Task 6 启动扫描恢复成草稿（这是设计 §8.1-5 的本意）。
+- 落库成功后置 `savedDreamId`，UI 据此导航到 `DreamRoute.FollowUp(id)`。
+- **不许乐观改 phase**：UI 一律跟 `session.state`；`FINISHING` 超过 5 秒没变 `DONE` → `error = "保存超时"`。
 
-**Expected**：三张截图非白（近白闸门 0）、文件字节在增长、草稿行 `isDraft=1`、松手后状态回 IDLE 且不崩。
+**Steps**
+- [ ] 4.0 前置检查（贴进证据）：`ls android/app/src/main/java/com/dreamkeeper/service/` 必须已有 `RecordingService.kt`/`RecordingSession.kt`/`RecordingNotifications.kt`（Task 3 的产物）。缺任何一个就**停手回信**，不要在本任务里补服务。
+- [ ] 4.1 写 `RecordViewModelTest`（先红，只测纯逻辑）：
+  - `parseEntry("LOCK_TILE") == LOCK_TILE`、`parseEntry("bogus") == HOME_BUTTON`、`parseEntry(null) == HOME_BUTTON`；
+  - 无权限时 `onPressStart` **不调** `starter.start`、`session.state.phase` 仍是 `IDLE`；
+  - 有权限时 `onPressStart` 调 `starter.start(dreamId)` 一次、`dreamId` 是合法 UUID、`filePath == audioStore.fileFor(dreamId).absolutePath`；
+  - 假 session 推到 `DONE(bytes = 32_000)` → 仓库里出现一条 `isDraft=true`、`rawAudioPath` 正确、`rawAudioMs == 1000` 的记录，且 `savedDreamId` 有值；
+  - `phase == DONE(bytes = 0)` → **不落库**、`error` 非空；
+  - `onCancel()` → 调 `starter.cancel` 且文件被删（用临时目录断言 `!file.exists()`）。
+  **断言不许从被测输出反推**；不碰 `Service`、不碰 `Context`。
+- [ ] 4.2 跑 `:app:testDebugUnitTest --tests "*RecordViewModelTest*"` → 红（`Unresolved reference` 或断言失败都算）。
+- [ ] 4.3 实现 `RecordViewModel` + `RecordingStarter` → 绿。
+- [ ] 4.4 `MainActivity` 接线：`registerForActivityResult(RequestMultiplePermissions())` 必须在 `onCreate` 里注册（早于 STARTED）；权限判断每次现查 `checkSelfPermission`，**不缓存**；`repeatOnLifecycle(RESUMED)` 只用于重读 intent / 重查权限，不用来驱动手势。`launchMode="singleTop"` + `onNewIntent` 把 `entry` 放进 `mutableStateOf` 供 Compose 消费；**只有 `savedInstanceState == null` 才消费首次 intent**（否则旋转/进程恢复会再跳一次）。锁屏开关只在 `entry ∈ {LOCK_TILE, NOTIFICATION}` 时打开：`setShowWhenLocked(true)`/`setTurnScreenOn(true)`，minSdk 26 分支补 `window.addFlags(FLAG_SHOW_WHEN_LOCKED or FLAG_TURN_SCREEN_ON)`。
+- [ ] 4.5 `RecordScreen` 按住录/松手停，**手势必须这么写**（`detectTapGestures` 没有 `onRelease` 参数，写 `onPress/onRelease` 直接编译不过）：
+  ```kotlin
+  Modifier.pointerInput(Unit) {
+      awaitEachGesture {
+          awaitFirstDown()
+          onStart()
+          val up = waitForUpOrCancellation()   // null = 被系统手势/来电打断，也必须停
+          onStop()
+      }
+  }
+  ```
+  本地 `starting` 布尔挡住连点/第二根手指发第二个 START；松手**先发 STOP 再 navigate**。
+- [ ] 4.6 `RecordScreen` 视觉：底 `NightVoid`；中央 `size(160.dp)` 主钮；计时文字只由 `session.state.elapsedMs` 驱动（**不许自建计时器**）；振幅条只读 `session.state.amplitude`（**不许每帧随机**）；底部「取消」48dp；进入 `RECORDING` 时**只轻震一次**（`HapticFeedbackType.LongPress`），**不发声**；屏内不再重复「正在录音」大字（第二证据是通知栏常驻）。
+- [ ] 4.7 权限三分支（Task 3 的 3.10 在这里落地）：① 还没问过/还能问 → 按下去时**不建草稿、不起服务**，显示「需要麦克风权限才能录梦」+「再试一次」（点了才 request）；② 永久拒绝（`!shouldShowRequestPermissionRationale` 且已问过）→ 只给「去设置」（`ACTION_APPLICATION_DETAILS_SETTINGS` + `package:com.dreamkeeper`）；③ 33+ `POST_NOTIFICATIONS` 被关 → **不拦录音**，屏内一行小字「通知栏不会显示，录音照常」。
+- [ ] 4.8 失败与取消要有出口：`error != null` 渲染成 `NightRaised` 容器（文字用 `Paper`，**不要** M3 `error` 默认色）+「再试一次」；`ENOSPC`（写满）文案单列；`BackHandler(enabled = phase == RECORDING) { onCancel() }`，别让返回键把录音页 pop 掉而服务还在录。
+- [ ] 4.9 构建安装 → 四条路径各走一遍并截图：① 首页「说梦」按住 3 秒松手；② `am start -n com.dreamkeeper/.MainActivity --es entry LOCK_TILE`；③ 通知点回（`entry=NOTIFICATION`）；④ 先拒绝权限再按（走 4.7 ①）。
+- [ ] 4.10 证据（存 `docs/evidence/plan2/`）：`p2-ux-01-idle.png`、`p2-ux-02-recording.png`、`p2-ux-03-finishing.png`、`p2-ux-04-perm-denied.png`、`p2-ux-05-cancel.txt`（取消后 `ls files/audio/` 为空 + 无新增行）、`p2-ux-06-bytes.txt`（两次 `stat`）；每张图旁记 APK sha256 + `adb shell date`；近白闸门 `-TopOffset 100 -MaxRatio 0` 全 0。
+- [ ] 4.11 提交：`feat(record): 录音页按住录/松手停，RecordEntry 四入口接线与落库时机`
+
+**Expected**：按首页「说梦」按住 3 秒 → 计时与振幅在动（只来自 session）、通知出现、松手后落一条 `isDraft=true` 的梦并跳追问页；`LOCK_TILE` / `NOTIFICATION` 两种 entry 都能直达录音页且锁屏可见；无权限时按下去**不建草稿、不起服务**；取消后不留文件不留行；四张截图近白 0；`logcat` 无 `FATAL`；不崩、录音不丢字节。
+
 
 ---
 
@@ -568,6 +610,14 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D103 | 通知 `ContentIntent` 说「回详情」 | 改成 `MainActivity` + `entry=NOTIFICATION`（+`FLAG_IMMUTABLE`），详情深链留 Plan 3 | Mobile App Builder：`DreamRoute.Detail` 没有 deep link、`MainActivity` 只认 `dk_prefill_search`，写「回详情」实际只会打开首页 | 以为的坑 |
 | D104 | `RecordingCommand` 只在 3.2/3.3 里被提到，没有签名也没有文件 | 钉成 `sealed interface RecordingCommand { Start/Stop/Cancel }` + `RecordingCommands.parse(action, dreamId): RecordingCommand?`，落 `RecordingSession.kt` | Mobile App Builder：3.2 的断言目前没有可编译契约，实现者会各自发明「非法」的表示 | 以为的坑 |
 | D105 | 3.7 只写「通知出现、服务存在、无 FATAL」 | 改成四连判据：`started=true`+`isForeground=true`+`foregroundId=42`+类型含 microphone；通知 id=42 且 flags 含 0x40；两次 stat 的字节速率 32000 B/s ±2%；logcat 三类关键字全空 | Evidence Collector：只有 `started=true` 只是 startService 成功，证明不了前台服务与 AudioRecord 在供数 | 实测结论 |
+| D106 | Task 4 的 Files 写 `ui/MainActivity.kt` | 实际路径是 `android/app/src/main/java/com/dreamkeeper/MainActivity.kt`（不在 `ui/` 下） | Mobile App Builder：照抄会新建出第二个 Activity，Manifest 里注册的却还是原来那个 | 实测结论 |
+| D107 | 原 4.1 要求「onPressStart 后仓库里出现 isDraft=true 的记录」 | 改为**按下不落库**、`phase == DONE && bytes > 0` 才一次性 `save`；崩溃在松手后落库前只留孤儿 WAV，由 Task 6 扫描恢复 | Mobile App Builder：`repository.save` 是 suspend，松手早于 save 返回会让 STOP 先到 START 后到，服务起来后没人停、文件无限长；同时避免误触落一堆空草稿 | 实测结论 |
+| D108 | 原 4.5 写 `detectTapGestures(onPress/onRelease)` | 钉成 `awaitEachGesture { awaitFirstDown(); onStart(); waitForUpOrCancellation(); onStop() }`，`up == null`（系统手势/来电）也必须 stop | Mobile App Builder：`detectTapGestures` 没有 `onRelease` 参数，原写法编译不过；`tryAwaitRelease()` 返 false 时原计划没有分支 → 录音永不停 | 实测结论 |
+| D109 | 四个入口只写「把 intent 的 entry 交给 RecordRoute」 | 补：`MainActivity` 加 `launchMode=singleTop` + `onNewIntent` + `entry` 用 `mutableStateOf`；只在 `savedInstanceState == null` 消费首次 intent；锁屏开关只在 `LOCK_TILE`/`NOTIFICATION` 时打开 | Mobile App Builder：点通知会再创建一层 MainActivity（返回退到空壳）；旋转/进程恢复会二次导航；无条件 `setShowWhenLocked` 会让主页也占锁屏 | 实测结论 |
+| D110 | 静态 `shortcuts.xml` 快捷方式入口 | **本轮不实现**，登记推迟：静态 shortcut 的 `<intent>` 不能带 extras，entry 只能靠专用 action 或 data URI；Plan 2 只做「主页按钮 / 锁屏磁贴 / 通知」三条真路 | Mobile App Builder + UI Designer：nowhere 能用真机证据证明第四条路可用，写了就是假入口 | 以为的坑 |
+| D111 | design §11 提到录音页「暂停/继续 + 音量键结束」 | **本轮不实现**，登记推迟到 Plan 4；`RecordUiState` 里旧的 `paused` 字段随重写删掉 | UI Designer：brief 与 plan 都没有这两条的实现步骤与证据，留在文档里只会让实现者猜 | 以为的坑 |
+| D112 | 42dp/160dp 等尺寸口径 | 仓内唯一有据的下限是 **48dp**（`CalendarScreen.kt:238-240`、`LibraryScreen.kt:127`）；主钮 `160.dp` 保留，但补「最小按住 200ms 才算一次录音」防蹭碰；文档里出现的 42dp 属笔误，不改 | UI Designer：`42dp` 在全仓 docs 里 0 命中，无出处 | 实测结论 |
+| D113 | 权限被拒后仍可能「先建草稿再让服务 fail」 | 钉死：`hasPermission()` 为 false 时 `onPressStart` 什么都不做（不生成 id、不建文件、不起服务），只把 `permissionBlocked` 置 true | UI Designer：原 4.1/4.4 顺序会让空草稿堆积、并在启动服务时才炸 | 实测结论 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
