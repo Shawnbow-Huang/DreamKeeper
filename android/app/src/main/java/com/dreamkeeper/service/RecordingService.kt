@@ -155,6 +155,8 @@ class RecordingService : Service() {
             )
         } catch (e: Exception) {
             Log.e(TAG, "startForeground 失败", e)
+            // 还没开始录音就失败了：删掉刚建的占位头文件，别在 files/audio/ 里留孤儿（D127）。
+            runCatching { file.delete() }
             session.fail(ERROR_FOREGROUND)
             stopForegroundAndSelf()
             return
@@ -165,6 +167,7 @@ class RecordingService : Service() {
         val writer = record?.let { openWriter(file) }
         if (record == null || writer == null) {
             record?.release()
+            runCatching { file.delete() }
             session.fail(ERROR_AUDIO_OPEN)
             stopForegroundAndSelf()
             return
@@ -172,6 +175,9 @@ class RecordingService : Service() {
         val recording = ActiveRecording(dreamId, file, record, writer)
         if (!recording.startCapture()) {
             recording.release()
+            // 句柄必须关（close 兜底 finish），文件删掉——这一趟什么都没录到（D127）。
+            runCatching { writer.close() }
+            runCatching { file.delete() }
             session.fail(ERROR_AUDIO_OPEN)
             stopForegroundAndSelf()
             return
