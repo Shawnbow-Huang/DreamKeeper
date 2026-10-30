@@ -39,6 +39,9 @@
 | — | p2-ux-hold.mp4 | 722,131 | 004507162720A0F4 | — | take3 同一次按住；9.20s / 1080x2400 / 14.02fps |
 | — | p2-ux-bytes-hold.txt | — | — | — | 三次 stat（take4） |
 | — | p2-ux-latency.txt | — | — | — | START/STOP 时间戳（take C + take B 复核） |
+| — | p2-ux-coldstart.txt | 415 | — | — | 冷启动 x3：1570/1609/1654ms，median 1609ms，CRASHES=0 |
+
+冷启动原始 logcat dump（1524 行）未入库，脚本摘要即上面的 p2-ux-coldstart.txt。
 
 证据 APK：`android/app/build/outputs/apk/debug/app-debug.apk`
 - 12,958,451 bytes，sha256 `998227942986919c3a900fe92c756690e54c805cd3ff792e648c019e4876e33a`（2026-10-30 16:54）
@@ -90,6 +93,11 @@ $ADB -s emulator-5554 shell am start -n com.dreamkeeper/.MainActivity \
 # 8) 闸门
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-near-white.ps1 \
   -Path docs/evidence/plan2/p2-ux-01-idle.png -TopOffset 100
+
+# 9) 冷启动 + 崩溃闸门（x3，门限 2000ms）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-logcat.ps1 \
+  -Serial emulator-5554 -OutFile docs/evidence/plan2/p2-ux-coldstart-logcat.txt \
+  -ReportFile docs/evidence/plan2/p2-ux-coldstart.txt
 ```
 
 ## 注记

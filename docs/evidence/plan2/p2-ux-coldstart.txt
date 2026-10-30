@@ -1,0 +1,8 @@
+﻿ADB: C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe serial=emulator-5554 mode=cold-start x3
+RUN 1: status=ok TotalTime=1654ms
+RUN 2: status=ok TotalTime=1609ms
+RUN 3: status=ok TotalTime=1570ms
+LOGCAT: docs/evidence/plan2/p2-ux-coldstart-logcat.txt lines=1524 bytes=315328
+CRASHES: 0
+LAUNCH: Displayed=3 statuses=ok,ok,ok
+STARTUP: runs=1654,1609,1570 min=1570ms median=1609ms max=1654ms
