@@ -135,7 +135,7 @@ interface WavWriter : Closeable {
 - [ ] 1.9 打印前 44 字节的 **xxd 风格** hexdump（带 offset 列 + ASCII 列，别用 `bytes.hex()` 单行，无法按 offset 引用）存 `docs/evidence/plan2/p2-wav-01-header.txt`，文件头 6 行写 `case / artifact / bytes / sha256 / generator / expect`。
 - [ ] 1.10 提交（**带 4 个证据文件**）：`feat(audio): WavStore 与 WAV 数学（占位头/单一写句柄/回填/repair/时长公式）`
 
-**Expected**：`testDebugUnitTest` 全绿且新增 ≥14 条；「占位头黄金 hex」与「回填头黄金 hex」两个常量都被逐字节断言；python fixture 与 `WavWriter` 产出 sha256 相同；ffprobe `duration=1.000000` 且 stderr 无 `[wav @` 行。**`(bytes-44)%32 != 0` 时契约未规定怎么处理——不许自行裁剪、补齐或四舍五入，先在偏差表记一行（D91）再问 Lead**。
+**Expected**：`testDebugUnitTest` 全绿且新增 ≥14 条；「占位头黄金 hex」与「回填头黄金 hex」两个常量都被逐字节断言；python fixture 与 `WavWriter` 产出 sha256 相同；ffprobe `duration=1.000000` 且 stderr 无 `[wav @` 行。**`(bytes-44)%32 != 0` 时契约未规定怎么处理——不许自行裁剪、补齐或四舍五入，先在偏差表记一行（D96）再问 Lead**。
 
 ---
 
@@ -151,45 +151,66 @@ interface WavWriter : Closeable {
 enum class SourceState { RECORDING, STOPPED, DEAD }
 
 interface PcmSource {
-    fun read(buffer: ByteArray): Int      // >0 字节数；<0 错误
+    /** >0 = 读到的字节数；0 = 这一轮暂时没有数据（**不结束**，继续循环）；<0 = 读错误（必须结束）。 */
+    fun read(buffer: ByteArray): Int
     fun state(): SourceState
     fun stop()
 }
 
+/** 与 WavWriter 的适配层：WavWriter 的 bytesWritten 是 val、且没有 sync()，不能直接当 PcmSink 用。 */
 interface PcmSink {
-    fun write(buffer: ByteArray, length: Int)
+    fun write(buffer: ByteArray, length: Int)   // length 必须偶数
     fun sync()
-    fun bytesWritten(): Long              // 含头之后的 PCM 字节数
+    fun bytesWritten(): Long                    // 绝对偏移：44 字节头之后的 PCM 总字节数
+    fun finish()
 }
 
-data class RecorderStop(val bytes: Long, val zeroFillBytes: Long, val reason: String)
+data class RecorderStop(
+    val bytes: Long,          // 本次 run 期间写入的**真实** PCM 字节（不含补零）
+    val zeroFillBytes: Long,  // 本次 run 期间补进去的零字节（一定偶数）
+    val reason: String,       // 只允许 "dead" | "stopped" | "user" | "error" 四个值
+)
 
 class RecorderCore(
     private val source: PcmSource,
     private val sink: PcmSink,
-    private val clock: () -> Long,        // elapsedRealtime 毫秒
+    private val clock: () -> Long,          // elapsedRealtime 毫秒；JVM 测试注入假钟，**禁止**默认 SystemClock
     private val minGapMs: Long = 100L,
+    private val silenceFloorDb: Int = -60,  // 振幅下限
 ) {
+    /** 前移两个原点：startMs = clock(); baseBytes = sink.bytesWritten()。暂停恢复、追问窗口超时都调它。 */
+    fun rebase()
+
     fun run(startedAtMs: Long, onChunk: (bytes: Long, amplitudeDb: Int) -> Unit): RecorderStop
 }
 ```
 
-**补零公式（唯一允许的算法，别自己发明）**
-- 每毫秒 32 字节（16 kHz × 1 ch × 2 B ÷ 1000 ms）；换样本时 1 ms = 16 样本。
-- `expectedSamples = (elapsedRealtime() - startMs) * 16`；`actualSamples = bytesWritten / 2`；`deficit = expectedSamples - actualSamples`（**单位是样本，不是毫秒**）。
-- **`deficit > 1600`（= 100 ms）才补**；先补等长零字节，**再**写刚读到的真实块（顺序反了会把声音推到静音之后）。
-- 只用 `elapsedRealtime()` 做基准，**禁止墙钟**（`System.currentTimeMillis()` 会被改时间/时区拖歪）。
-- 暂停恢复、追问窗口超时都必须**前移基准**（`startMs = now` 且已写字节数一并前移，等价 `rebase()`），否则暂停那几十秒会被补成静音。
-- 收尾顺序固定为 `stop() → join() → sync() → 回填 8 字节 → close()`，一步都不许提前、合并或省略。
+**补零与振幅契约（唯一允许的算法，别自己发明）**
+- 不变量：`deficitSamples = (clock() - startMs) * 16 - (sink.bytesWritten() - baseBytes) / 2`（样本）。
+- `deficitSamples > minGapMs * 16`（默认 1600 样本 = 100 ms）才补；**补进去的字节数 = deficitSamples * 2**（1600 样本 = 3200 B）。
+- 先补等长零字节，**再**写刚读到的真实块；顺序反了会把声音推到静音之后。
+- 时钟必须在**调用 `read` 之前**采样；在读之后采样会把刚读到的这块算进缺口、再前补一遍（音频加倍）。
+- 缺口 ≤ 阈值时**不补、也不重置基线**：累计到下次超阈值一次补齐，不做逐轮漂移修正。
+- `rebase()` **只**改 `startMs` 与 `baseBytes`，**不许**去动 `sink.bytesWritten()`（它是绝对偏移，回填 data size 依赖它）。
+- 振幅：每块按 `20*log10(rms/32768)` 算；全零块直接取 `silenceFloorDb`（否则 `log10(0) = -Infinity`，`.toInt()` 会变成 `Int.MIN_VALUE`）；`amplitudeDb ∈ [silenceFloorDb, 0]`；UI 映射 `(db - silenceFloorDb) / -silenceFloorDb` → `0..1`。
 
 **Steps**
-- [ ] 2.1 写测试（先红）：正常三块 3200B → `bytes == 9600`、`zeroFillBytes == 0`；`read() == -1` → 返回 `reason="dead"`；`state() == STOPPED` → 结束；时钟前进 200ms 但只读到 3200B → `zeroFillBytes > 0` 且**零字节先写**（用记录写入顺序的假 sink 断言第 1 次写入长度 == deficit、第 2 次才是真实块）；缺口 ≤100ms 不补；`onChunk` 收到单调递增的 bytes。
+- [ ] 2.1 写测试（先红），至少九组：
+  - 对照组：三块各 3200 B、时钟不前进 → `bytes == 9600`、`zeroFillBytes == 0`、`write` 调用次数 == 3（**这条是「≤100 ms 不补」的唯一杀手**）。
+  - 补零组：时钟前进 250 ms、只读到 3200 B → expected 4000 样本、actual 1600、deficit 2400 → 先写 **4800** 字节零、再写 3200 字节真实块；假 source 每块填可区分的值，断言 `out[0,4800)` 全 0 且 `out[4800,8000)` 逐字节等于第 1 块；期望常量在**测试侧**用 `BYTES_PER_MS` 算，**不许**拿 `result.zeroFillBytes` 反推。
+  - 边界组：时钟前进 100 ms、读到 3200 B → deficit 恰 1600，**不补**（`> 1600` 才补）、`zeroFillBytes == 0`、`write` 次数 == 1。
+  - `read() == -1` → `reason == "dead"`；`read() == 0` → 不结束、继续读（不得当 EOF）。
+  - `state() == STOPPED` → `reason == "stopped"`；外部 `stop()` → `reason == "user"`。
+  - 追加组：sink 起始 `bytesWritten() == 1044`（44 头 + 1000 B PCM）、`baseBytes == 1044`、首块 3200 B → deficit 为 0、不补（防止拿绝对偏移当分子）。
+  - `rebase()` 组：补过一次之后 rebase → 新窗口 deficit 从 0 起算，不追溯 rebase 之前的缺口。
+  - 振幅组：全零块 `amplitudeDb == silenceFloorDb`；正常块落在 `[silenceFloorDb, 0]`；UI 映射公式单测 `(db+60)/60`。
+  - 形状组：每次补零字节数为偶数；`onChunk` 的 `bytes` 单调递增。
 - [ ] 2.2 跑测试 → 红。
-- [ ] 2.3 实现 `RecorderCore` → 绿。
-- [ ] 2.4 **变异验证**：把「先补零再写」改成「先写再补零」→ 顺序断言必须红；把 `deficit > minGapMs * 16` 改成 `>= 0` → 「缺口 ≤100ms 不补」必须红。改回。**注意单位**：`deficit` 是样本数，门槛是 `100 ms × 16 样本/ms = 1600`，别拿毫秒直接和样本比。
-- [ ] 2.5 提交：`feat(audio): RecorderCore 读循环、按单调钟补等长零帧、收尾原因`
+- [ ] 2.3 实现 `RecorderCore` → 绿。`deficitSamples` 用 `Long`；`read` 的 buffer 大小取 `max(getMinBufferSize, 3200)`（Task 3 决定实例值，这里按 `buffer.size` 自适应）。
+- [ ] 2.4 **变异验证**（四条，每条都要真红再改回）：「先补零再写」→「先写后补零」；`deficitSamples > minGapMs * 16` → `>= 0`；补零字节 `deficitSamples * 2` → `deficitSamples`（只补一半）；时钟采样从 `read` 之前挪到之后。
+- [ ] 2.5 提交：`feat(audio): RecorderCore 读循环、按单调钟补等长零帧、rebase 与收尾原因`
 
-**Expected**：新增 ≥6 条用例；`zeroFillBytes` 与时钟缺口严格对应；写入顺序断言存在。
+**Expected**：新增 ≥9 条用例；`zeroFillBytes` 与时钟缺口严格对应（样本→字节要 ×2）；写入顺序断言存在且期望值不取自被测输出；`reason` 只会是四个字面量之一；振幅不会出现 `Int.MIN_VALUE`；`(bytes-44)%32 != 0` 时**不许自行处理**，先记偏差表再问 Lead。
 
 ---
 
@@ -515,6 +536,11 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D94 | 旧稿「`ParcelFileDescriptor` 先 seek 跳过 44 字节头」 | 自己 `skip(44)`，把剩下的 PCM 灌进 `ParcelFileDescriptor.createPipe()` 写端 | 传给识别器的 PFD 不能 seek | 以为的坑 |
 | D95 | 权限只验 `pm revoke`/`pm grant` 两路 | 补 `appops set com.dreamkeeper RECORD_AUDIO ignore`（永久拒绝）并取 `dumpsys package` 授权行 | 只有 revoke 验不出「永久拒绝」分支；且 revoke 会杀进程，pid 变是正常的 | 实测结论 |
 | D96 | Task 1 实作的四处细节原计划没写死：①`openWriter` 对缺失或 <44 字节文件兜底写占位头；②`state()` 对 <44 字节抛 `IllegalStateException`；③`repair` 顺带纠正过期但非占位的尺寸；④追加场景 `bytesWritten` 从已有 PCM 起算。另计划里那条 python fixture 命令原本含一个真正的 NUL 字节 | 四条行为全部保留并用测试钉住（`WavStoreTest` 17 条）；NUL 换成 `\x00` 字面量使命令可复制执行 ；Lead 复核 `WavStore.kt:63-116` 并修补 | 实测结论 |
+| D97 | Task 2 的 `reason`、`read()` 返回 0 的语义、`rebase()` 三处都没定义 | 钉死 `reason ∈ {dead, stopped, user, error}`；`read()==0` 视为「暂时没数据、继续读」；新增 `rebase()` 只改 `startMs` 与 `baseBytes` | Mobile App Builder：没有这三条，STOPPED 分支与「暂停不补静音」在单测里根本无法表达，5.4b 要调的 `rebase()` 也不存在 | 以为的坑 |
+| D98 | 原 2.1 的补零用例写「时钟前进 200 ms、读到 3200 B」 | 改成 250 ms（deficit 2400 样本、补 4800 B），并补「100 ms 恰好 1600 样本不补」的边界组 | Voice AI：200 ms 时 deficit 恰为 1600，`> 1600` 不成立，原断言 `zeroFillBytes > 0` 必红；门槛在边界上一格都不能差 | 实测结论 |
+| D99 | `PcmSink` 直接复用 `WavWriter` | 加一层适配（`bytesWritten` 是 `val`、`WavWriter` 也没有 `sync()`）；`join()` 从接口里去掉（`run` 同步返回、没有读线程） | Mobile App Builder：两者签名不兼容，直传编译不过；`join` 无出处会让实现者自己发明线程模型 | 以为的坑 |
+| D100 | 只写「振幅条读 `onChunk` 的 dBFS」 | 钉死 `20*log10(rms/32768)`、全零块取 `silenceFloorDb`、值域 `[-60, 0]`、UI 映射 `(db+60)/60` | Mobile App Builder：全零块 `log10(0) = -Infinity`，Kotlin 的 `(-Infinity).toInt()` 返回 `Int.MIN_VALUE` 且不抛，振幅条会恒空 | 实测结论 |
+| D101 | rebase 写成「已写字节数一并前移」 | 改成保留独立的 `baseBytes` 参与减法，**不动** `sink.bytesWritten()` | Voice AI：只前移时间原点会让 deficit 变成负值、整段时间窗漏补；只归零字节计数会一次补出与已录等长的静音 | 实测结论 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
