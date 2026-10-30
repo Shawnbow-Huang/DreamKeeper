@@ -12,3 +12,6 @@ prompts/*.md text eol=lf
 # 实测 fresh clone 后 p3-mig-00-red.txt 由 LF 变 CRLF、sha256 漂移（D377）。二进制证据不转换。
 docs/evidence/plan3/*.txt text eol=lf
 docs/evidence/plan3/*.db binary
+docs/evidence/plan4/*.txt text eol=lf
+docs/evidence/plan4/*.db binary
+docs/evidence/plan4/*.png binary
