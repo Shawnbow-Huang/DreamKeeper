@@ -128,16 +128,19 @@ class MigrationTest {
         // v2 新列：老行必须都是 NULL（不是 0、不是空串）
         assertNull(row.novelSelectedVersion)
         assertNull(row.generationStage)
+        // v3 新列：FAILED 的老行不算「已转写」，水位必须是 0
+        assertEquals("FAILED 行不许被回填成已覆盖", 0L, row.transcriptMs)
 
         val second = withContext(Dispatchers.IO) { database.dreamDao().getById("legacy-dream-2") }
         assertNotNull(second)
         assertEquals(4_444L, second!!.updatedAt)
+        assertEquals("无音频老行水位也是 0", 0L, second.transcriptMs)
 
         withContext(Dispatchers.IO) {
             val raw = database.openHelper.readableDatabase
             raw.query("PRAGMA user_version").use { c ->
                 c.moveToFirst()
-                assertEquals("v1→v2 之后 user_version 必须是 2", 2, c.getInt(0))
+                assertEquals("v1→v3 之后 user_version 必须是 3", 3, c.getInt(0))
             }
             raw.query("SELECT COUNT(*) FROM dreams").use { c ->
                 c.moveToFirst()

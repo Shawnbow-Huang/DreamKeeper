@@ -41,4 +41,9 @@ data class Dream(
     val rawAudioMs: Long? = null,
     /** 用户挑中的小说化版本号（`novel_versions.version`）；null = 没挑，详情/导出用最新版。 */
     val novelSelectedVersion: Int? = null,
+    /**
+     * 转写水位：`rawTranscript` 已覆盖到的音频毫秒数（Plan 4 §0.2）。
+     * 不在 UI 上直接展示；`rawAudioMs > transcriptMs` 表示还有没转写的追加段。
+     */
+    val transcriptMs: Long = 0,
 )

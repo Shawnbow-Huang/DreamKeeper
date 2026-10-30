@@ -170,7 +170,8 @@ interface DreamDao {
     @Query("""
         UPDATE dreams
         SET rawTranscript = COALESCE(:rawTranscript, rawTranscript),
-            transcriptStatus = :transcriptStatus
+            transcriptStatus = :transcriptStatus,
+            transcriptMs = CASE WHEN :rawTranscript IS NULL THEN transcriptMs ELSE :expectedMs END
         WHERE id = :id
           AND rawAudioMs = :expectedMs
           AND TRIM(rawTranscript) = ''
@@ -200,6 +201,74 @@ interface DreamDao {
         expectedMs: Long,
         transcriptStatus: String,
     ): Int
+
+    // ---- 追加录音（Plan 4 §0.3）：时长先落库、文本按后缀 CAS ----
+
+    /**
+     * 追加录音开始：把这次录音的总时长先落库，并标 `PENDING`。
+     *
+     * 为什么必须「先落库再入队转写」：UI 的 `beginAppend` 在松手后才调用，service 收尾
+     * 若抢在它前面入队，Writer 会等不到行而 0 行静默丢字（Voice AI 复核发现）。
+     *
+     * 用严格 `<`：0 字节的新增（打开又立刻关掉）不该把已经 `OK` 的行打回 `PENDING`，
+     * 否则会留下一条永远等不到结果的死锁行。`rawAudioMs IS NULL` 表示这条梦之前没有音频，
+     * 首次追加按「从 0 开始」处理。**不写 `updatedAt`**：录音不是文本编辑。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawAudioMs = :newRawAudioMs, transcriptStatus = 'PENDING'
+        WHERE id = :id
+          AND (rawAudioMs IS NULL OR rawAudioMs < :newRawAudioMs)
+    """)
+    suspend fun beginAppend(id: String, newRawAudioMs: Long): Int
+
+    /**
+     * 尾段转写写回（§0.3）：后缀 CAS。
+     *
+     * 两个 `WHERE` 是幂等的全部依据：`rawAudioMs = :toMs` 保证结果属于「当前这一次追加」，
+     * `transcriptMs = :fromMs` 保证同一段不会拼两次（重跑最多 0 行，不会重复文本）。
+     * 只拼后缀、不覆盖既有正文，所以用户手改过的部分天然不会被冲掉。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawTranscript = rawTranscript || :suffix,
+            transcriptStatus = :transcriptStatus,
+            transcriptMs = :toMs
+        WHERE id = :id
+          AND rawAudioMs = :toMs
+          AND transcriptMs = :fromMs
+    """)
+    suspend fun appendTranscript(
+        id: String,
+        fromMs: Long,
+        toMs: Long,
+        suffix: String,
+        transcriptStatus: String,
+    ): Int
+
+    /** 手动「重试转写」：把 `FAILED` 打回 `PENDING`，让 Writer 重新排队（0 行 = 已被别处推进）。 */
+    @Query("""
+        UPDATE dreams
+        SET transcriptStatus = 'PENDING'
+        WHERE id = :id
+          AND rawAudioMs = :expectedMs
+          AND transcriptStatus = 'FAILED'
+    """)
+    suspend fun markTranscriptionRetry(id: String, expectedMs: Long): Int
+
+    /**
+     * 「这段不用转写」：把水位直接推到当前音频末尾，保留旧正文。
+     *
+     * 只在确有未覆盖音频时生效（`transcriptMs < :expectedMs`），保证水位单调不减。
+     */
+    @Query("""
+        UPDATE dreams
+        SET transcriptMs = rawAudioMs, transcriptStatus = 'OK'
+        WHERE id = :id
+          AND rawAudioMs = :expectedMs
+          AND transcriptMs < :expectedMs
+    """)
+    suspend fun skipUncoveredAudio(id: String, expectedMs: Long): Int
 
     /**
      * 生成成功后的窄更新（Plan 3 Task 8 / D314）。

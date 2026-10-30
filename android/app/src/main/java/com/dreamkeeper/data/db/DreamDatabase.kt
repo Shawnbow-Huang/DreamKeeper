@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [DreamEntity::class, TagEntity::class, DreamTagEntity::class,
                 MediaAssetEntity::class, NovelVersionEntity::class, NovelMessageEntity::class,
                 GenerationJobEntity::class, LlmCallEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,      // 必须 true：schema json 是 migration 的唯一对照物
 )
 @TypeConverters(Converters::class)
@@ -40,9 +40,12 @@ abstract class DreamDatabase : RoomDatabase() {
     companion object {
         const val DB_NAME = "dreamkeeper.db"
 
+        /** 当前 schema 版本；[com.dreamkeeper.data.db.DbBackup] 的升级前快照门闩引用它，避免两处漂移。 */
+        const val SCHEMA_VERSION = 3
+
         fun create(context: Context): DreamDatabase =
             Room.databaseBuilder(context, DreamDatabase::class.java, DB_NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
             // 注意这里没有、也永远不许加 fallbackToDestructiveMigration()：
             // 升级时宁可崩在 migration，也不能把用户的梦静默删掉。
@@ -114,6 +117,25 @@ abstract class DreamDatabase : RoomDatabase() {
                 //    按 tagId 反查会全表扫）
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_dream_tags_tagId` ON `dream_tags` (`tagId`)"
+                )
+            }
+        }
+
+        /**
+         * v2 → v3（Plan 4 §0.2）：`dreams` 末尾追加 `transcriptMs`（转写水位），并把
+         * 「已有音频 + 已转写成功 + 正文非空」的老行回填成「整段都已覆盖」。
+         *
+         * 回填必须带 `rawAudioMs IS NOT NULL`：列是 `NOT NULL DEFAULT 0`，
+         * 把 NULL 写进去会让整个迁移 abort（教训见 Task 1 复核）。
+         * 老 D202 的「录了但没转」尾巴会被回填当成已覆盖——这是接受的限制，见 §9 偏差。
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `dreams` ADD COLUMN `transcriptMs` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE `dreams` SET `transcriptMs` = `rawAudioMs` " +
+                        "WHERE `rawAudioPath` IS NOT NULL AND `rawAudioMs` IS NOT NULL " +
+                        "AND `transcriptStatus` = 'OK' AND TRIM(`rawTranscript`) <> ''"
                 )
             }
         }

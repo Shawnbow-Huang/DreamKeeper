@@ -23,8 +23,11 @@ import java.util.Locale
  * 2. 探测版本要用 SQLite 打开一次读 `PRAGMA user_version`，**不能**读文件头第 60 字节：
  *    同样是「user_version 还在 WAL 里」的坑，文件头会读到 0。
  *
- * 版本已经是 2（或更高）时什么都不备份，只顺手清理多余备份（保留最新一份，§0.8 要求
- * 迁移成功且 `integrity_check` 通过后不必留一堆几十 KB 的副本）。
+ * 版本门闩按「来源版本 < 目标版本」泛化（Plan 4：v2 用户升级 v3 前也必须先有副本）：
+ * `user_version` 在 `1 until [TARGET_SCHEMA_VERSION]` 之间 → 先拷 db + wal + shm 三件，
+ * 文件名前缀带来源版本（`dreamkeeper-v2-<时间戳>.db`）；已经到目标版本（或更高）时什么都不备份，
+ * 只顺手清理多余备份（保留最新一份，按版本号优先、同版本按时间戳，§0.8 要求迁移成功且
+ * `integrity_check` 通过后不必留一堆几十 KB 的副本）。
  */
 object DbBackup {
 
@@ -41,17 +44,33 @@ object DbBackup {
     /** `files/db-backup/`：与 Room 的 `databases/` 分开，卸载重装就一起没了，不额外泄漏隐私 */
     const val DIR_NAME = "db-backup"
 
-    private const val PREFIX = "dreamkeeper-v1-"
+    private const val BACKUP_PREFIX = "dreamkeeper-v"
+
+    /**
+     * 目标 schema 版本：`user_version` 落在 `1 until TARGET_SCHEMA_VERSION` 才做升级前快照。
+     *
+     * 必须与 [DreamDatabase] 的 `@Database(version = ...)` 同步。Plan 4 Task 1 把库升到 v3 时，
+     * 这里同步为 3（届时若 `DreamDatabase` 暴露 `SCHEMA_VERSION` 常量，改为引用它，避免两处漂移）。
+     */
+    internal const val TARGET_SCHEMA_VERSION = DreamDatabase.SCHEMA_VERSION
 
     fun backupDir(context: Context): File = File(context.filesDir, DIR_NAME)
 
+    private fun prefixFor(version: Int): String = "$BACKUP_PREFIX$version-"
+
     /**
-     * 打开数据库前调用：v1 老库 → 拷 db + wal + shm 三件；v2 库 → 清多余备份。
+     * 打开数据库前调用：来源版本 < 目标版本 → 拷 db + wal + shm 三件（前缀带来源版本）；
+     * 已到目标版本（或更高）→ 清多余备份。
      *
+     * @param targetVersion 本次构建要迁移到的 schema 版本，默认 [TARGET_SCHEMA_VERSION]；
+     *   单测可显式传入以固定「已到目标版本」的语义。
      * @return 这次新建的备份文件；不需要备份或探测失败时 null（失败只记日志，绝不能因此拦住启动——
      *         备份是保险，不是前置条件）。
      */
-    fun snapshotBeforeMigration(context: Context): File? {
+    fun snapshotBeforeMigration(
+        context: Context,
+        targetVersion: Int = TARGET_SCHEMA_VERSION,
+    ): File? {
         val dbFile = context.getDatabasePath(DreamDatabase.DB_NAME)
         if (!dbFile.exists()) return null // 新装：没有老库可保
         val version = readUserVersion(dbFile)
@@ -60,8 +79,8 @@ object DbBackup {
             return null
         }
         return when {
-            version == 1 -> copyTrio(context, dbFile)
-            version >= 2 -> {
+            version in 1 until targetVersion -> copyTrio(context, dbFile, version)
+            version >= targetVersion -> {
                 pruneOldBackups(context, dbFile)
                 null
             }
@@ -104,48 +123,62 @@ object DbBackup {
         }.onFailure { Log.w(TAG, "探测 user_version 失败: ${dbFile.path}", it) }.getOrNull()
     }
 
-    private fun copyTrio(context: Context, dbFile: File): File? = runCatching {
+    private fun copyTrio(context: Context, dbFile: File, sourceVersion: Int): File? = runCatching {
         val dir = backupDir(context)
         if (!dir.exists() && !dir.mkdirs()) error("建不了备份目录: ${dir.path}")
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val target = File(dir, "$PREFIX$stamp.db")
+        val target = File(dir, "${prefixFor(sourceVersion)}$stamp.db")
         dbFile.copyTo(target, overwrite = false)
         // -wal / -shm 不存在是正常的（干净关闭后 SQLite 会删），存在就必须一起拷
         copyIfExists(File(dbFile.path + "-wal"), File(target.path + "-wal"))
         copyIfExists(File(dbFile.path + "-shm"), File(target.path + "-shm"))
         Log.i(
             TAG,
-            "v1 库已快照: ${target.name} (${target.length()} B, wal=" +
+            "v$sourceVersion 库已快照: ${target.name} (${target.length()} B, wal=" +
                 File(target.path + "-wal").length() + " B)",
         )
         target
-    }.onFailure { Log.w(TAG, "v1 库快照失败（不拦启动）", it) }.getOrNull()
+    }.onFailure { Log.w(TAG, "v$sourceVersion 库快照失败（不拦启动）", it) }.getOrNull()
 
     private fun copyIfExists(from: File, to: File) {
         if (from.exists()) from.copyTo(to, overwrite = false)
     }
 
     /**
-     * v2 库已能打开时清理旧备份：只留最新一份 v1 快照。
+     * 已到目标版本时清理旧备份：只留最新一份。
+     *
+     * 「最新」按「版本号优先、同版本按时间戳」排序，而不是纯文件名字典序：
+     * `dreamkeeper-v2-...` 的字典序永远压过 `dreamkeeper-v1-...`，但真正该留的是
+     * 迁移前最后一份（v2），所以先比版本号。
      *
      * 先 `PRAGMA integrity_check`：迁移写坏但还能打开时，唯一干净的那份可能是刚被覆盖前的备份，
      * 这时删副本等于把退路删了。检查不通过就一份都不删。
      */
     private fun pruneOldBackups(context: Context, liveDb: File) {
         val dir = backupDir(context)
-        val backups = dir.listFiles { f -> f.name.startsWith(PREFIX) && f.name.endsWith(".db") }
-            ?: return
+        val backups = dir.listFiles { f ->
+            f.name.startsWith(BACKUP_PREFIX) && f.name.endsWith(".db")
+        } ?: return
         if (backups.size <= 1) return
         if (!isIntact(liveDb)) {
-            Log.w(TAG, "integrity_check 未通过，保留全部 v1 备份不删")
+            Log.w(TAG, "integrity_check 未通过，保留全部旧备份不删")
             return
         }
-        backups.sortedByDescending { it.name }.drop(1).forEach { old ->
-            File(old.path + "-wal").delete()
-            File(old.path + "-shm").delete()
-            if (old.delete()) Log.i(TAG, "清理旧备份: ${old.name}")
-        }
+        backups
+            .sortedWith(
+                compareByDescending<File> { versionOf(it.name) }.thenByDescending { it.name },
+            )
+            .drop(1)
+            .forEach { old ->
+                File(old.path + "-wal").delete()
+                File(old.path + "-shm").delete()
+                if (old.delete()) Log.i(TAG, "清理旧备份: ${old.name}")
+            }
     }
+
+    /** 从 `dreamkeeper-v2-20261031-120000.db` 里取 2；名字不合规当 0（最低优先保留）。 */
+    private fun versionOf(backupName: String): Int =
+        backupName.removePrefix(BACKUP_PREFIX).substringBefore('-').toIntOrNull() ?: 0
 
     private fun isIntact(dbFile: File): Boolean = runCatching {
         SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->

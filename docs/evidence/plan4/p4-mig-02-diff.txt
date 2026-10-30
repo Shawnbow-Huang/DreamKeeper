@@ -1,0 +1,41 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "python scripts/check-migrate.py --diff <before.json> <after.json>" --rerun-tasks --console=plain
+# 本轮新增的 schema 文件
+android/app/schemas/com.dreamkeeper.data.db.DreamDatabase/3.json
+  sha256=8991f4cc91a9fe39f560682bd6ab47683ceb2092490d5ccbe8bcfb8b49cf2ff6
+  transcriptMs 字段（导出原文）：
+  {"fieldPath": "transcriptMs", "columnName": "transcriptMs", "affinity": "INTEGER",
+    "notNull": true, "defaultValue": "0"}
+  dreams createSql 尾部：... `generationStage` TEXT, `transcriptMs` INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(`id`))
+  identity_hash=30a868b210968180762f1065ca5e7264
+
+# MIGRATION_2_3 与 3.json 的对应（逐字）
+ALTER TABLE `dreams` ADD COLUMN `transcriptMs` INTEGER NOT NULL DEFAULT 0
+  ↔ 3.json 的 `transcriptMs` INTEGER NOT NULL DEFAULT 0（类型/NOT NULL/默认值一致）
+UPDATE `dreams` SET `transcriptMs` = `rawAudioMs`
+  WHERE `rawAudioPath` IS NOT NULL AND `rawAudioMs` IS NOT NULL
+    AND `transcriptStatus` = 'OK' AND TRIM(`rawTranscript`) <> ''
+
+# 脚本侧口径校验（合成库；不是设备证据）
+用 2.json 的 createSql 手搭 v2 库（3 行：OK+音频 / PENDING+音频 / 无音频），
+再执行与 MIGRATION_2_3 相同的 ALTER+UPDATE，两份都 `--dump` 后 `--diff`：
+  pair=2->3 business_tables=8
+  dreams rows=3 equal=3
+  identity_hash 166666e50d40204e526403725c8302ab -> 30a868b210968180762f1065ca5e7264
+  RESULT: GREEN（rc=0）
+
+# 负向对照（同一份 dump 把 v2-ok-1 的 transcriptMs 改成 0）
+  FAIL dreams transcriptMs 回填错: ('s:a',) 期望 i:2400 实际 i:0
+  RESULT: RED: 1 处不一致
+
+# 本轮修掉的脚本缺陷（D422）
+diff_2_3 原先直接用 dump 里带 `i:`/`s:` 前缀的字符串比较 `transcriptStatus == "OK"` 与
+`transcriptMs == 0`，导致回填期望永远算成 0（真实数据必 RED）。已加 `decanon()` 去前缀，
+并在比较时用 canon 形式（`i:0`/`i:2400`）。修后：
+- 本 fixture GREEN、负向 RED
+- v1→v2 回归仍 GREEN（p3-mig-01-baseline.json vs p3-mig-02-after.json，输出逐字不变）
+
+# 未覆盖
+设备上的真实 v2→v3 迁移（当前模拟器库还是 v2）留到 T4/T7 的 E2E 里做，本文件不含设备证据。

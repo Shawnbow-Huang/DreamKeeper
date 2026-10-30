@@ -1,5 +1,6 @@
 package com.dreamkeeper.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.time.LocalDate
@@ -66,4 +67,14 @@ data class DreamEntity(
     val novelSelectedVersion: Int? = null,
     /** 生成链最后一次落在哪一档：`T0`/`T1`/`T2`/`T3`；null = 没跑过。 */
     val generationStage: String? = null,
+
+    // ↓↓↓ Plan 4（v2→v3）追加位：仍然只许在末尾追加，且必须带默认值 ↓↓↓
+    /**
+     * 转写水位：`rawTranscript` 已经覆盖到音频的哪一毫秒（0 = 一个字都还没转写）。
+     *
+     * 为什么必须有这一列：追加录音后「文字覆盖到哪」是唯一能跨进程崩溃存活的依据。
+     * `rawAudioMs > transcriptMs` 即「还有没转写的尾段」，重启时据此补转写；
+     * 只靠 `transcriptStatus` 分不出「整段没转」和「旧段已转、新段还没转」。
+     */
+    @ColumnInfo(defaultValue = "0") val transcriptMs: Long = 0,
 )

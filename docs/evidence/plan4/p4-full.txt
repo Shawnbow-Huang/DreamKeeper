@@ -1,0 +1,18 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "" --rerun-tasks --console=plain
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" \
+       ./gradlew :app:testDebugUnitTest --rerun-tasks --console=plain
+
+# 结果（全量）
+BUILD SUCCESSFUL in 38s（rc=0）
+XML 汇总：classes=41 tests=380 failures=0 errors=0 skipped=0
+
+# 与 Plan 3 基线（39 类 / 365 例）的差额
++ MigrationV2ToV3Test 3 例（新类）
++ AppendTranscriptTest 10 例（新类）
++ DbBackupTest 2 例（v2 快照 / v3 到目标不建快照；原 4 例 → 6 例）
+= 41 类 / 380 例
+
+# 全量清单里本任务相关的四类
+AppendTranscriptTest 10/0、DbBackupTest 6/0、MigrationTest 3/0、MigrationV2ToV3Test 3/0

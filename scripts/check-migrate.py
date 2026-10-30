@@ -89,6 +89,13 @@ def canon(value):
     return "s:" + str(value)
 
 
+def decanon(value):
+    """去掉 [canon] 的类型前缀，只用于「按语义比较」（回填口径判断）。"""
+    if not isinstance(value, str):
+        return value
+    return value[2:] if value[:2] in ("i:", "s:", "f:", "x:") else value
+
+
 def sha256_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -422,15 +429,12 @@ def diff_2_3(before, after):
                 if brow[col] != arow.get(col):
                     problems.append(f"{table} 列值变了: {key} {col}: {brow[col]!r} → {arow.get(col)!r}")
             if table == "dreams":
-                raw_ok = bool((brow.get("rawTranscript") or "").strip())
-                expected = (
-                    brow.get("rawAudioMs")
-                    if brow.get("rawAudioPath") not in (None, "")
-                    and brow.get("rawAudioMs") is not None
-                    and brow.get("transcriptStatus") == "OK"
-                    and raw_ok
-                    else 0
-                )
+                # 注意：dump 里的值都带 `i:`/`s:` 前缀（见 canon()），比较前必须去前缀，
+                # 否则 `transcriptStatus` 永远 != "OK"，回填期望会被错算成 0（Task 1 实测踩到）。
+                raw_ok = bool(decanon(brow.get("rawTranscript") or "").strip())
+                status_ok = decanon(brow.get("transcriptStatus") or "") == "OK"
+                path_ok = brow.get("rawAudioPath") not in (None, "")
+                expected = brow.get("rawAudioMs") if (path_ok and status_ok and raw_ok) else "i:0"
                 if arow.get("transcriptMs") != expected:
                     problems.append(
                         f"dreams transcriptMs 回填错: {key} 期望 {expected} 实际 {arow.get('transcriptMs')}"

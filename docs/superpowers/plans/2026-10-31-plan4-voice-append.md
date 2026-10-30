@@ -425,13 +425,35 @@ suspend fun commitSuccess(
 
 | 编号 | 日期 | 任务 | 偏差 | 原因（必须可实测） |
 | --- | --- | --- | --- | --- |
-| （待填） | | | | |
+| D415 | 2026-10-31 | T0 | 设计 §14.1「音频预算」不补测、不判绿 | Plan 2 FINAL-REVIEW 只证「音频侧通、不判绿」，plan1:3412 仍记「Plan 4 未开始」；本计划不补测，ACCEPTANCE `## 3e` 记「未覆盖，Plan 5」 |
+| D416 | 2026-10-31 | T0 | 锁屏磁贴/通知/常亮/夜间/完整设置页/回收站推迟 Plan 5 | Plan 4 范围只收用户明确要的「语音追加 + 小说化显式触发」；这些项在 plan1:3484 的 backlog 里无验收落点，**需用户确认** |
+| D417 | 2026-10-31 | T0 | 真实模型质量「未评」 | 评测集 0/20 真实梦、当前无 Key；只做 v2 vs v2.1 的 fixture 渲染前后对比，不写「评测通过」 |
+| D418 | 2026-10-31 | T1 | T1 由 Lead 直接实施，红证据是「变异反证 + 恢复复绿」而非严格先红 | 原 subagent 因 `scripts/check-migrate.py` 白名单卡点挂起且不可寻址（`active teammate not found`）；为避免继续空转，Lead 接手。诚实口径：红=删挂载变异必红，见 p4-mig-00/append-00 |
+| D419 | 2026-10-31 | T1 | `AppendTranscriptTest` 10 例（计划 7 例） | 多出的 3 例兜住实测风险：等长/更短 no-op（0 字节追加死锁）、手动重试只从 FAILED、跳过转写幂等 |
+| D420 | 2026-10-31 | T1 | `3.json` 由 Room 编译导出（`exportSchema=true`），MIGRATION_2_3 逐字对齐它 | 手工写 schema 是 Plan 3 已有的教训；`transcriptMs` 的 `INTEGER NOT NULL DEFAULT 0` 必须与 3.json 一致，否则 Room 自校验在老用户机上抛 Migration didn't properly handle |
+| D421 | 2026-10-31 | T1 | `DbBackup.TARGET_SCHEMA_VERSION` 改为引用 `DreamDatabase.SCHEMA_VERSION` | 两处常量各写一个 3 会漂移；Builder 复核明确建议单源 |
+| D422 | 2026-10-31 | T1 | `scripts/check-migrate.py` 的 `diff_2_3` 比较前需去 `i:`/`s:` 前缀 | 实测踩到：dump 值是 canon 字符串，`transcriptStatus == "OK"` 恒假 → 回填期望永远算成 0，真实数据必 RED。已加 `decanon()`；修后 fixture GREEN、负向 RED、v1→v2 回归逐字不变 |
 
 ## 10. 自审记录
 
 ### T0 契约冻结（Lead，2026-10-31）
 - 交付：`724d13e`（计划 404 行）、`71cd30b`（Voice AI 复核收紧）、本文档后续修订。
 - 结论：契约冻结，T1 开工；测试计数冻结为 48 类 / 408 例（终态）。
+
+### Task 1 验收（Lead，2026-10-31）
+- **交付**：`6 个主文件 + 4 个测试文件 + 3.json + 5 份 p4-* 证据`（本提交）。主改动：`DreamEntity` 追加
+  `transcriptMs`（`@ColumnInfo(defaultValue = "0")`）、`DreamDatabase` version=3 + `MIGRATION_2_3`（ALTER + 回填）、
+  `DreamDao` 三条新 CAS（`beginAppend`/`appendTranscript`/`markTranscriptionRetry`/`skipUncoveredAudio`）+
+  `updateTranscript` 带水位、`DreamRepository` 五个包装 + save/toDomain 带新列、`DbBackup` 目标版本单源。
+- **Lead 独立复跑**：`MigrationV2ToV3Test` 3/3、`AppendTranscriptTest` 10/10、`MigrationTest` 3/3、
+  `DbBackupTest` 6/6；全量 **41 类 / 380 例 / 0 / 0 / 0**（38s，`.scratch/p4-full.log`）。
+- **变异**：删 `MIGRATION_2_3` 挂载 → 3/3 红（`A migration from 2 to 3 was required but not found`）；
+  `appendTranscript` 拼串改覆盖 → 3 红（幂等/追加/手改保留）；两处恢复后 sha 与变异前逐字节相同并复绿。
+- **证据**：`p4-mig-00-red.txt`、`p4-mig-01-green.txt`、`p4-mig-02-diff.txt`（含合成库 GREEN + 负向 RED +
+  `diff_2_3` 去前缀修复）、`p4-append-00-red.txt`、`p4-append-01-green.txt`、`p4-full.txt`。
+- **PENDING**：设备上的真实 v2→v3 迁移（当前模拟器库仍是 v2）→ T4/T7 E2E；`rawAudioMs` 大文件下的
+  TailWav 边界（T2）；release 升级（T7）。
+- **结论**：通过。偏差 D418–D422 已登记；下一步 T2（写回/reconcile/TailWav）。
 
 每个 Task（含 T0）完成后由 Lead 追加：`### Task N 验收（Lead，YYYY-MM-DD）`，含交付 commit、Lead 独立复跑、
 证据核对、变异、PENDING、结论六要素。Task 7 之后追加 `### Plan 4 终审`。

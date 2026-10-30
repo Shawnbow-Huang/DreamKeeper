@@ -1,0 +1,24 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.MigrationV2ToV3Test" --rerun-tasks --console=plain
+# 结果
+BUILD SUCCESSFUL in 27s（rc=0）
+XML: TEST-com.dreamkeeper.data.db.MigrationV2ToV3Test.xml → tests=3 failures=0 errors=0 skipped=0
+
+# 三条用例覆盖了什么
+1. v2DatabaseMigratesToV3AndBackfillsWatermark
+   - 行 v2-ok-1（有音频 2400ms、status=OK、正文非空）→ transcriptMs=2400（回填）
+   - 行 v2-pending-2（有音频、PENDING）→ transcriptMs=0（不许把「还没转完」当成已覆盖）
+   - 行 v2-noaudio-3（无音频）→ transcriptMs=0
+   - PRAGMA user_version 2→3；行数仍 3（非 destructive）；integrity_check=ok；foreign_key_check=0 行
+2. v2RowsKeepEveryLegacyValue
+   - 老列逐个等值：rawTranscript / rawAudioPath / rawAudioMs / transcriptStatus / updatedAt(2222)
+     / novelSelectedVersion=2 / generationStage="T1"
+   - PRAGMA table_info(dreams) 列数 22→23（只多 transcriptMs）
+   - identity_hash 166666e50d40204e526403725c8302ab → 30a868b210968180762f1065ca5e7264（= 3.json）
+3. newRowsGetZeroWatermarkByDefault
+   - 迁移后插入新行（省略该列）→ transcriptMs=0，证明 `INTEGER NOT NULL DEFAULT 0` 真生效
+
+# 旁证：v1→v3 直通仍在
+MigrationTest（手搭 v1 库 → DreamDatabase.create）3/3 绿；其断言已升级为
+「user_version 必须是 3」+「FAILED 老行 transcriptMs=0」+「无音频老行 transcriptMs=0」。

@@ -1,0 +1,21 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.AppendTranscriptTest" --rerun-tasks --console=plain
+# 结果
+BUILD SUCCESSFUL in 25s（rc=0）
+XML: tests=10 failures=0 errors=0 skipped=0
+
+# 十条断言（真 Room in-memory，非 fake DAO）
+1. firstTranscriptWriteFillsWatermarkAndText：首写正文 + transcriptMs=2400 + OK
+2. statusOnlyWriteKeepsWatermarkAtZero：`updateTranscript(..., null, FAILED)` 只改状态，水位仍 0
+3. beginAppendMovesAudioMsAndSetsPending：A 2400→3000、状态 PENDING、水位不动、正文不动
+4. beginAppendWithEqualOrSmallerMsIsNoOp：等长/更短都 0 行（防 0 字节追加造成 PENDING 死锁）
+5. appendExtendsTextAndWatermark：`旧段。` + `\n新的一段。`，水位 3000
+6. appendIsIdempotentOnSecondRun：同参第二跑 0 行、正文不重复
+7. appendAfterAnotherAppendMatchesNothing：A 已到 3000 时用 toMs=2900 拼 → 0 行
+8. manualEditSurvivesAppend：用户手改的正文保留，只在尾部追加
+9. markTranscriptionRetryOnlyFromFailed：FAILED→PENDING 生效；已 OK 的行 0 行
+10. skipUncoveredAudioMovesWatermarkAndKeepsText：「这段不用转写」推水位到 3000、正文不动、幂等
+
+# 读法
+这一层只测「数据层契约」。录音 service 的入队时序、TailWav 切片、启动 reconcile 属于 T2。

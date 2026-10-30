@@ -1,0 +1,20 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-30T18:44:00Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.AppendTranscriptTest" --rerun-tasks --console=plain
+RED_BASELINE=把 DreamDao.appendTranscript 的 `SET rawTranscript = rawTranscript || :suffix`
+             临时改成 `SET rawTranscript = :suffix`（把「追加」退化成「覆盖」）
+
+# 结果
+BUILD FAILED in 26s（rc=1）
+XML: tests=10 failures=3 errors=0
+  红：appendIsIdempotentOnSecondRun / appendExtendsTextAndWatermark / manualEditSurvivesAppend
+
+# 为什么这三例必须红
+覆盖式写入会让「旧正文 + 新尾段」变成「只有新尾段」，直接撞碎用户手改内容；
+第二跑也不再是 0 行（会重复覆盖）。恢复 `|| :suffix` 后 10/10 全绿（p4-append-01），
+恢复后 DreamDao.kt sha256=b8da47ad538b10455fbed9c374a932ea0fe54b5653c295df8697665ca1c966b7
+与变异前逐字节相同。
+
+# 变异只覆盖了「拼串」这一半
+`WHERE rawAudioMs = :toMs AND transcriptMs = :fromMs` 的幂等约束由 idempotent/after-another-append
+两例分别兜住（前者同参重跑 0 行，后者错位参数 0 行）。

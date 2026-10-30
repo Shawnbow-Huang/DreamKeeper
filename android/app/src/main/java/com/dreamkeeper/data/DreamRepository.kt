@@ -162,6 +162,7 @@ class DreamRepository(
                 // v2 新列不在 domain 上：必须从现有行原样带回，否则每次保存都抹成 null
                 novelSelectedVersion = existing?.novelSelectedVersion,
                 generationStage = existing?.generationStage,
+                transcriptMs = dream.transcriptMs,
             )
         )
     }
@@ -284,6 +285,24 @@ class DreamRepository(
     suspend fun updateManualTranscript(id: String, expectedMs: Long, text: String): Int =
         dreams.updateTranscript(id, expectedMs, text, TranscriptStatus.OK)
 
+    // ------------------------------------------------------------ Plan 4 追加录音
+
+    /** 追加录音开始：总时长先落库并置 `PENDING`，返回 0 表示时长没变（0 字节追加）。 */
+    suspend fun beginAppend(id: String, newRawAudioMs: Long): Int =
+        dreams.beginAppend(id, newRawAudioMs)
+
+    /** 尾段转写写回：后缀 CAS，返回 0 表示让位/已拼过（不重复拼接）。 */
+    suspend fun appendTranscript(id: String, fromMs: Long, toMs: Long, suffix: String): Int =
+        dreams.appendTranscript(id, fromMs, toMs, suffix, TranscriptStatus.OK)
+
+    /** 手动重试转写：`FAILED` → `PENDING`。 */
+    suspend fun markTranscriptionRetry(id: String, expectedMs: Long): Int =
+        dreams.markTranscriptionRetry(id, expectedMs)
+
+    /** 「这段不用转写」：水位推到音频末尾，保留旧正文。 */
+    suspend fun skipUncoveredAudio(id: String, expectedMs: Long): Int =
+        dreams.skipUncoveredAudio(id, expectedMs)
+
     /**
      * 把一枚孤儿 WAV 恢复成草稿；**行已存在就返回 false**（重跑不许重置 `createdAt`）。
      *
@@ -398,6 +417,7 @@ class DreamRepository(
         rawAudioPath = e.rawAudioPath,
         rawAudioMs = e.rawAudioMs,
         novelSelectedVersion = e.novelSelectedVersion,
+        transcriptMs = e.transcriptMs,
     )
 
     private fun tagToDomain(e: TagEntity) = Tag(e.id, e.name, e.kind, e.source, e.evidenceText)
