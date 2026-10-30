@@ -70,17 +70,23 @@ UPDATE `dreams` SET `transcriptMs` = `rawAudioMs`
 - `DreamDatabase` `version = 3`，`create()` 的 `addMigrations(MIGRATION_1_2, MIGRATION_2_3)`。
 - `DreamEntity`/`Dream`/`DreamRepository.toDomain`/`save()` 全链路带上新列；`save()` 的 read-modify-write
   不许把 `transcriptMs` 抹成 0。
-- 禁止 `fallbackToDestructiveMigration`；升级前 `DbBackup` 快照逻辑不改。
+- 禁止 `fallbackToDestructiveMigration`。
+- **DbBackup 快照必须泛化**（T1 内修，实测缺口）：现状只对 `user_version==1` 快照、前缀写死 `dreamkeeper-v1-`，
+  而 v2→v3 也是一次不可回滚迁移 → 改成「当前 `user_version < 目标版本` 就快照，文件名带版本号」，
+  并补 2 条用例（v2 库会快照、v3 库不重复快照）。
 
 ### 0.3 追加的状态机与 CAS
 
 三个状态量：`rawAudioMs`（文件总时长）、`transcriptMs`（已转写到的位置）、`transcriptStatus`。
 
-- 落录音（服务已经做完）：`beginAppend(id, newRawAudioMs)`
+- **时序**：`beginAppend` 由录音服务在 `onRecordingFinished` 里、入队 STT **之前**落库（不是 UI 松手之后），
+  避免 writer 的 `awaitRow` 窗口里 CAS 撞 0 行。
+
+- 落录音：`beginAppend(id, newRawAudioMs)`
 
 ```sql
 UPDATE dreams SET rawAudioMs = :newRawAudioMs, transcriptStatus = 'PENDING'
-WHERE id = :id AND (rawAudioMs IS NULL OR rawAudioMs <= :newRawAudioMs)
+WHERE id = :id AND (rawAudioMs IS NULL OR rawAudioMs < :newRawAudioMs)   -- 严格小于：0 字节 take 不留 PENDING 死锁
 ```
 
 - 首次转写（原有路径，补水位）：`UPDATE … SET rawTranscript=:text, transcriptStatus='OK',
@@ -98,6 +104,11 @@ WHERE id = :id AND rawAudioMs = :expectedMs AND transcriptMs = :fromMs
 - `suffix` 由调用方以 `"\n"` 前缀拼好（保证分段可读，且 G2 不计空白）；CAS 命中 0 行 = 让位（已重跑/已手改），
   不是错误，但要 logcat 一行 `TRANSCRIPT append skipped fromMs=… expectedMs=…`。
 - 失败/不可用：只改状态（沿用 `updateTranscriptStatus`），**不动** `rawAudioMs`/`transcriptMs`，next 重试仍可补。
+- **空转写判失败**：追加段 STT 无有效文字 → 不前进水位、置 `FAILED`、保留旧文本；否则每次启动都会重试并堵死生成闸门。
+- **跳过本轮**：`skipUncoveredAudio(id, expectedMs)` 把 `transcriptMs = rawAudioMs`（不动文本、状态 OK），
+  给「这段不用转写」按钮用（静音/环境噪补录的唯一出路）。
+- **崩溃恢复判据**：reconcile 扫的是 `rawAudioMs > transcriptMs`（**不依赖 `transcriptStatus`**），
+  因为录音中被杀时 `beginAppend` 根本没机会执行；`AudioScan` 发现文件变长 → 更新 `rawAudioMs` 并置 `PENDING`。
 - 手动补字后追加：如果用户在追加前改过 `rawTranscript`，`beginAppend` 不改文本，追加段拼在其后（不覆盖）；
   回归用例必须覆盖这条路径。
 
@@ -108,6 +119,8 @@ WHERE id = :id AND rawAudioMs = :expectedMs AND transcriptMs = :fromMs
 - `TranscriptWriter` 在 `append` 模式下用 `TailWav.sliceTo` 再调 `SttEngine.transcribe(temp)`；
   临时文件用 `cacheDir`，用完删除。
 - 不扩 `SystemSttEngine` 的公开接口（它内部已有 range 泵送；本轮不改，减少风险）。
+- `TailWav.sliceTo` 前置断言 `rawAudioMs - fromMs == (sliceBytes / 32)`（不符即失败，不许把 0 行 CAS 静默当真）；
+  `fromMs` 越界或空段返回 0 → 走失败路径；临时文件 `finally` 删除，ENOSPC 走失败文案。
 - 失败文案沿用 Plan 2 的 `FAILED` 三态；PENDING 必须有重试入口（见 0.5）。
 
 ### 0.5 生成闸门（防半截原文进模型）
@@ -206,7 +219,7 @@ data class DreamEntity(..., @ColumnInfo(defaultValue = "0") val transcriptMs: Lo
 // DreamDao
 @Query("""
   UPDATE dreams SET rawAudioMs = :newRawAudioMs, transcriptStatus = 'PENDING'
-  WHERE id = :id AND (rawAudioMs IS NULL OR rawAudioMs <= :newRawAudioMs)
+  WHERE id = :id AND (rawAudioMs IS NULL OR rawAudioMs < :newRawAudioMs)   -- 严格小于：0 字节 take 不留 PENDING 死锁
 """)
 suspend fun beginAppend(id: String, newRawAudioMs: Long): Int
 
@@ -241,7 +254,8 @@ suspend fun updateRawAudioMs(id: String, newRawAudioMs: Long): Int
 5. 全量 `--rerun-tasks`，写证据 `p4-mig-00-red.txt` / `01-after.txt` / `02-diff.txt`（host-only 头）。
 
 **Expected**
-- 新 2 类：`MigrationV2ToV3Test`（3 例）、`AppendTranscriptTest`（7 例）；全量 **41 类 / 375 例 / 0 失败**。
+- 新 2 类：`MigrationV2ToV3Test`（3 例）、`AppendTranscriptTest`（7 例）；`DbBackupTest` 4→6 例；
+  全量 **41 类 / 377 例 / 0 失败**。`DbBackup` 对 v2 库也快照、v3 库不重复快照。
 - `3.json` 入库且与 `DreamDatabase` 版本一致；`2.json`/`1.json` 字节未变（`sha256sum` 写进证据）。
 
 ## Task 2：追加写回与重转写兜底（stt 层）
@@ -278,7 +292,8 @@ suspend fun reconcilePendingTranscriptions(): Int   // 启动补转写（F1）
 4. 证据 `p4-append-00-red.txt`、`p4-append-01-jvm.txt`（host-only）。
 
 **Expected**
-- 新 2 类：`TailWavTest`（5 例）、`TranscriptAppendTest`（6 例）；全量 **43 类 / 386 例 / 0 失败**。
+- 新 2 类：`TailWavTest`（6 例，含空段/越界/长度不符）、`TranscriptAppendTest`（7 例，含空文本判失败与 skip 水位）；
+  全量 **43 类 / 388 例 / 0 失败**。
 - 旧 `TranscriptWriterTest` 全绿；不新增依赖。
 
 ## Task 3：忠实稿基座与整段重跑
@@ -308,7 +323,7 @@ suspend fun commitSuccess(
 3. 全量 + 证据 `p4-faithful-00-red.txt` / `01-green.txt` / `02-mutation.txt`。
 
 **Expected**
-- 加 4 例（并入现有类则类数不变；若新建类则 **44 类 / 390 例**，实施者先报 Lead 再定）。
+- 加 4 例（并入现有类则类数不变；若新建类则 **44 类 / 392 例**，实施者先报 Lead 再定）。
 - `p3` 的 GenerationOrchestratorTest 全绿不退化。
 
 ## Task 4：「补一段」入口与原样 tab
