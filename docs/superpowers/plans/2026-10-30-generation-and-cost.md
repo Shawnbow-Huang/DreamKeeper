@@ -615,24 +615,78 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ### Task 9 对话改稿 + 多版本 + 选最终稿
 
-- Files：`ui/detail/ReviseSheet.kt`、`ui/detail/VersionStrip.kt`、`ui/detail/DetailViewModel.kt`、
-  `data/DreamRepository.kt`（`listVersions/selectVersion/appendVersion`）、`test/.../ReviseFlowTest.kt`。
-- 要点：ASK 不建版；REVISE 必建版；「没改也交一版」允许；快捷按钮 6 个（太文绉绉 / 细节太多 / 结尾太说教 /
-  人称不对 / 多点环境 / 少点形容）；版本线 `v2 · 按你说的删了那两段描写 · 改动 3 处`；`novelSelectedVersion` 决定
-  列表与导出用哪一版；`db.withTransaction`。
-- Steps：先写 6 条（ASK 分支、REVISE 分支、逐字相同版、选择后列表生效、失败保留旧版、G2/G3 对当前版本），红 → 实现 → 绿。
+- Files：`llm/ReviseOrchestrator.kt`（新）、`llm/RevisionResult.kt`（新）、`data/GenerationStore.kt`（在 Task 8 的
+  `commitSuccess` 旁补消息/改稿/选择三类方法）、`data/DreamRepository.kt`（`listVersions`/`listMessages`/`selectVersion`/
+  `resolveFinalNovel` + `toDomain` 补 `novelSelectedVersion`）、`domain/Dream.kt`（加 `novelSelectedVersion: Int?`）、
+  `ui/detail/ReviseSheet.kt`（新：输入条 + 6 快捷按钮 + 对话气泡）、`ui/detail/VersionStrip.kt`（新：`versionLabel` + 版本条）、
+  `ui/detail/DetailScreen.kt`（只改 `NovelTab` 与其调用点两处）、`ui/detail/DetailViewModel.kt`（对话/版本/选择状态与动作）、
+  `test/.../llm/ReviseOrchestratorTest.kt`（新，8 例）、`test/.../ui/detail/VersionStripTest.kt`（新，2 例）、`docs/evidence/plan3/p3-revise-*`。
+
+- §0.1 事务与落点（D330）：REVISE 成功 = **一个** `db.withTransaction`：插 user 消息 → `novelVersionDao().insertWithNextVersion`
+  （`origin = "REVISE"`，`prompt*` 三元组取 `RenderedPrompt`）→ 窄 UPDATE `dreams(novelText, novelVersion, novelChangeLog)` →
+  插 assistant 消息（`versionId = 新版本 id`）。ASK 成功 = 一个事务只插 user + assistant 两条消息（`versionId = null`）。
+  **不使用** `DreamRepository.save()`；`novelSelectedVersion` 只由「选择/撤回」的窄 UPDATE 改。
+
+- §0.2 ASK 还是 REVISE（D331）：改稿模型返回 JSON
+  `{"action":"ask"|"revise", "question"?:..., "summary":..., "body"?:..., "changeLog"?:[...]}`。
+  `action == "ask"` → `question` 与 `summary` 都写 assistant 消息、`versionId = null`、**不建版、不动正文**；
+  `action == "revise"` → `body` 非空才建版。判据只看 `versionId` 与 `action`，**不拿「正文变没变」判**（逐字相同版合法，见用例 3）。
+
+- §0.3 改稿闸门：`gate(currentText, body, GateMode.REVISE)`（G2 在 REVISE 模式下阈值 115%，由 Task 7 的移植保证）。
+  不过 → `temperature = 0.0` 重试一次并带 `PREVIOUS_VIOLATIONS` 载荷 → 仍不过 → **保留旧版**、不建版、返回
+  `RevisionResult.failure = Gate(failed, detail)`，旧版正文与 `novelSelectedVersion` 一字不动。
+
+- §0.4 changeLog：`quote` 基准是**当前版本正文**（不是 `faithfulText`），4–40 码点精确子串，找不到丢弃并计数；
+  全丢存 `[]`；`k = 保留条数` 用于版本线「改动 k 处」。
+
+- §0.5 消息与历史：user 消息 `content = 用户这一条意见`；assistant 消息 `content = summary`（一句话，≤60 字，模型给）。
+  历史取最近 **3 轮 = 6 条**消息，渲染成 `【最近三轮对话】` 槽（`USER:` / `ASSISTANT:` 前缀，跨轮用空行分隔）。
+  6 个快捷按钮逐字：太文绉绉 / 细节太多 / 结尾太说教 / 人称不对 / 多点环境 / 少点形容；点一下填入输入框（空则填入、非空则
+  末尾加「，」再拼），可继续编辑（D335）。
+
+- §0.6 版本线（D334）：纯函数 `versionLabel(n: Int, summary: String, changeCount: Int): String`
+  = `"v$n · $summary · 改动 $changeCount 处"`；`summary` 取该版本对应 assistant 消息的 `content`（不新增列）。
+  无对应消息的版本（历史/种子）用 `"v$n · 无说明 · 改动 $changeCount 处"` 兜底。
+  详情页当前行：`selectedVersion != null` → 「当前 vN · 已选中」，否则「当前 vN」（vN = `resolveFinalNovel` 的版本号）。
+  标签页「小说化 · 补写 N 处」继续走 `novelChangeCount`（Task 8 已加 JSON 分支 + 旧文本 regex 回退，D318）。
+
+- §0.7 选择与撤回（D336）：`selectVersion(dreamId, version)` 只改 `dreams.novelSelectedVersion`（窄 UPDATE，校验版本存在）；
+  撤回 = 选中上一版，**不删除任何版本行**；`resolveFinalNovel(dreamId) = selected ?: maxVersion`。
+  列表页不读小说稿（D332：设计 §6.3「列表用挑中版」在 Plan 3 不落地，`DreamCard`/`LibraryScreen` 仍显示 `faithfulText ?: rawTranscript`），
+  **详情正文与 Task 10 导出**用 `resolveFinalNovel`，**不要**用 `dreams.novelText`（它永远是最新生成版）。
+  `title`/`mood` 无列可落，Task 9 直接丢弃、不写 `dreams.title`（D333）。
+
+- §0.8 UI 三态（D330）：输入条常驻 `NovelTab` 内、正文滚动区之下、`PlaybackBar` 之上；发送中禁输入 + 一行 12sp「正在改…」；
+  失败在输入框上方显示「没改成：{闸门人话} · 旧版还在」并保留原文可重发；ASK 后正文区出现助手气泡（无 `vN` 徽标、无版本芯片），
+  placeholder 变「回它一句」。**不新增 BottomSheet**，`TagsScreen.kt:406` 的 `MergeSheet` 是 private，不重构它。
+  6 chips 用单行 `LazyRow`（高 48dp、chip 高 36dp）；1080x2400@420 下必然横滚，截图只证首屏。
+
+- §0.9 Steps（先红后绿；8 例 `ReviseOrchestratorTest` 用 fake `LlmClient` + fake `GenerationStore`/真 Room 混合，2 例 `VersionStripTest` 纯函数）：
+  1. **ASK 分支**：模型返回 `action=ask` → 不建版、内存版号不变、消息两条且 assistant `versionId == null`；
+  2. **REVISE 分支**：返回新正文 → 版本号 +1、`origin=REVISE`、`dreams.novelText` 更新、assistant `versionId` 指向新版本；
+  3. **逐字相同也建版**：`body` 与旧稿完全一致 → 仍 +1 版（「没改也交一版」）；
+  4. **超长判失败**：`body` 正文比 130%（不计标点空白）→ REVISE 模式 G2 红 → 重试仍红 → 保留旧版、旧正文与 `novelSelectedVersion` 不变；
+  5. **闸门重试带载荷**：第一次输出新增专名（G1 红）→ 第二次干净 → 成功且第二次请求含 `【上一版违规清单】` 与引文；
+  6. **选择生效**：`selectVersion(2)` → `dreams.novelSelectedVersion == 2`、`resolveFinalNovel == v2`（即使已有 v3）；
+  7. **撤回**：v3 当前选中 → 撤回 → 选中 v2、版本表仍有 3 行；
+  8. **历史只取 3 轮**：预置 5 轮消息 → 请求体 `【最近三轮对话】` 只含最后 3 轮（6 条）。
+  变异：`selectVersion` 不落库（只改内存）→ 用例 6 红；ASK 分支改建成版 → 用例 1 红；各自恢复复绿。
+
+- Expected：`ReviseOrchestratorTest` 8/8 + `VersionStripTest` 2/2；全量 **35 类 / 344 例**（334 + 10）0 失败；
+  证据 `p3-revise-00-red.txt`、`01-green.txt`、`02-mutation.txt`、`03-full.txt`（host-only 头）。
+  设备截图（输入条/chips、ASK 气泡、版本线、选中态、撤回、失败态）归 **Task 10 端到端**，本任务不做设备证据（D336）。
 
 ### Task 10 导出（txt/docx/pdf）+ 验收与证据
 
 - Files：`export/Exporter.kt`（`export(dream, format): Uri`）、`export/TxtExporter.kt`、`DocxExporter.kt`、`PdfExporter.kt`、
-  `ui/detail/ExportSheet.kt`、`test/.../DocxStructureTest.kt`、`scripts/check-export.py`、
+  `ui/detail/ExportSheet.kt`、`test/.../DocxStructureTest.kt`、`scripts/check-export.py`、`scripts/check-cost.py`（D337：必须支持 error 行）、
   `docs/evidence/plan3/**`、`docs/evidence/plan1/ACCEPTANCE.md` 追加 `## 3d 生成与成本证据表`、
   `docs/evidence/plan3/FINAL-REVIEW.md`。
 - Steps：docx 结构测试（zip 三件、XML 可解析、`w:t` 文本与期望一致、非法字符被剔除）；pdf 用
   `PdfRenderer.pageCount ≥ 1` + 逐页渲染非空白；txt 编码断言；真机导出三个文件 → `adb pull` →
   `scripts/check-export.py` 硬校验；成本复算 `scripts/check-cost.py`；五闸门与 A1–A21 对同一批输出各跑一次。
 - Expected：三个导出文件全部可打开；docx 文本 sha256 与源一致；`check-export.py` 退出码 0；
-  `check-cost.py` `mismatches=0`；证据首三行绑定 APK sha 与设备时间。
+  `check-cost.py` `mismatches=0` 且 summary 打 `failed=N`、每个 `error IS NOT NULL` 行断言 `cost == 0 && usageJson IS NULL`（D337，只断 `mismatches=0` 会假绿）；证据首三行绑定 APK sha 与设备时间。
 
 ## 9. 偏差登记（从 D218 起）
 
@@ -755,6 +809,15 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D327 | T7-5：15 条向量写成 15 个独立 `@Test`（`case01`..`case15`），不用参数化/循环 | 逐例失败在 XML 里可直接定位（红相 `15 tests completed, 15 failed`），变异时能精确数红例数（7 例） |
 | D328 | T7-6：`p3-gates-01-green` 是变异恢复后的**二次**绿跑（首次绿后先做变异，恢复后再跑并留证） | 证据首三行 `DEVICE_TIME=host-only 2026-10-30T14:50:26Z` 对应第二次跑；恢复后 `sha256 a855bb9f…` 与备份一致 |
 | D329 | T7-7：Task 8 计划 §0.3 的 T2 判据签名修正为 `FaithfulGates.isConservativeOk(input, output)`（Task 7 实作定双参），原稿 `isConservativeOk(report)` 不可编译 | Task 7 的 `isConservativeOk` 直接吃两个字符串并比 `contentChars` 全等；Task 8 orchestrator 传 `(input, out)` 即可 |
+
+| D330 | T9-1：Files 补 `ui/detail/DetailScreen.kt`（`NovelTab` 集成与其调用点两处）；新增 `ReviseSheet.kt`/`VersionStrip.kt`，不用 BottomSheet | `NovelTab` 是 `DetailScreen.kt:486-503` 的私有 composable，调用点 `:177`；`TagsScreen.kt:406` 的 `MergeSheet` 是 private，复用只能整体重构，超出 Task 9 白名单 |
+| D331 | T9-2：ASK/REVISE 判据 = 模型 JSON `action` + `novel_messages.versionId`（null=ASK），不拿「正文变没变」判 | 「逐字相同版」是合法 REVISE（D335/用例 3），用正文变化判会把「没改也交一版」误判成 ASK |
+| D332 | T9-3：列表页仍显示 `faithfulText ?: rawTranscript`，设计 §6.3「列表用挑中版」不在 Plan 3 落地 | `DreamCard.kt:37`、`LibraryScreen.kt:204` 是 Plan 1 卡片契约，改它会连带改列表用例；Plan 3 范围内只让详情与导出读 `resolveFinalNovel`，列表留 Plan 4 |
+| D333 | T9-4：小说化返回的 `title`/`mood` 直接丢弃，不写 `dreams.title` | `dreams` 无 mood 列、title 在 Plan 1 由用户填；`novel_versions` 也无这两列，加列要第三次迁移，收益不抵成本（与 D315 同一判断） |
+| D334 | T9-5：版本线摘要取对应 assistant 消息的 `content`（≤60 字一句话），版本表不新增列 | `novel_versions` 12 列已冻结（Task 4），加列要迁移；消息表天然有 `versionId`，一对一可取 |
+| D335 | T9-6：6 个快捷按钮点一下填入输入框（空则填、非空则末尾「，」追加），可编辑；撤回 = 选中上一版，不删版本行 | 设计 §6.3「点一下填入输入框，可再编辑」；删版本行会破坏 `(dreamId, version)` 唯一序与 export 引用 |
+| D336 | T9-7：Task 9 只做 JVM 证据（8+2 例）；设备截图与「正在改」瞬态归 Task 10 端到端 | ASK 是模型概率行为、瞬态是毫秒级，设备上无法稳定复现；端到端真机流程（录制→生成→改稿→选版→导出）在 Task 10 一次取证更可信，也与 README 的 APK sha 首三行口径一致 |
+| D337 | T9-8：Task 10 Files 补 `scripts/check-cost.py`，Expected 补 `failed=N` 与 error 行断言 | D316 已要求失败行落库；现有 `check-cost.py:60` 对未知 `formulaVersion` 直接 exit 2，不改脚本会在 Task 10 必红；只断 `mismatches=0` 会把 error 行漏成假绿 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
