@@ -31,3 +31,7 @@ docs/eval/*.local/
 # OS
 .DS_Store
 Thumbs.db
+
+# Python 缓存（scripts/*.py 会生成）
+__pycache__/
+*.pyc

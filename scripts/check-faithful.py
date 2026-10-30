@@ -86,6 +86,17 @@ def strip_ws(s):
     return re.sub(r"\s+", "", s or "")
 
 
+def content_chars(s):
+    """正文用字：去掉空白与标点。
+
+    为什么不能直接数 strip_ws：理顺允许（也几乎必然）插入标点，
+    一段没有标点的口述稿加完标点后总字符会涨 10%~16%，把插入标点判成
+    变长等于禁止合法操作。长度比只该管正文。
+    """
+    s = strip_ws(s)
+    return "".join(ch for ch in s if ch not in PUNCT)
+
+
 def bigrams(s):
     s = strip_ws(s)
     s = "".join(ch for ch in s if ch not in PUNCT)
@@ -185,13 +196,13 @@ def gate_g1(input_text, output_text):
 
 def gate_g2(input_text, output_text, kind):
     lim = 1.15 if kind == "revise" else 1.10
-    a, b = len(strip_ws(input_text)), len(strip_ws(output_text))
+    a, b = len(content_chars(input_text)), len(content_chars(output_text))
     if a == 0:
         return {"gate": "G2", "name": "长度比", "value": None, "pass": False,
                 "detail": ["输入为空"], "advisory": []}
     ratio = b / a
     return {
-        "gate": "G2", "name": "长度比 ≤ %.2f" % lim,
+        "gate": "G2", "name": "正文长度比 ≤ %.2f（不计标点空白）" % lim,
         "value": round(ratio, 4), "pass": ratio <= lim,
         "detail": [] if ratio <= lim else ["输出/输入 = %.1f%%（上限 %.0f%%）" % (ratio * 100, lim * 100)],
         "advisory": [],
@@ -317,6 +328,9 @@ def _self_test():
 
     cases.append(("G1 疑似专名", src,
                   good.replace("后来切换到了教室里面", "后来切换到了教室里面，小王说快跑"), False))
+
+    dense = "".join(ch for ch in good if ch not in PUNCT)
+    cases.append(("G2 只加标点、正文不变（合法操作，必须绿）", dense, good, True))
 
     cases.append(("G2 长度膨胀", src,
                   good + "我还能感觉到电梯井深处有一阵风，从脚底一直吹到后颈，像有人在耳边呼气。", False))
