@@ -679,6 +679,33 @@ T3  不调用模型                                   → faithfulText = rawTran
 - Expected：`ReviseOrchestratorTest` 8/8 + `VersionStripTest` 2/2；全量 **35 类 / 344 例**（334 + 10）0 失败；
   证据 `p3-revise-00-red.txt`、`01-green.txt`、`02-mutation.txt`、`03-full.txt`（host-only 头）。
   设备截图（输入条/chips、ASK 气泡、版本线、选中态、撤回、失败态）归 **Task 10 端到端**，本任务不做设备证据（D336）。
+  本任务**不验证**：①生成入口 UI 可点性（由 Task 9b 关闭，D356/D367）；②D221 的残余风险——改稿闸门不再对 rawTranscript
+  复查 G1/G5，更早版本里已混入的专名不会被重罚（D353，列为可接受并进 Task 9 验收的「未验证/可接受」段）。
+
+### Task 9b 生成入口接线（UI 可点性，D356/D367）
+
+- 前置：**Task 9 已提交验收**。`DetailViewModel.orchestrator` 参数与 `DreamKeeperRoot`/`MainActivity` 的传参已由 Task 9 落地，
+  本任务**复用、不重复改签名**；只允许在参数已存在的前提下调用。
+- Files：`ui/detail/DetailScreen.kt`（NovelTab 顶部两枚按钮「原样整理」「小说化」+ `GenerationPhase` 三态 + 失败「重试」）、
+  `ui/detail/DetailViewModel.kt`（`generateFaithful()` / `generateNovel()` / `retryGeneration()` + `generationPhase: StateFlow<GenerationPhase>`）、
+  `test/.../ui/detail/GenerationPhaseMappingTest.kt`（fake orchestrator，纯逻辑）、`docs/evidence/plan3/p3-wire-*`、`task-9b-report.md`。
+- 禁止：改 orchestrator / DAO / 数据库 / prompts / export；改导航结构；新增依赖；对 `transcriptStatus != OK` 或
+  `rawTranscript` 为空的梦发起生成（按钮禁用或一行 Protocol 文案）。
+- Steps（先红后绿）：
+  1. 先落可编译空壳（按钮 + 状态枚举 + 空回调）→ 跑红。
+  2. 实现：按钮 → 对应入口；`Idle → Running → Idle`、失败 `Failed(kind)`；失败态「重试」再次调用同一入口；成功后刷新详情
+     （复用 Task 9 的刷新路径，不新增状态源）。
+  3. 单测 3 例：①两按钮分别命中 fake orchestrator 的 faithful / novel 入口；②`GenerationPhase` 映射（Running/Failed/Idle）；
+     ③失败态「重试」命中第二次调用。
+  4. 设备 smoke：`assembleDebug` → `install -r` → 打开一条种子梦（`rawTranscript` 非空、无小说稿）→ 截按钮可见
+     `p3-wire-01-buttons.png` → **无 Key** 点「原样整理」→ 截失败态 `p3-wire-02-failed.png`（不要求真实生成，真实 API 归 Task 10）
+     → logcat `FATAL EXCEPTION` 计数 0。
+  5. 负向：对 `transcriptStatus != OK` 的梦，按钮禁用/文案触发，且 `llm_calls` / `generation_jobs` 无新增行
+     （设备 `run-as` 前后 count 对比，落 `p3-wire-04-dbcount.txt`）。
+- Expected：3/3 绿；全量 **36 类 / 347 例**（344 + 3）0 失败（若并入既有类则类数不变，报告须说明差 1 原因）；证据
+  `p3-wire-00-red.txt`（host-only 头）、`01-green.txt`、`02-mutation.txt`（回调改成空 → 用例 1 红）、`03-full.txt`；设备两图 +
+  同名 txt（`APK_SHA256`/`DEVICE_TIME`/`REPLAY`，截图 `nearWhite=0`）。
+- 闸门：**Task 9b 验收段通过后才允许 Task 10 开工**；Task 9 验收段只能写「UI 可点性 PENDING → 9b」。
 
 ### Task 10 导出（txt/docx/pdf）+ 端到端验收与证据
 
@@ -686,7 +713,8 @@ T3  不调用模型                                   → faithfulText = rawTran
   `export/DocxExporter.kt`、`export/PdfExporter.kt`、`ui/detail/ExportSheet.kt`、`ui/detail/DetailViewModel.kt`（导出动作）、
   `ui/detail/DetailScreen.kt`（导出入口两处）、`data/DreamRepository.kt`（读 `resolveFinalNovel` 与选中版本）、
   `test/.../export/TxtExporterTest.kt`、`test/.../export/DocxExporterTest.kt`、`test/.../export/ExportNamingTest.kt`、
-  `scripts/check-export.py`（新）、`scripts/check-cost.py`（D337：必须支持 error 行）、
+  `scripts/check-export.py`（新）、`scripts/check-cost.py`（D337/D366：必须支持 error 行；新增 `--require-rows` 硬门，
+  输出 `failed=N` 与逐行 `[FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET` 格式）、
   `docs/evidence/plan3/p3-export-*`、`docs/evidence/plan3/p3-e2e-*`、`docs/evidence/plan1/ACCEPTANCE.md` 追加 `## 3d 生成与成本证据表`、
   `docs/evidence/plan3/FINAL-REVIEW.md`、`docs/PROGRESS.md`。
 
@@ -728,8 +756,9 @@ T3  不调用模型                                   → faithfulText = rawTran
 - §0.6 端到端设备流程（真机/模拟器 emulator-5554，APK 用本次 `assembleDebug` 产物；D360/D361）：
   1. 安装（`adb install -r`）→ 原文 `Success` → `pm path` → `adb pull` 出 base.apk → 主机 sha256 与设备 `sha256sum` 相等 →
      `aapt2 dump badging` 的包名/版本对齐；只认 pull 出来的 APK。
-  2. 录制一条 8–15s 中文梦（真实 Mic 走 STT）→ 等 T0 原样稿（截 `p3-e2e-01-generated.png`）；STT 不可用时按 PENDING 口径
-     用预置 `rawTranscript`（需 debug 入口），并在 FINAL-REVIEW 写明。
+  2. 用**已有种子梦**（`rawTranscript` 非空、无小说稿）做生成链：点「原样整理」→ 等 T0 原样稿（截 `p3-e2e-01-generated.png`）。
+     真实麦克风 STT 录制**不在本步**：若本轮要验 STT，另开一梦真实录制并在 A18 单列；STT 不可用就直接记 PENDING
+     （D364：不引入 debug 播种入口，避免新开白名单）。
   3. 点「小说化」→ 等新版本（截 `p3-e2e-02-novel.png`，含版本线与「补写 N 处」）。
   4. 改稿一句（如「删掉最后一句」）→ 截新版本与对话气泡（`p3-e2e-03-revise.png`）；再发一句纯提问 → 截 ASK 气泡
      （`p3-e2e-04-ask.png`，版本数不变）。
@@ -738,8 +767,9 @@ T3  不调用模型                                   → faithfulText = rawTran
      三件 → 主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）。
   7. 系统「文件」打开 txt/docx 截图；pdf 打开态记 PENDING（AOSP 无 viewer），`p3-e2e-07-pdf-open.png` 若拍到则单独说明、
      **排除**在 nearWhite=0 之外（D359）。
-  8. 制造一次失败：开飞行模式 → 点「小说化」→ 等到失败态截图（`p3-e2e-09-failed.png`）→ 关飞行模式；这步保证 A7 的
-     `failed>=1` 有真实行可验（D361）。
+  8. 制造一次失败并验证重试：开飞行模式 → 点「小说化」→ 失败态截图（`p3-e2e-09-failed.png`）→ 点「重试」→ 仍失败
+     （证明重试走的是同一入口，A23）→ 关飞行模式 → 再点「重试」→ 成功出新版本（截 `p3-e2e-09b-retry.png`）；这步保证 A7 的
+     `failed>=1` 有真实行可验，且重试路径有设备证据（D361/D368）。
   9. `adb shell am force-stop com.dreamkeeper` → `run-as ls -l databases/`（db/wal/shm 三个大小原文）→
      `cmd /c "... exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db > p3-e2e-08-db.db"`，`-wal/-shm` 只做本地核对、
      不入库（D279 口径）；主机 sha256 == 设备 sha256 才继续。
@@ -748,21 +778,25 @@ T3  不调用模型                                   → faithfulText = rawTran
      `costMicroYuan` 改成 1 → 必须 RED。
  11. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令（含 `--mutation`）+ `scripts/check-faithful.py --input --output`
      （A1–A21 与生成相关项）+ `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 扫除 pdf-open 外的全部截图。
- 12. 每份证据的 `DEVICE_TIME` 必须落在该步骤的事件窗口内（不许一批同值，Task 4 教训）；截图同名 txt 带 `PNG_SHA256` 与
+ 12. 大字体与键盘：`adb shell settings put system font_scale 1.3` → 打开有小说稿的梦 → 点输入框弹键盘 → 截图
+     `p3-e2e-10-fontscale.png`（输入条不被遮挡）→ `font_scale 1.0` 恢复；A14 以该图 + 目视结论为准（D369）。
+ 13. 每份证据的 `DEVICE_TIME` 必须落在该步骤的事件窗口内（不许一批同值，Task 4 教训）；截图同名 txt 带 `PNG_SHA256` 与
      `nearWhite=0 ratio=0.0000%` 原文。
 
-- §0.7 验收清单（每项一行结论 + 证据文件）：A1 生成链路（T0 原样稿真实入库）；A2 五闸门全绿批次；A3 版本线/选中/撤回；
+- §0.7 验收清单（每项一行结论 + 证据文件）：A1 生成链路（T0 原样稿真实入库）；A2 五闸门全绿批次（T2/T3 降级链以 `GenerationOrchestratorTest` #6/#7 的 JVM 证据补充，设备只走 happy path，D367）；A3 版本线/选中/撤回；
   A4 ASK 不建版；A5 txt/docx 设备可打开 + pdf 结构 GREEN + pdf 打开态 PENDING（D359）；A6 成本复算 `mismatches=0` + `failed=N`；A7 失败行记账（`error`/`cost==0`/`usageJson NULL`，`failed>=1`，由飞行模式步骤制造，D361）；
-  A8 提示词指纹与三件 sha 一致；A9 Key 只在 Keystore（复用 Plan 2 证据 + 本轮 review）；A10 无新依赖（`libs.versions.toml` 未增）；
-  A11 表数 9 / `user_version=2` 不被 Task 10 改动；A12 列表页仍显示原样稿（D332 知情）；A13 导出文件名清洗；A14 大字体下输入条不被键盘遮挡；
+  A8 提示词指纹与三件 sha 一致；A9 Key 只在 Keystore：本轮**手工**在设置页输入 Key（禁用 `dk_debug_save_key`/adb 注入），证据目录与 REPLAY 中 Key 命中 0
+  （`grep -r` 原文），截图不含 Key 输入框（D365）；A10 无新依赖（`libs.versions.toml` 未增）；
+  A11 表数 9 / `user_version=2` 不被 Task 10 改动；A12 列表页仍显示原样稿（D332 知情）；A13 导出文件名清洗；A14 大字体下输入条不被键盘遮挡（§0.6 步骤 12 的设备截图 `p3-e2e-10-fontscale.png`，D369）；
   A15 全程无崩溃（logcat `FATAL EXCEPTION` 计数 0）；A16 证据头三行齐全且 sha 可复算；A17 复跑命令逐条可执行（JVM/sha 类逐字节复现；E2E 类写「同步骤产生新证据且断言全绿」，D362）；
-  A18 PENDING 清单与理由；A19 计划 §9 偏差全部有 D 号；A20 看板 10/10 与验收段；A21 FINAL-REVIEW 结论可被第三方复现。
+  A18 PENDING 清单与理由；A19 计划 §9 偏差全部有 D 号；A20 看板 10/10 与验收段；A21 FINAL-REVIEW 结论可被第三方复现；A22 生成入口可点且失败可重试（Task 9b 证据 + §0.6 步骤 8）；
+  A23 降级/兜底链有可查证据（T2/T3 走 JVM，`generation_jobs.stage` 与 `llm_calls` 行数对得上；STT 若未验则进 PENDING 白名单）。
 
 - §0.8 `docs/evidence/plan3/FINAL-REVIEW.md` 结构固定六节：结论（Plan 3 是否可交付）→ 交付物与提交链 → 证据索引（文件 ↔ 断言）→
   偏差索引（D275–D343）→ PENDING 与理由 → 复跑命令（逐条可粘贴）。`ACCEPTANCE.md` 的 `## 3d` 只放一张表：能力 / 证据文件 / 结论。
 
-- Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **38 类 / 356 例** 0 失败
-  （344 + 12）；设备端三格式文件全部 `check-export.py` GREEN；`check-cost.py --db-copy` `mismatches=0` 且 `failed=N`；
+- Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **39 类 / 359 例** 0 失败
+  （347 + 12；347 见 Task 9b）；设备端三格式文件全部 `check-export.py` GREEN；`check-cost.py --db-copy` `mismatches=0` 且 `failed=N`；
   截图全部 `nearWhite=0`；`FINAL-REVIEW.md` 六节齐全、A1–A21 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
 
 ## 9. 偏差登记（从 D218 起）
@@ -922,6 +956,13 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D360 | T10-10：设备取证前必须 force-stop，db/wal/shm 三件齐拉、双侧 sha256 相等才准跑检查；`llm_calls` 加 `rows>0` 硬门 | Task 4 已实测「只拉 .db 得 4096B/0 表」；WAL 未 checkpoint 会读到旧快照；空表假绿是 `scripts/check-cost.py:283-286` 的现存缺陷 |
 | D361 | T10-11：E2E 增加「飞行模式制造一次失败」，A7 要求 `failed>=1` 且 error 行 `cost==0 && usageJson IS NULL`，并做负向对照（改一行 cost=1 必 RED） | happy path 下 failed=0，A7 无法被验证；负向对照证明检查器不是恒绿 |
 | D362 | T10-12：`scripts/check-faithful-gates.py` 更正为 `scripts/check-faithful.py`（`--input/--output`）；A17 复跑口径分级 | 仓库里没有 check-faithful-gates.py，原命令会空转；JVM/sha 可复现，E2E 依赖录制与采样，只能承诺「同步骤产生新证据且断言全绿」 |
+| D363 | T10-13：Task 9b 独立立项（生成入口 UI 接线），排在 Task 9 之后、Task 10 之前，验收通过才放行 Task 10 | 只登记一条偏差不留小节=未计划工作；Task 9 的白名单已含 `DreamKeeperRoot`/`MainActivity` 的传参（改稿导航用），9b 不能二次改签名，只能复用 |
+| D364 | T10-14：E2E 的生成链改用**已有种子梦**（rawTranscript 非空、无小说稿），不引入预置 rawTranscript 的 debug 播种入口；真实 STT 录制改为可选项/ PENDING | Task 10 Files 里没有 debug 播种文件，原「预置 rawTranscript」降级不可执行；种子梦足以覆盖 A1/A2/A3/A6/A7 |
+| D365 | T10-15：A9 的 Key 必须**手工**在设置页输入，禁用 `dk_debug_save_key`/adb 注入，并对证据目录与 REPLAY 做 Key 命中 0 的 grep | adb 注入会把 Key 写进 logcat/REPLAY，反而违反 A9/G-2 证据纪律 |
+| D366 | T10-16：`check-cost.py` 增 `--require-rows`（rows>0 硬门）、输出 `failed=N` 与逐行 `[FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET` | 现脚本 `:516-521` 无这些参数，空表/全绿会假绿；格式写进契约，Task 10 不会漏实现 |
+| D367 | T10-17：T2/T3 降级链以 JVM 用例（`GenerationOrchestratorTest` #6/#7）为证据，设备只走 happy path；A22/A23 明确入口可点与兜底证据口径 | 设备上强制 T2 需要可控坏模型返回，E2E 不引入假 client；JVM 已覆盖判据（`isConservativeOk`、T3 不调模型） |
+| D368 | T10-18：§0.6 步骤 8 增加「失败 → 重试仍失败 → 联网重试成功」三段，A22 一并验收 | happy path 下重试入口无证据；只测一次失败无法区分「重试没接上」与「重试接上但网络仍断」 |
+| D369 | T10-19：A14 大字体遮挡改为设备步骤 12（`font_scale 1.3` + 键盘 + 截图 `p3-e2e-10-fontscale.png`） | 原 A14 在 §0.6 无对应步骤，不可机器判定；加一步即可留证 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
