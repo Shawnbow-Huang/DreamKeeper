@@ -5,7 +5,10 @@ REPLAY=python scripts/check-migrate.py --dump docs/evidence/plan3/p3-mig-01-base
 # p3-mig-01-baseline：升级前的 v1 库（含 2 条非种子行）
 
 设备：emulator-5554（1080x2400 @420dpi），时区 Asia/Shanghai。
-v1 APK：从 HEAD(plan3-generation) 构建，装后 pm clear 再冷启 → 4 条种子 + 7 条历史录制数据。
+首三行 DEVICE_TIME 是 00–05 这批证据的统一采集时刻，各步真实执行时刻见正文；v1 包 sha 链
+（`pm path` → `adb pull` → `sha256sum`）见 task-4-report.md:81。
+v1 APK：从 HEAD(plan3-generation) 构建，装后 pm clear 再冷启 → 仅 4 条种子。
+派工书 §四.2 声称随种子带有 7 条历史录音，实测设备上不存在（偏差 D277），基线按实际状态另造：
 在此基础上造基线（否则 destructive 迁移也会假绿）：
   1) 真实录制 1 条：按住「说梦」2.4s，dreamId=4f3b44fd-4299-4f0f-84c2-994b50989713，
      rawAudioPath=/data/user/0/com.dreamkeeper/files/audio/<id>.wav，rawAudioMs=2400，

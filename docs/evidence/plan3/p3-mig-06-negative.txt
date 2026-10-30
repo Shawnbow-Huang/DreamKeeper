@@ -1,0 +1,79 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=host-only 2026-10-30T13:50:48Z
+REPLAY=python scripts/check-migrate.py --diff docs/evidence/plan3/p3-mig-01-baseline.json docs/evidence/plan3/p3-mig-06-negative.json
+
+# p3-mig-06 负向对照：同一份基线、同一条命令，只篡改升级后 dump 的一个字段，闸门必须翻红
+#
+# 目的：证明 p3-mig-03-diff.txt 的 `RESULT: GREEN` 不是空转——不是「脚本永远打印 GREEN」，
+#       也不是「比对的两份 JSON 其实没关系」。做法是拿升级后真库的 dump 手工改一个字符再跑。
+#
+# 源数据：p3-mig-02-after.json（sha256 8a21e3d8390af38563d3a8b6e4e4f0e042902584a164b09d375873df16b594f5，11240 B）
+# 篡改：table_data.dreams.rows 中 id='s:seed-dream-1' 的 title
+#       由 s:电梯（老用户改过的标题） → s:被篡改的标题
+#       除该键外，所有表/列/行/排序/缩进/转义原样保留
+# 篡改件：p3-mig-06-negative.json（sha256 368b8057a27e8f8d32b76a06cf864e63d46ce04f7632f3d2ec8696fcac760a7e，11222 B）
+# 采集时刻（源库）：见 p3-mig-01/02 首部 DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026；本对照全程在宿主复算，
+#   故本文件首三行按 host-only 极性写（2026-10-30T13:50:48Z，Lead 独立复跑，非实施者转述）
+# 证据目录另存篡改件而不是只写「我改过」：否则 REPLAY 无法逐字重放，只能靠口述。
+
+## 一、正对照：未篡改的两份 dump 必须 GREEN / exit 0
+
+$ python scripts/check-migrate.py --diff docs/evidence/plan3/p3-mig-01-baseline.json docs/evidence/plan3/p3-mig-02-after.json
+tables=9 rows_before=14 rows_after=14
+dreams rows=5 equal=5 new_columns_null=10/10
+dreams updatedAt unchanged=5/5
+dreams indexes=-
+tags rows=4 equal=4
+tags indexes=index_tags_name
+dream_tags rows=4 equal=4
+dream_tags indexes=index_dream_tags_tagId
+media_assets rows=1 equal=1
+media_assets indexes=index_media_assets_dreamId
+novel_versions rows=0 indexes=index_novel_versions_dreamId_version
+novel_messages rows=0 indexes=index_novel_messages_dreamId_createdAt
+generation_jobs rows=0 indexes=-
+llm_calls rows=0 indexes=index_llm_calls_dreamId_createdAt
+identity_hash 3150a0bccf0e3cb537faa8aac20e4186 -> 166666e50d40204e526403725c8302ab
+integrity_check=ok -> ok
+foreign_key_check_rows=0 -> 0
+RESULT: GREEN
+exit=0
+
+## 二、负向对照：只改 seed-dream-1 的 title，必须 RED / exit 1
+
+$ python scripts/check-migrate.py --diff docs/evidence/plan3/p3-mig-01-baseline.json docs/evidence/plan3/p3-mig-06-negative.json
+tables=9 rows_before=14 rows_after=14
+dreams rows=5 equal=5 new_columns_null=10/10
+dreams updatedAt unchanged=5/5
+dreams indexes=-
+tags rows=4 equal=4
+tags indexes=index_tags_name
+dream_tags rows=4 equal=4
+dream_tags indexes=index_dream_tags_tagId
+media_assets rows=1 equal=1
+media_assets indexes=index_media_assets_dreamId
+novel_versions rows=0 indexes=index_novel_versions_dreamId_version
+novel_messages rows=0 indexes=index_novel_messages_dreamId_createdAt
+generation_jobs rows=0 indexes=-
+llm_calls rows=0 indexes=index_llm_calls_dreamId_createdAt
+identity_hash 3150a0bccf0e3cb537faa8aac20e4186 -> 166666e50d40204e526403725c8302ab
+integrity_check=ok -> ok
+foreign_key_check_rows=0 -> 0
+FAIL dreams 列值变了: ('s:seed-dream-1',) title: 's:电梯（老用户改过的标题）' → 's:被篡改的标题'
+RESULT: RED: 1 处不一致
+exit=1
+
+## 三、读法
+
+- 两跑的差异只有最后一个字段的取值，闸门精确报出「哪张表 / 哪一行 / 哪一列 / 从什么到什么」，
+  计数正好 1（不是「红了就行」的粗判）。
+- 这说明 03-diff 的 GREEN 依赖「baseline 与 after 逐列真的相等」，删行、改值、改列型都会被拦住。
+- 本文件与 p3-mig-03-diff.txt 互为对照：03 是「没改 → 绿」，06 是「改一个字符 → 红」，缺任一条都不算证明。
+
+## 四、复算步骤（如需从零重放）
+
+1. 取 `docs/evidence/plan3/p3-mig-02-after.json`，校验 sha256 = 8a21e3d8…b594f5。
+2. 把它复制到临时目录，仅把 `table_data.dreams.rows` 中 `id == "s:seed-dream-1"` 的 `title` 改成 `s:被篡改的标题`，
+   其余内容不动，另存（JSON 缩进/排序不限，闸门只读语义）。
+3. `python scripts/check-migrate.py --diff docs/evidence/plan3/p3-mig-01-baseline.json <改后的文件>`，应得 `RESULT: RED: 1 处不一致` 且 exit 1。
+4. 正向回读：把第 3 步的入参换回 `p3-mig-02-after.json`，应得 `RESULT: GREEN` 且 exit 0。
