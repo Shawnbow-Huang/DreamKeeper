@@ -428,16 +428,20 @@ T3  不调用模型                                   → faithfulText = rawTran
 > **0.1–0.10（Lead 派工前修订，2026-10-30；D286 起登记）**
 >
 > 0.1 **可注入是硬要求**：生产仍用单例 `OkHttpClient`，但 `DeepSeekClient` 的构造参数必须能注入
-> `baseUrl`（默认 `https://api.deepseek.com/`）、`callTimeoutMs`、`readTimeoutMs`、`client`、`sleeper: (Long) -> Unit`、
-> `clock: () -> Long`、`jitter: () -> Long`、`RetryPolicy`。测试全部指向 `http://127.0.0.1:<port>/`，否则「超时取消」按 180s 不可测。
-> 0.2 **重试留在 client 内，但每次尝试必须可记账**：`ChatResponse.attempts: List<Attempt>`（`attemptNo/httpStatus/latencyMs/errorKind`），
-> 失败时 `LlmException.attempts` 同样带全。Task 8 要「每尝试一行 `llm_calls`、成本行数==尝试次数」，client 不暴露 attempts 就必然返工。
+> `baseUrl`（默认 `https://api.deepseek.com/`）、`callTimeoutMs`、`readTimeoutMs`、`client`、`sleeper: suspend (Long) -> Unit`（默认 `delay`）、
+> `clock: () -> Long`、`jitter: () -> Long`、`RetryPolicy`。测试全部指向 `http://127.0.0.1:<port>/`，否则「超时取消」按 180s 不可测。**超时落地方式写死**：同时注入 `client` 与超时参数时，
+> 必须在 `DeepSeekClient` 内 `client.newBuilder().callTimeout(...).readTimeout(...)` 派生，否则注入单例的 300s 会覆盖参数、超时用例挂 180s；
+> `baseUrl` 结尾斜杠归一。
+> 0.2 **重试留在 client 内，但每次尝试必须可记账**：`ChatResponse.attempts: List<Attempt>`（`attemptNo/httpStatus/latencyMs/errorKind/requestId/startedAtMs`），
+> 失败时 `LlmException.attempts` 同样带全。**每个 HTTP 交换（含 429/5xx/`Retry-After`）与每个传输错误各 append 一条**，不是只记最后一次；
+> 传输错误的 `httpStatus=null`、`usage=null`（Task 8 记 0 成本）。Task 8 要「每尝试一行 `llm_calls`、成本行数==尝试次数」，client 不暴露 attempts 就必然返工。
 > 0.3 **usage 四字段**：`promptCacheHitTokens/promptCacheMissTokens/completionTokens/reasoningTokens`（`Pricing.kt` 的 hit/miss/out 需要），
 > 另带 `totalTokens`；`ChatResponse` 还要有 `requestId`、`httpStatus`、`latencyMs`、`finishReason`。
 > 0.4 **取消语义**：`suspendCancellableCoroutine` + `invokeOnCancellation { call.cancel() }`；`CancellationException` **一律 rethrow**
 > （retry/parse 的 catch 不许把它包成 `LlmException`）；响应体 `use {}` 关闭；cancel 后不得再 resume。
 > 0.5 **错误模型**：`LlmException(kind, httpStatus, requestId, attempts, cause)`，
-> `kind ∈ {NETWORK, TIMEOUT, RATE_LIMIT, SERVER, AUTH, BAD_REQUEST, EMPTY_CONTENT, INVALID_JSON}`，`isRetryable = RATE_LIMIT|SERVER|NETWORK|TIMEOUT`。
+> `kind ∈ {NETWORK, TIMEOUT, RATE_LIMIT, SERVER, AUTH, BAD_REQUEST, EMPTY_CONTENT, INVALID_JSON}`，`isRetryable = RATE_LIMIT|SERVER|NETWORK|TIMEOUT`；
+> `EMPTY_CONTENT`/`INVALID_JSON` **不进重试链**（D290，覆盖设计 §9:374），坏返回交给 Task 7 闸门与 Task 8 修复。
 > 0.6 **显式 import**：`com.sun.net.httpserver.HttpServer/HttpExchange` 与 `okhttp3.Request/Response` 不许通配。
 > 两边都有 `Request`，通配导入直接编译失败（已复现）。
 > 0.7 **测试框架**：`@RunWith(RobolectricTestRunner::class)` + `@Config(sdk=[34])`——纯 JUnit 下 `org.json` 是 android.jar stub（"not mocked"）；
@@ -445,7 +449,8 @@ T3  不调用模型                                   → faithfulText = rawTran
 > 0.8 **wire 格式**：`thinking={"type":"enabled"|"disabled"}`、`reasoning_effort` 只在 enabled 时发（low/high/max）且为顶层字段；
 > enabled 时**不发 `temperature`**（API 会忽略，发了只会误导日志）；`response_format={"type":"json_object"}` 仅 `jsonMode=true`。
 > 0.9 **边界**：本任务不写库、不改 schema、不碰 `prompts/`；API Key 由调用方传入，日志只许 `sk-…后四位`。
-> 0.10 **退避**：基线 1000ms × 2、上限 30000ms、`Retry-After` 优先；测试注入 sleeper 与 jitter=0，禁止真实 sleep。
+> 0.10 **退避**：基线 1000ms × 2、上限 30000ms、`Retry-After` 优先（`RetryPolicy(maxAttempts, baseDelayMs, factor, maxDelayMs, retryAfterMaxMs)`）；
+> 测试注入 suspend sleeper（记录时长并立即返回，或真实 `delay` 小值）与 jitter=0，禁止真实 4s sleep；退避期间取消必须立即返回。
 
 - Files：`llm/LlmClient.kt`（接口 `suspend fun chat(req: ChatRequest): ChatResponse`）、`llm/DeepSeekClient.kt`、
   `llm/ChatModels.kt`（`ChatRequest(model, messages, thinking, effort, temperature, jsonMode, apiKey)`、`ChatMessage(role, content)`、
@@ -453,16 +458,17 @@ T3  不调用模型                                   → faithfulText = rawTran
   `test/.../DeepSeekClientTest.kt`（用 `com.sun.net.httpserver.HttpServer` 起本地服务）。
 - Interfaces：
   `interface LlmClient { suspend fun chat(req: ChatRequest): ChatResponse }`；
-  `class DeepSeekClient(client: OkHttpClient, baseUrl: String, callTimeoutMs: Long, readTimeoutMs: Long, sleeper: (Long) -> Unit, clock: () -> Long, jitter: () -> Long, retry: RetryPolicy) : LlmClient`。
+  `class DeepSeekClient(client: OkHttpClient, baseUrl: String, callTimeoutMs: Long, readTimeoutMs: Long, sleeper: suspend (Long) -> Unit, clock: () -> Long, jitter: () -> Long, retry: RetryPolicy) : LlmClient`。
 - 要点：`OkHttpClient` 单例、`callTimeout(300s)`、`readTimeout(180s)`；取消用 `suspendCancellableCoroutine` +
   `invokeOnCancellation { call.cancel() }`；`thinking` 与 `reasoning_effort` 是**顶层字段**；`response_format: {type:"json_object"}`；
   **`content` 为空或非 JSON 一律判失败**（服务端会把非法 JSON 换成空格但 `finish_reason` 仍是 `stop`）；
   429/5xx 指数退避 3 次、尊重 `Retry-After`，时钟与 jitter 可注入。
-- Steps：先写 7 条服务端用例（200 正常 + 请求体逐字段断言、空 content、非 JSON、429×3 后成功、401 不重试、超时/取消、
-  `Retry-After` 优先），红 → 实现 → 绿；再补 1 条变异（把 `CancellationException` 吞成 `LlmException`，取消用例必须红）。
+- Steps：先写 8 条用例（200 正常 + 请求体逐字段断言、空 content、非 JSON、429×3 后成功、401 不重试、超时、飞行中取消、
+  退避中取消/`Retry-After` 优先），红 → 实现 → 绿；再补 1 条变异（把 `CancellationException` 吞成 `LlmException`，取消用例必须红）。
 - Expected：401 只发 1 次请求；429 共 4 次尝试且间隔 1000/2000/4000 ms（sleeper 收到的序列逐项相等）；`Retry-After` 覆盖指数退避；
-  空 content 与非 JSON 都抛 `EMPTY_CONTENT`/`INVALID_JSON`；**取消的断言在客户端侧**：`call.isCanceled()` 为 true 且
-  `CancellationException` 原样透传——「服务端收到连接断开」不可观测（探针实测 `SERVER_DISCONNECTS=0`），不作断言。
+  空 content 与非 JSON 都抛 `EMPTY_CONTENT`/`INVALID_JSON`；**取消断言用注入的 `EventListener.canceled(call)`**：命中次数≥1、`CancellationException` 原样透传、
+  飞行中取消 <1s、退避中取消 <200ms 返回——`call.isCanceled()` 在测试侧拿不到内部 Call，「服务端收到连接断开」也不可观测
+  （探针实测 `SERVER_DISCONNECTS=0`），两者都不作断言（D291）。
 
 ### Task 6 提示词资产与 PromptRepository
 
@@ -589,6 +595,9 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D286 | T5-1：`DeepSeekClient` 的 `baseUrl`/`callTimeoutMs`/`readTimeoutMs`/`client`/`sleeper`/`clock`/`jitter`/`RetryPolicy` 全部构造注入；`ChatResponse` 增 `attempts`（每次尝试一条） | 不注入则测试指不到本地 HttpServer，「超时取消」按 180s 不可测；不出 attempts 则 Task 8 的「每尝试一行 `llm_calls`、成本行数==尝试次数」无法落地（重试留在 client 内是计划原意） |
 | D287 | T5-2：取消断言语义改为客户端侧（`call.isCanceled()` + `CancellationException` 透传）；删掉「服务端收到连接断开」 | 探针实测 `SERVER_DISCONNECTS=0`：OkHttp 的取消在客户端就断了，服务端 side 不可观测，原 Expected 写了一条永远无法断言的话 |
 | D288 | T5-3：`DeepSeekClientTest` 必须 `@RunWith(RobolectricTestRunner::class)` + `@Config(sdk=[34])`，且 `okhttp3.*`/`com.sun.net.httpserver.*` 显式 import | 纯 JUnit 下 `org.json` 是 android.jar stub（"not mocked"）；两边都有 `Request`，通配导入编译失败（已复现） |
+| D289 | T5-4：Task 5 证据头是 host-only 例外（`APK_SHA256=n/a (host-only JVM test; no APK involved)`），文件命名 `p3-llm-*` | README 的首三行（APK sha/设备时间）是为设备证据定的；Task 5 是纯 JVM 单测，本机没有对应 APK，编一个 sha 就是造假 |
+| D290 | T5-5：`EMPTY_CONTENT`/`INVALID_JSON` 不进 client 重试链，覆盖设计 §9:374「解析失败按一次失败计入重试链」 | 这两类大概率是确定性坏返回，重试 4 次=4 倍成本；修复归 Task 7 闸门与 Task 8 编排；用户侧有重试按钮兜底 |
+| D291 | T5-6：`sleeper` 改 `suspend (Long)->Unit`（默认 `delay`）；超时用 `client.newBuilder()` 派生；取消断言用 `EventListener.canceled` 计数；`Attempt` 补 `requestId`/`startedAtMs` 且每交换必记 | Thread.sleep 版 sleeper 会让退避中取消等满 4s；不派生 builder 则注入单例超时覆盖参数（超时用例挂 180s）；测试取不到内部 Call；峰谷判定必须按尝试时刻（跨 12:00 的重试） |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
