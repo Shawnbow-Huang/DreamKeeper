@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 33+ 通知要用户授权；没授权也照录，只是常驻通知不可见 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 调用模型 API 必需；缺了第一次请求就是 SecurityException -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- 前台服务本体 + microphone 类型（14+ 起类型权限是独立的一条） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />

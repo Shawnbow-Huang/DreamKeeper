@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      仅 debug 源集：把明文放行配置挂到 application 上。
+      release 源集既没有这份 manifest，也没有 res/xml/network_security_config.xml，
+      因此 release 包不会带 networkSecurityConfig 属性（Task 1 证据里用 aapt2 做负向断言）。
+    -->
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>

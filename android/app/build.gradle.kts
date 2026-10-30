@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.androidx.navigation.compose)
+    // 纯 JVM jar；钉 4.12.1 而非 5.x（5.5.1 的 .module 是 KMP root，见 D227）
+    implementation(libs.okhttp)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

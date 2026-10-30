@@ -62,6 +62,7 @@ fun CalendarScreen(
     onDayClick: (LocalDate) -> Unit,
     onSearch: () -> Unit,
     onRecord: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val today = LocalDate.now()
@@ -85,6 +86,7 @@ fun CalendarScreen(
                         onPrev = vm::prevMonth,
                         onNext = vm::nextMonth,
                         onToday = vm::goToday,
+                        onSettings = onSettings,
                     )
                     SearchEntry(onSearch = onSearch)
                     WeekdayHeader()
@@ -138,6 +140,7 @@ private fun MonthHeader(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -162,6 +165,27 @@ private fun MonthHeader(
             )
         }
         ArrowButton("›", "下个月", onNext)
+        SettingsEntry(onSettings)
+    }
+}
+
+/**
+ * 设置入口：48dp 文字盒，照 [ArrowButton] 的写法（不引 material-icons）。
+ *
+ * 放在月头行最右侧（第 4 个 48dp 位），是整个应用里唯一的设置入口。
+ * `contentDescription = "设置"` 既是读屏标签，也是证据脚本定位它的唯一锚点；
+ * 盒子写死 48dp（420dpi 下 126px），保证 uiautomator 量到的 bounds 不小于触控下限。
+ */
+@Composable
+private fun SettingsEntry(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clickable { onClick() }
+            .semantics { contentDescription = "设置" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("设置", style = MaterialTheme.typography.labelMedium, color = Paper)
     }
 }
 

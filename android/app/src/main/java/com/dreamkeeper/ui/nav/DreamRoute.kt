@@ -18,6 +18,9 @@ sealed interface DreamRoute {
 
     data object Search : DreamRoute { override val route = "search" }
     data object Tags : DreamRoute { override val route = "tags" }
+
+    /** 设置页：只在日历顶栏有入口，**不是**底部栏的第三个 tab（见 DreamKeeperRoot 的 showBottomBar） */
+    data object Settings : DreamRoute { override val route = "settings" }
     data class Detail(val dreamId: String) : DreamRoute { override val route = "detail/$dreamId" }
     data class Record(val entry: RecordEntry) : DreamRoute { override val route = "record/${entry.name}" }
     data class FollowUp(val dreamId: String) : DreamRoute { override val route = "followup/$dreamId" }

@@ -54,6 +54,8 @@ import com.dreamkeeper.ui.nav.RecordEntry
 import com.dreamkeeper.ui.record.RecordScreen
 import com.dreamkeeper.ui.record.RecordViewModel
 import com.dreamkeeper.ui.search.SearchScreen
+import com.dreamkeeper.ui.settings.SettingsScreen
+import com.dreamkeeper.ui.settings.SettingsViewModel
 import com.dreamkeeper.ui.tags.TagsScreen
 import com.dreamkeeper.ui.tags.TagsViewModel
 import com.dreamkeeper.ui.theme.Ember
@@ -152,6 +154,7 @@ fun DreamKeeperRoot(
                     onSearch = { nav.navigate(DreamRoute.Search.route) },
                     // 首页「说梦」是 HOME_BUTTON 入口（§0.3）：直接进录音页，不再弹「录音还没做」
                     onRecord = { nav.navigate(DreamRoute.Record(RecordEntry.HOME_BUTTON).route) },
+                    onSettings = { nav.navigate(DreamRoute.Settings.route) { launchSingleTop = true } },
                 )
             }
             composable("day/{dateIso}") { backStackEntry ->
@@ -189,6 +192,11 @@ fun DreamKeeperRoot(
             composable(DreamRoute.Tags.route) {
                 val vm: TagsViewModel = viewModel { TagsViewModel(repo, tagDao) }
                 TagsScreen(vm = vm, onBack = { nav.popBackStack() })
+            }
+            // 设置页同理不进底部栏：showBottomBar 只按 calendar / library 等值判定
+            composable(DreamRoute.Settings.route) {
+                val vm: SettingsViewModel = viewModel { SettingsViewModel() }
+                SettingsScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable("detail/{dreamId}") { backStackEntry ->
                 val dreamId = backStackEntry.arguments?.getString("dreamId").orEmpty()

@@ -38,6 +38,16 @@ class AppContainer(
     val transcriptionScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
 
+    /**
+     * 生成任务的作用域（Task 5 起把 LLM 请求扔进来）。
+     *
+     * 取消归属：**容器**持有并只随进程结束消失；不挂在 Activity / ViewModel / Service 上，
+     * 用户切页或退出设置页不该掐掉已经在跑的请求。与 [transcriptionScope] 的区别是它不靠
+     * `DreamKeeperApp.appScope` 传入——appScope 只跑启动任务，从不 cancel 别人；两者是并列的
+     * SupervisorJob，互不负责取消对方。
+     */
+    val generationScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+
     private val appContext: Context = context.applicationContext
 
     /** 进程内唯一的 Room 实例；`DreamDatabase.create` 内部没有 `fallbackToDestructiveMigration` */
