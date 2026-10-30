@@ -1,0 +1,30 @@
+case: wav
+artifact: audio/p2-wav-01.wav（python fixture）与 audio/p2-wav-code-01-filled.wav（WavStore.create + openWriter + write 32000 零 + finish）两份同 sha256
+bytes: 32044 = 44 字节 canonical 头 + 32000 字节 PCM
+sha256: 643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc（两份完全一致）
+generator: python 3.10.11 按简报 1.7 命令 struct.pack('<I', ...) 造 fixture；code 产物由 WavMath.kt + WavStore.kt 的公开 API 生成（kotlinc 编译后跑 main，见 task-1-report.md）
+expect: RIFF | riffSize=32036 (24 7D 00 00) | WAVE | "fmt "（第 4 字节是空格 20） | fmtSize=16 | PCM=1 | 1ch | 16000 (80 3E 00 00) | byteRate=32000 (00 7D 00 00) | blockAlign=2 | 16bit | data | dataSize=32000 (00 7D 00 00)
+
+前 44 字节（xxd -l 44 audio/p2-wav-01.wav，offset 列 + ASCII 列）：
+
+00000000: 5249 4646 247d 0000 5741 5645 666d 7420  RIFF$}..WAVEfmt 
+00000010: 1000 0000 0100 0100 803e 0000 007d 0000  .........>...}..
+00000020: 0200 1000 6461 7461 007d 0000            ....data.}..
+
+按 offset 对照（十进制值均按无符号小端读）：
+
+| offset | 字节（hex）       | 字段            | 值 / 说明                     |
+|--------|-------------------|-----------------|-------------------------------|
+| 0..4   | 52 49 46 46       | "RIFF"          | 容器魔数                      |
+| 4..8   | 24 7D 00 00       | riffSize        | 32036 = fileBytes-8           |
+| 8..12  | 57 41 56 45       | "WAVE"          | 格式魔数                      |
+| 12..16 | 66 6D 74 20       | "fmt "          | **第 4 字节是空格 0x20**      |
+| 16..20 | 10 00 00 00       | fmt chunk size  | 16                            |
+| 20..22 | 01 00             | audioFormat     | 1 = PCM                       |
+| 22..24 | 01 00             | channels        | 1 = 单声道                    |
+| 24..28 | 80 3E 00 00       | sampleRate      | 16000                         |
+| 28..32 | 00 7D 00 00       | byteRate        | 32000 = 16000*2               |
+| 32..34 | 02 00             | blockAlign      | 2                             |
+| 34..36 | 10 00             | bitsPerSample   | 16                            |
+| 36..40 | 64 61 74 61       | "data"          | 数据块魔数                    |
+| 40..44 | 00 7D 00 00       | dataSize        | 32000 = fileBytes-44          |

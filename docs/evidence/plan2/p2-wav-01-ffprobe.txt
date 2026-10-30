@@ -1,0 +1,36 @@
+case: wav
+artifact: audio/p2-wav-01.wav（python fixture）、audio/p2-wav-code-01-filled.wav（WavStore 代码产物）
+bytes: 两份均 32044
+sha256: 643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc（两份相同，说明 python 头与 WavWriter 回填头逐字节一致）
+generator: ffprobe version 9.0.1-full_build-www.gyan.dev（ffmpeg 9.0.1）
+expect: pcm_s16le / 16000 Hz / 1 channel / duration=1.000000 / size=32044；stderr 不得出现 "[wav @"（出现 Ignoring maximum wav data size / Estimating duration from bitrate / Packet corrupt 即判失败）
+
+## 复跑命令
+
+    cd docs/evidence/plan2/audio
+    ffprobe -v error -show_entries stream=codec_name,sample_rate,channels:format=duration,size -of compact p2-wav-01.wav
+
+## audio/p2-wav-01.wav（python fixture）
+
+stdout:
+stream|codec_name=pcm_s16le|sample_rate=16000|channels=1
+format|duration=1.000000|size=32044
+
+stderr:（空，0 字节；未出现任何 "[wav @" 行）
+
+## audio/p2-wav-code-01-filled.wav（代码产物）
+
+stdout:
+stream|codec_name=pcm_s16le|sample_rate=16000|channels=1
+format|duration=1.000000|size=32044
+
+stderr:（空，0 字节；未出现任何 "[wav @" 行）
+
+## 判定
+
+- codec_name = pcm_s16le ✓
+- sample_rate = 16000 ✓
+- channels = 1 ✓
+- duration = 1.000000 ✓（= dataSize 32000 / 32000 字节每秒）
+- size = 32044 ✓
+- 两份文件 stderr 均为 0 字节，`[wav @` 未出现 ✓
