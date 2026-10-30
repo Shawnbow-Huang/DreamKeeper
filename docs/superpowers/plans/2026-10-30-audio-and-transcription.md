@@ -481,6 +481,33 @@ class FollowUpViewModel(
 
 ## Task 6：启动扫描与 WAV 头修复
 
+### 0. 派工前修订（Lead 按两位专家预审裁定，覆盖下文任何冲突）
+
+以下 16 条是硬约束，与下文冲突时以本节为准。
+
+1. **编译级缺口先补齐**：`WavStore` 现在拿不到文件列表 → 加 `fun files(): List<File>`（`rootDir.listFiles` 过滤 `*.wav`，且 stem 必须是 UUID 形，忽略 `.tmp/.part/`垃圾名）；`DreamDao` 加两条 `@Query`：`SELECT * FROM dreams WHERE rawAudioPath IS NOT NULL` 与「按 id 是否存在」；`DreamDao` 再加**两条窄更新**：`clearAudio(id)`（path 置 NULL + `rawAudioMs` 置 NULL + status 置 `FAILED`）与 `setAudioMs(id, ms)`（**只**改 `rawAudioMs`，不许碰 `transcriptStatus`——现成的 `updateAudio` 会把 `FAILED` 悄悄改成 `OK`）。
+2. **事务放仓库层**：`DreamRepository` 加 `recoverDraft(...)`、`markMissing(id)`、`fixAudioMs(id, ms)` 三个带 `db.withTransaction` 的方法；`AudioScan` 只依赖 `WavStore` + `DreamRepository`，**不许**直接碰 DAO（`db` 是私有字段，扫描里没有事务边界）。
+3. **别把正在录的文件当孤儿（最高优先级）**：`WavStore` 维护一份「当前打开的文件」集合（`create`/`markOpen`/`openWriter` 注册，`finish`/`close` 注销），扫描**跳过集合内的文件**。理由：录音前先写占位头、数据库行要等 DONE 之后才写 → 「文件在 + `placeholder=true` + 库无行」正是正常录音中；`onCreate` 的异步扫描会把它当孤儿插一条草稿（而 `RecordViewModel.alreadyPersisted()` 随后会直接 return，导致 DONE 不再保存、也不跳追问页——可见回归，不只是脏数据）。
+4. **修 `RecordViewModel` 的「已存在就跳过」**：行已存在时不再 `return`，改为窄更新 `rawAudioPath`/`rawAudioMs` 并照常发 `savedDreamId`，否则补录后的时长永远停在扫描值。
+5. **文件系统是「存在与时长」的唯一真源**：`repair()` 只碰文件、不写库，扫描必须在 `repair` 成功后自己走 `fixAudioMs` 写 `(bytes-44)/32`；**禁止**用 `save()`（整行 upsert 会改 `updatedAt`、覆盖并发编辑）。
+6. **恢复草稿必须写全字段**：`isDraft=true`、`transcriptStatus=PENDING`、`rawTranscript=""`、`rawAudioPath=文件绝对路径`、`rawAudioMs=WavMath.durationMs(len)`，并且 `dreamDate` 与 `createdAt` **取 `file.lastModified()`**（不许用 `today`，否则三天前录的梦会落到今天）。
+7. **四条主状态 + 一条补充状态，逐文件 try/catch**：①有行+占位头 → `repair` + `fixAudioMs`（幂等）；②有文件无行 → 恢复草稿（不存在才插，重跑不重置 `createdAt`）；③有行无文件 → `markMissing`（path 置 NULL + `FAILED`）；④干净 → `Noop` 且**字节与 mtime 都不许变**；⑤0 字节或 `<44`：库无行则**删文件、不建行**（0ms 草稿会成永久幽灵），有行则 `markMissing`。**每个文件都必须 `runCatching`**，单个坏文件不许中断全扫；外层再加一层 try/catch（`SupervisorJob` 不兜未捕获异常，漏一个就崩进程）。
+8. **尾部半帧**：扫描先截掉奇数尾字节再 `repair`，并单独出用例（否则 `markOpen` 会永久拒绝追加）。
+9. **正好 44 字节**（`dataSize=0`）：按第 ⑦ 条「无行删文件、有行标 FAILED」处理，不许留下 `0:00` 条目。
+10. **启动时机**：扫描挂在 `DreamKeeperApp` 已有的 `appScope(IO)` 上，**不 await、不占主线程**；但必须排在种子之后（`SeedData` 以 `count()==0` 整体跳过，扫描先插草稿会让演示种子永久不出现）。
+11. **别污染测试**：扫描入口收进 `di/AppContainer`（`val audioScan by lazy`）+ `BuildConfig` 门闩，`Application.onCreate` 只调容器；Robolectric 每个用例都会跑 `onCreate`，无条件扫描会给现有测试加真实 `filesDir` IO。
+12. **证据必须能反驳自己**：写一个 python 校验脚本进证据目录，读 offset `4..8` 与 `40..44` 与 `len(file)` 比对，并跑 `ffmpeg -v warning -i x.wav -f null -`——**占位头会打 `[wav @ Ignoring maximum wav data size`，stderr 非空即失败**；`ffprobe` duration 与 `(bytes-44)/32` 差 <100ms；**脚本 exit code 就是结论**，不许用 hexdump + 肉眼当判据。脚本必须先在 `p2-scan-01-before.wav` 上**红一次**（贴 stderr 与 exit code），再在 `02` 上绿，成对存在。
+13. **四种状态怎么造（真路径，不许只跑单测）**：
+    - ①（有行+占位头）：录 3 s → 松手 → 追问页补录 2 s（`markOpen` 把两字段写回 `FFFFFFFF`）→ 补录中 `am force-stop` → 重启断言修复。
+    - ②（有文件无行）：`am start` → 长按录 3 s → 录制中 `am force-stop` → 重启；断言出现「今天的草稿」且 `rawAudioMs == (bytes-44)/32`。
+    - ③（有行无文件）：正常存一条 → `run-as rm files/audio/<id>.wav` → 重启。
+    - ④（干净）：存一条 → force-stop → 重启，断言文件 sha256 与 mtime 前后一致。
+    - 证据里每一态都必须写一行 `pre_state_by:`（说明这个状态是 App 造成的还是你用 adb 造的），脚本进证据目录（照 `p2-fgs-01-capture.sh` 先例）。
+14. **取文件与查库的纪律**：拉 WAV 用 `cmd /c "<adb> exec-out run-as com.dreamkeeper cat … > …"`，并**比对设备 `sha256sum` 与宿主 `Get-FileHash` 逐字符相同**（PS 直接重定向会毁二进制）；查库前先 `am force-stop`（Room 是 WAL，边跑边 cat 是撕裂读），导出 `dreamkeeper.db`（有 `-wal` 一起取）后宿主 python 只读打开，并把 db 的 sha256 记进 txt；交叉表必须输出 `(bytes-44)//32 | rawAudioMs | diff` 三列，`diff != 0` 即红。
+15. **证据命名与必带字段**：`p2-scan-00-index.md` + `p2-scan-01-before.txt` / `-01-before.wav` / `-01-validate.txt`(红) / `-02-after.txt` / `-02-repaired.wav` / `-02-validate.txt`(绿) / `-03-db.txt` / `-04-file-missing.txt` / `-04-clean.txt` / `-05-zero-byte.txt`；每个 txt 头必须有 `apk_sha256 / device_date / replay / artifact / file_sha256 / pre_state_by`。截图必须带判别串（「原样/小说化/标签/素材」之一）+ `adb shell date`，否则判废。
+16. **挪给 Task 9**：恢复出来的草稿在 UI 里可见/可播放/时长显示正确、权限路径 A（录制中 revoke → 占位头交给扫描）的跨任务整链、100+ 文件目录的扫描耗时、连续多次重启的幂等——这些是端到端与性能，不塞进本任务。
+
+
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/audio/AudioScan.kt`
 - Modify `android/app/src/main/java/com/dreamkeeper/data/db/DreamDao.kt`（只加 `@Query`，不动 schema）
@@ -720,6 +747,22 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D170 | 收起后 `popBackStack()` 回日历（不是回详情页） | followup 入栈时 record 已被 `popUpTo(inclusive)` 清掉，pop 即回日历；pop 失败再 `navigate(日历)` 兜底 | `ui/followup/FollowUpViewModel.kt` |
 | D171 | 120s 上限提示用内联中文「单段最长 120 秒，已替你保存」 | 全仓库同类文案均为内联，本阶段不抽 `strings.xml`（国际化不在范围内） | `ui/followup/FollowUpScreen.kt` |
 | D172 | `onTimeout` 后不写 `rawTranscript` 文本（计划 5.1 要求「rawTranscript 非空」被 §0-5 覆盖） | 只置 `transcriptStatus="PENDING"` 与 `rawAudioMs`；`FollowUpViewModelTest` 显式断言原文未被改动——文本由 Task 7 的 STT 写 | `ui/followup/FollowUpViewModel.kt`、Task 7 |
+| D173 | `WavStore` 没有暴露文件列表、`DreamDao` 没有「列出所有带 audioPath 的行」的查询 → 扫描两个方向都枚举不了（编译级缺口） | `WavStore.files(): List<File>`（只认 UUID 形 `*.wav`）+ `DreamDao.audioRows()` / `existsById(id)` | 计划 Task 6 §0 第 1 条 |
+| D174 | 清理孤儿与写毫秒若复用 `updateAudio`，会把 `transcriptStatus` 一起改成 `PENDING`（`FAILED` 会被悄悄改回） | 新增两条窄更新：`clearAudio(id)`、`setAudioMs(id, ms)`；`updateAudio` 留给 Task 5 的场景 | 计划 Task 6 §0 第 1 条 |
+| D175 | `DreamRepository.db` 是私有字段，扫描层拿不到事务边界 | `recoverDraft` / `markMissing` / `fixAudioMs` 三个带 `db.withTransaction` 的仓库方法；`AudioScan` 不碰 DAO | 计划 Task 6 §0 第 2 条 |
+| D176 | **最危险的一条**：录音前先写占位头、行要 DONE 后才写 → 启动扫描会把正在录的文件当孤儿插草稿；随后 `RecordViewModel.alreadyPersisted()` 直接 return，导致 DONE 不保存、不跳追问页 | `WavStore` 维护「当前打开文件」集合，扫描跳过它；同时改 `RecordViewModel`：行已存在也窄更新 path/ms 并发 `savedDreamId` | 计划 Task 6 §0 第 3–4 条 |
+| D177 | `repair()` 只修文件不写库，扫描若忘了写 `rawAudioMs`，库里时长会一直是旧值 | `repair` 成功后由扫描调 `fixAudioMs(id, (bytes-44)/32)`；禁用 `save()`（会改 `updatedAt`、覆盖并发编辑） | 计划 Task 6 §0 第 5 条 |
+| D178 | 恢复草稿只写了 `isDraft`/`PENDING` 两个字段，`dreamDate`/`createdAt` 无默认值 | 补 `rawTranscript=""`、`rawAudioPath`、`rawAudioMs`，且日期取 `file.lastModified()`（不许用今天） | 计划 Task 6 §0 第 6 条 |
+| D179 | 0 字节 / `<44` 字节文件会让 `WavStore` 抛异常；不逐文件 `runCatching` 会在启动 IO 协程里整段炸掉（连其它状态一起不修） | 四条主状态 + 第 5 态（0/<44）逐文件 `runCatching`，外层再加一层；无行→删文件不建行，有行→`markMissing` | 计划 Task 6 §0 第 7 条 |
+| D180 | 尾部奇数半帧没处理：`repair` 会把奇数 `dataSize` 写进头，此后 `markOpen` 永久拒绝追加 | 扫描先截掉奇数尾字节再 `repair`，单独出用例 | 计划 Task 6 §0 第 8 条 |
+| D181 | 正好 44 字节（`dataSize=0`）会变成 `0:00` 幽灵条目 | 按第 5 态处理（无行删文件、有行标 `FAILED`） | 计划 Task 6 §0 第 9 条 |
+| D182 | 扫描若早于 `SeedData`（`count()==0` 整体跳过），先插草稿会让演示种子永久不出现 | 扫描排在种子之后，且挂 `appScope(IO)`、不 await、不占主线程 | 计划 Task 6 §0 第 10 条 |
+| D183 | `Application.onCreate` 里无条件启动扫描，会让 Robolectric 每个用例都跑真实 `filesDir` IO（隐式耦合） | 扫描入口收进 `AppContainer`（lazy）+ `BuildConfig` 门闩，App 只调容器 | 计划 Task 6 §0 第 11 条 |
+| D184 | 「头修好了」没有机器判据：`ffprobe` 对占位头也照样报 duration，hexdump + 肉眼无法反驳 | 写 python 校验脚本（读 offset 4..8 / 40..44 + `ffmpeg` **stderr 必须为空** + 时长差 <100ms），exit code 即结论；先在 before 文件上红一次、再在 after 上绿 | 计划 Task 6 §0 第 12 条 |
+| D185 | `am force-stop` 造不出状态①：`rawAudioPath` 只在 DONE 之后写，录制中被杀根本没有行 | 用真路径造：录 3 s → 松手 → 补录 2 s（`markOpen` 写回 `FFFFFFFF`）→ 补录中 force-stop → 重启 | 计划 Task 6 §0 第 13 条 |
+| D186 | 四种状态若只靠手改 DB/文件造出来，无法区分「App 自己发现的」与「人摆出来的」 | 每态证据强制一行 `pre_state_by:` + 造数脚本入库；干净态用「前后 sha256 + mtime 不变」证 `Noop`，不靠日志自证 | 计划 Task 6 §0 第 13 条 |
+| D187 | 拉 WAV 与查库的取证方法会自己骗自己：PS 重定向毁二进制、边跑边 cat 是撕裂读、拿 App 写的 ms 当判据 | 拉文件必须 `cmd /c` + 设备/宿主 sha256 逐字符比对；查库先 force-stop 再导出、宿主 python 只读打开；交叉表输出 `(bytes-44)//32 | rawAudioMs | diff`，`diff != 0` 即红 | 计划 Task 6 §0 第 14 条 |
+| D188 | 要把「恢复的草稿能看能播、权限路径 A 整链、100+ 文件扫描耗时、多次重启幂等」这些端到端项塞进本任务，会让证据变成截图堆 | 这些挪给 Task 9；本任务只留四态 + 第 5 态矩阵、变异验证、clean 态字节不变 | 计划 Task 6 §0 第 16 条 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
