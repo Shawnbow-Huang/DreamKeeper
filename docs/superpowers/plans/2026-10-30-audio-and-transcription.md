@@ -414,6 +414,26 @@ class RecordViewModel(
 
 ## Task 5：30 秒追问窗口
 
+### 0. 派工前修订（Lead 按三位专家预审裁定，覆盖下文任何冲突）
+
+以下 14 条是硬约束，与下文冲突时以本节为准。
+
+1. **追加必须走 `openWriter`，禁止 `create`**：`RecordingService` 的 START 分支改成「文件不存在或 `<44` 字节 → `audioStore.create(dreamId)`；否则 `audioStore.markOpen(file)` 后 `audioStore.openWriter(file)` 追加」。`WavStore` 新增两个方法：`ensurePlaceholder(dreamId): File`（仅当不存在或 `<44` 时写占位头）与 `markOpen(file)`（把 offset `4..8` 与 `40..44` 写回 `0xFFFFFFFF`，让 `placeholder == true` 成为唯一的「正在写」标记，崩溃后扫描照样可修）。`create()` 的「截断」语义保留（它是新建专用），但**第二次 START 绝不许调它**——`WavStore.kt` 里是 `FileOutputStream(file, false)`，会把前一段整条抹成 44 字节。
+2. **失败路径不得删已存在的录音**：`ActiveRecording` 加 `createdThisTake: Boolean`；三条失败路径（`startForeground` / `AudioRecord` 打开 / `startCapture`）与 `CANCEL` 都只在 `createdThisTake == true` 时 `file.delete()`，否则保留文件（补录那趟失败不能连带删掉第一段）。
+3. **`FollowUpViewModel` 依赖注入**：`FollowUpViewModel(repository, session, starter: RecordingStarter, audioStore: WavStore, clock: () -> Long, dispatcher: CoroutineDispatcher = Dispatchers.IO, windowMs: Long = 30_000L, maxSegmentMs: Long = 120_000L, dreamId: String)`。`onSpeakStart()` 先判 `session.state.value.phase ∈ {IDLE, DONE}` 才发 `starter.start(dreamId)`，否则忽略并给一行提示「上一段还在收尾」——服务在 `FINISHING` 时收到 START 只 `Log.w` 就 return，若不判就会出现「界面在录、实际零字节」。
+4. **不补中间静音，直接拼接**（Lead 裁定）：所以 `rawAudioMs` ≠「从按下到窗口超时」的墙钟跨度，这是对设计 §8.1-1 的有意偏差。理由两条：补 30 秒静音会把识别器的端点检测提前打掉（长静音 → 会话结束 → 后半段丢），且 30 s × 32 KB/s ≈ 960 KB 白占空间。设计文档要记这条偏差。
+5. **Task 5 不写 `rawTranscript` 文本**：只通过窄更新写 `rawAudioMs` 与 `transcriptStatus = PENDING`。新增 `DreamDao.updateAudio(id: String, rawAudioMs: Long, transcriptStatus: String)`（`@Query`）+ `DreamRepository.updateAudio(...)`；**禁止**用 `save()` 整行 upsert（会按内存里的旧值覆盖用户改过的文本）。「用户手改后不许被机器覆盖」的最终方案留到 Task 7（可能需要 `rawTranscriptEditedByUser` 列 + v1→v2 迁移，到那时再定）。
+6. **时长口径**：`rawAudioMs = state(file).dataSize / 32`（**最终整文件**），不许把两次 run 的 `elapsedMs` 相加（各自 `/32` 会漂）。
+7. **尾部分帧**：追加前断言 `trailingPartialBytes == 0`；不为 0 则拒绝追加、记日志与本任务偏差，**不许**自动补零或裁剪（一字节错位会让此后整条时间线变噪声）。
+8. **追加期间禁止转写**：`placeholder == false` 才允许起 STT；本任务 `markOpen` 之后即为 `true`。设计 §8.1 补一条「同一 dream 的转写单一 in-flight（Mutex），追加前先 cancel 掉在跑的识别器」（Task 7 实现，本任务只保证标记语义）。
+9. **倒计时**：`remainingMs = windowMs - (clock() - openedAt)`，不硬编码、不累加；UI 全程显示 `30..0`（无动画、不变色）。测试**禁止**用 `advanceUntilIdle()`（ticker 永不 idle 会挂死），用 `advanceTimeBy + runCurrent`；期望值写具体数字（`30000 → 25000`，录音中墙钟再跳 5 秒仍 `25000`），别在测试里重算公式。
+10. **交互与状态字段**：`FollowUpUiState` 改为 `dreamId: String? = null, loaded: Boolean = false, remainingMs: Long = 0L, recording: Boolean = false, transcript: String = ""`；回调补齐 `onSpeakStart() / onSpeakStop() / onDoneNow() / onTimeout() / onEditText(String)`（原 brief 缺 `onDoneNow`，「就这样」落不了地）。`loaded` 门闩防「进页即收起」。按住超过 `maxSegmentMs`（120 s）到点强制 `onSpeakStop()` + 收起（防按住不放写整夜）。`BackHandler` 覆盖本页（record 路由已被 `popUpTo(inclusive)` 清掉，没有返回键会退到桌面）。
+11. **视觉（实算，不许改）**：底 `NightVoid #05070A`；正文 `#B8C1CF`（11.11:1，**不用** `Paper` 16.73:1——整屏最亮面积太大会刺眼）；倒计时 `Ember #C8873F`（6.72:1，亮度只有 `Paper` 的 37%）；按钮边界 `InkDim #8B95A7`（6.68:1，**禁** `Line #232A36` 1.40:1）；主钮 `EmberDeep` 底 + `Paper` 字（6.02:1）；进页 `fadeIn(tween(DreamMotion.Quick))`（120ms），收起落 `Night` 底页、不要退到桌面；进页**只轻震一次**（复用 `RecordScreen.kt` 那套），收起时不震。
+12. **屏幕亮度**：应用没有 `DEVICE_POWER` 权限，做不到真「熄屏」——本轮做法：进页 `window.attributes.screenBrightness = 0.01f`、离开恢复原值，且**不**持 `KEEP_SCREEN_ON`。设计 §11 里「设置里可关（默认开）」本轮没有设置页 → 固定为开，记偏差。
+13. **无障碍**：麦克风点区 `heightIn(min = 88.dp)`（在 48dp 下限之上），三个可点节点都带 `contentDescription`（照 `RecordScreen.kt` 的写法），倒计时加 `semantics { contentDescription = "还剩 N 秒" }` 但**不许**加 `liveRegion`（每秒播报会把人吵醒），进页时 announce 一次。
+14. **证据（一次 take）**：`p2-followup-01.png`（刚进页）、`-02.png`（剩 5 秒）、`-03.png`（收起后落地页）、`-04.mp4`（进页→收起 `screenrecord`，截图证明不了白闪与时序）、`p2-followup-bytes-append.txt`（同一 `dreamId` 的三次 `stat`：第一段结束后、补录中、补录结束后，差值要等于 `(bytes2-bytes1)/32` 秒）、`p2-followup-index.md`（每行：文件 / APK sha256 前 8 位 / `adb shell date` / 复跑命令 / 判别串）。判据：三张图过 `scripts\check-near-white.ps1 -Path … -TopOffset 100`（**没有 `-MaxRatio` 参数**）；`ffmpeg -vf signalstats` 逐帧 `YAVG` 最大值 ≤ 32、录屏里出现 ≥48 的帧即判白闪失败；`uiautomator dump` 里 `clickable="true"` 且 `content-desc` 非空的节点数 == 3、每个 `bounds` 高 ≥ 132 px（48dp × density 2.75）。
+
+
 **Files**
 - Create `android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpScreen.kt`
 - Create `android/app/src/main/java/com/dreamkeeper/ui/followup/FollowUpViewModel.kt`
@@ -668,6 +688,28 @@ class AudioPlayback(private val scope: CoroutineScope) {
 | D138 | 简报把「取消立即删文件」写成契约，但 CANCEL 是异步的、fd 还开着 → 可能 DONE 一条指向已删文件的草稿 | VM 只发 `starter.cancel()`，删文件归服务；测试改成「收到 IDLE 后文件不存在」 | 计划 Task 4 §0 第 10 条 |
 | D139 | `BackHandler` 只挡 RECORDING，FINISHING 按返回会丢草稿；跳 FollowUp 无 `popUpTo` → 返回死循环 | `BackHandler(enabled = RECORDING || FINISHING)`；导航用 `popUpTo(inclusive) + launchSingleTop`，`savedDreamId` 当一次性事件 | 计划 Task 4 §0 第 11–12 条 |
 | D140 | 视觉与坐标不自洽：`EmberDeep` 直接放 `Night` 上只有 2.68:1、`NightVoid` 与 `Night` 只差 1.04:1、圆心在 50% 单手够不到、`check-near-white.ps1` 没有 `-MaxRatio` 参数、FINISHING 亚秒级截不到图 | 底色 `Night`；主钮 `EmberDeep` + 1.5dp `Ember` 描边 + `Paper` 字；圆心 65%；`ThemeContrastTest` 加 `EmberDeep on Night ≥ 3.0`（预期红，逼出描边）；证据改 `-Path … -TopOffset 100` 并把 nearWhite=0 写进 txt；FINISHING 用冻结帧 + 日志 | 计划 Task 4 §0 第 13–14 条 |
+| D141 | §0.13 要求 `assertContrast("EmberDeep on Night", …, 3.0)`（预期红），与本任务「测试全绿」的完成门槛互相矛盾 | 改成两条：`Ember on Night ≥ 3.0`（证明描边可辨）+ `EmberDeep on Night < 3.0`（钉住「必须靠描边」的事实）；哪天 EmberDeep 被调亮会红，提醒复查方案 | 计划 Task 4 §0.13、`android/app/src/test/java/com/dreamkeeper/ui/theme/ThemeContrastTest.kt` |
+| D142 | 要拍 ENOSPC 错误态，但模拟器磁盘写不满 | 加 DEBUG-only 注入开关（仅 `BuildConfig.DEBUG` 生效），release 不编入 | `ui/record/RecordScreen.kt`、`ui/record/RecordViewModel.kt` |
+| D143 | 手势做了两层：进页 300ms 吞触摸 + 内层按住手势 | 保留（防「松手点正好落在麦克风上」误录一段静音） | `ui/record/RecordScreen.kt` |
+| D144 | 10 张截图不全来自同一次 take（04 是保存态真帧，finishing 原生仅 14ms） | 在 `p2-ux-index.md` 逐图标注 take 与时间戳；phase 由日志定，不靠截图断言 | `docs/evidence/plan2/p2-ux-index.md` |
+| D145 | 模拟器输入灌零 → 振幅恒 0 dBFS 下限，振幅环视觉未验证 | 如实记录；真机验收时补一张有信号振幅的图 | `docs/evidence/plan2/` |
+| D146 | DONE/ERROR 状态先 `cancel()` 再收页面 | 保留（避免状态机在 DONE 上再收到 START） | `ui/record/RecordViewModel.kt` |
+| D147 | DONE 后额外停留 900ms 展示「已保存」，属规格外 UX | 保留（4 点醒来需要一个「存住了」的确认）；**FollowUp 的 30 秒窗口从进入 FollowUp 起算，不吃这 900ms**，Task 5 落实 | `ui/record/RecordScreen.kt`、Task 5 §0 第 9 条 |
+| D148 | 同一按压事件可能重入（`onPressStart` 被多次回调） | 加去重：`phase != IDLE` 直接 return，`dreamId` 以 session 为唯一真源 | `ui/record/RecordViewModel.kt` |
+| D149 | `p2-ux-05-notif-ongoing.png` 近白闸门 118/69,120 = 0.17% 判红 | 白像素全部来自 SystemUI 给通知应用图标垫的白圆底（与 D128 同因）；判据改为「除该图标包围盒外为 0」，原始数字写进证据 | `docs/evidence/plan2/p2-ux-index.md` |
+| D150 | Task 5 的 START 会走 `audioStore.create()`（`RecordingService.kt` START 分支），而 `WavStore.create` 是 `FileOutputStream(file,false)` → 补录把第一段截成 44 字节 | 新增 `WavStore.ensurePlaceholder(dreamId)` 与 `markOpen(file)`；START 分支改「不存在或 <44 → create；否则 markOpen + openWriter 追加」；`create` 的截断语义只留给新建 | 计划 Task 5 §0 第 1 条 |
+| D151 | 三条失败路径与 CANCEL 都无条件 `file.delete()` → 补录那趟失败会把第一段一起删掉 | `ActiveRecording` 带 `createdThisTake`，只有本趟新建的文件才删 | 计划 Task 5 §0 第 2 条 |
+| D152 | `FollowUpViewModel` 缺 `starter`/`audioStore`/`dreamId`，物理上发不出 START、也读不到最终字节数 | 构造注入 `repository, session, starter, audioStore, clock, dispatcher, windowMs=30_000, maxSegmentMs=120_000, dreamId` | 计划 Task 5 §0 第 3 条 |
+| D153 | 设计 §8.1-1 写「一条梦＝从按下到窗口超时的连续文件（含中间静音）」，与「补录直接拼接」冲突 | **Lead 裁定：直接拼接，不补静音**。理由：补 30 秒静音会触发识别器端点检测提前收尾（后半段丢字），且 30s≈960 KB 白占空间。代价：`rawAudioMs` ≠ 墙钟跨度，设计记偏差 | 计划 Task 5 §0 第 4 条、设计 §8.1 |
+| D154 | Task 5 若用 `save()` 整行 upsert 写时长，会覆盖用户改过的文本 | 新增窄更新 `DreamDao.updateAudio(id, rawAudioMs, transcriptStatus)` + `DreamRepository.updateAudio`；**本任务不写 `rawTranscript` 文本** | 计划 Task 5 §0 第 5 条 |
+| D155 | 时长若把两次 run 的 `elapsedMs` 相加，各自 `/32` 截断会漂 | `rawAudioMs = state(file).dataSize / 32`（最终整文件） | 计划 Task 5 §0 第 6 条 |
+| D156 | 文件尾部若残留半个采样帧，追加后整条时间线错位成噪声 | 追加前断言 `trailingPartialBytes == 0`；不为 0 则拒绝追加 + 记日志 + 记偏差，不许自动补/裁 | 计划 Task 5 §0 第 7 条 |
+| D157 | 追加期间若有 STT 在读，识别器会把当前尾当 EOF，出偏短结果且不报错 | `placeholder == true` 期间禁止起转写；同一 dream 单一 in-flight（Mutex），Task 7 实现 | 计划 Task 5 §0 第 8 条、Task 7 |
+| D158 | 倒计时若用 `while(true){delay}` ticker，`advanceUntilIdle()` 永不 idle 会挂死测试 | `remainingMs = windowMs - (clock() - openedAt)`；测试用 `advanceTimeBy + runCurrent`，期望值写具体数字 | 计划 Task 5 §0 第 9 条 |
+| D159 | brief 缺 `onDoneNow`（「就这样」落不了地）、缺 `transcript` 字段、`visible` 初值会「进页即收起」 | `FollowUpUiState(dreamId, loaded, remainingMs, recording, transcript)` + 五个回调；`loaded` 门闩；`maxSegmentMs=120_000` 到点强制停；`BackHandler` 覆盖 | 计划 Task 5 §0 第 10 条 |
+| D160 | 夜间可读性与对比度：正文若用 `Paper` 16.73:1 整屏最亮面积过大、`Line` 边框 1.40:1 等于无边界、倒计时用 Paper 太亮 | 正文 `#B8C1CF`（11.11:1）、倒计时 `Ember`（6.72:1）、按钮边界 `InkDim`（6.68:1）、主钮 `EmberDeep`+`Paper`（6.02:1）；进页 `fadeIn(120ms)`，收起落 `Night` 底页 | 计划 Task 5 §0 第 11 条 |
+| D161 | 设计 §11 要「自动熄屏」与「设置里可关」，但应用没有 `DEVICE_POWER` 权限、本轮也没有设置页 | 本轮做法：`window.screenBrightness = 0.01f`（离开恢复）、不持 `KEEP_SCREEN_ON`；「可关」无落点 → 固定为开，待 Plan 4 设置页 | 计划 Task 5 §0 第 12 条、设计 §11 |
+| D162 | 30 秒窗口缺无障碍与证据判据（倒计时加 liveRegion 会每秒播报、把人吵醒） | 麦克风 `heightIn(min=88.dp)`、三个可点节点带 `contentDescription`、倒计时 `contentDescription="还剩 N 秒"` 但不加 liveRegion；证据卡 YAVG ≤32、近白 `-TopOffset 100`、uiautomator 三节点 bounds 高 ≥132px | 计划 Task 5 §0 第 13–14 条 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复核的事实，不写「感觉」。
 
