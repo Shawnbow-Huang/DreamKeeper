@@ -72,3 +72,12 @@ ksp {
     // 它是 "v1 的表结构长什么样" 的唯一机器可读记录。
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+// D266/D273：单测会读仓库里的成本向量（scripts/check-cost.py 的同一份真源）。
+// 不登记成 input 的话，Gradle 会认为 testDebugUnitTest 的输入没变而跳过——向量改了测试不重跑，
+// 是「假绿」的经典来源。指向 evidence main 树里的文件，保证 CI 与本地跑的是同一份。
+tasks.withType<Test>().configureEach {
+    inputs.file(rootProject.file("../docs/evidence/plan3/p3-cost-01-vectors.json"))
+        .withPropertyName("costVectors")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

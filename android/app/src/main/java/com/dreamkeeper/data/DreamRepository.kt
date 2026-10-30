@@ -125,7 +125,7 @@ class DreamRepository(
      *    每次都写 `clock()` 的话，「补录一句 / 改个标点」就会把首次录入时间改成此刻——不可逆。
      * 2. [Dream.deletedAt] 原样透传：构造实体时漏掉它，任何一次编辑都会把回收站里的梦悄悄捞回来。
      * 3. `DreamEntity` 里凡**在 [Dream] 上没有对应字段**的列（当前是 `ownerId`、
-     *    `faithfulEditedByUser`、`novelEditedByUser`、`remoteId`），必须先 `getById` 读回现有行再
+     *    `faithfulEditedByUser`、`novelEditedByUser`、`remoteId`，v2 起再加 `novelSelectedVersion`、`generationStage`），必须先 `getById` 读回现有行再
      *    原样写回（read-modify-write）。**新增任何「domain 上不存在」的列，必须在这里显式保留，
      *    否则第一次编辑就会被抹掉**——用户手改过稿的标记、本地用户归属、云同步 id 都会静默丢失，
      *    而且没有任何提示。新建一条梦时没有 existing，才走 `"local"` / `false` / `null` 的默认值。
@@ -157,6 +157,9 @@ class DreamRepository(
                 novelEditedByUser = existing?.novelEditedByUser ?: false,
                 remoteId = existing?.remoteId,
                 transcriptStatus = dream.transcriptStatus,
+                // v2 新列不在 domain 上：必须从现有行原样带回，否则每次保存都抹成 null
+                novelSelectedVersion = existing?.novelSelectedVersion,
+                generationStage = existing?.generationStage,
             )
         )
     }

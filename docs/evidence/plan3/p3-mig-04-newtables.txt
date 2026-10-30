@@ -1,0 +1,26 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.MigrationTest" --rerun-tasks
+
+# p3-mig-04-newtables：变异反证 —— 删掉一张新表的 CREATE，绿必须变红
+
+[变异]
+把 MIGRATION_1_2 里 novel_messages 的 `CREATE TABLE` 与其索引两段 SQL 删除（其余一字不动）。
+
+[实测结果：3/3 红]
+MigrationTest > migrationCreatesTheFourNewTablesAndTagIdIndex FAILED
+MigrationTest > v1DatabaseMigratesToV2AndKeepsEveryLegacyValue FAILED
+MigrationTest > fourNewTablesRoundTripChineseAndNewlines FAILED
+3 tests completed, 3 failed
+异常原文（测试 XML 的 failure message）：
+  java.lang.IllegalStateException: Migration didn't properly handle: novel_messages(com.dreamkeeper.data.db.NovelMessageEntity).
+   Expected:
+   TableInfo {
+       name = 'novel_messages',
+       columns = { Column { name = 'content', type = 'TEXT', affinity = '2', notNull = 'true', ... } ... }
+   }
+Room 的 schema 自校验在迁移后发现缺表/表结构不符，直接判迁移失败。
+
+[恢复]
+从变异前备份 cp 回 DreamDatabase.kt，cmp 逐字节相同；同一命令重跑 BUILD SUCCESSFUL、3/3 绿。
+结论：前面的绿确实依赖四张新表的 CREATE，测试不是空转。

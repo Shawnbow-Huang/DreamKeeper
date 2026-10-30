@@ -55,4 +55,15 @@ data class DreamEntity(
      * 不能用空串当哨兵——空串分不清「还没转写」和「真的录到一段静音」。
      */
     val transcriptStatus: String = TranscriptStatus.OK,
+
+    // ↓↓↓ Plan 3（v1→v2）追加位：仍然只许在末尾追加，且必须带默认值 ↓↓↓
+    /**
+     * 用户挑中的小说化版本号（`novel_versions.version`）；null = 没挑，列表/导出用最新版。
+     *
+     * **不在 `domain/Dream` 上**——所以 `DreamRepository.save()` 必须 read-modify-write 原样带回，
+     * 否则用户每次编辑正文都会把「我挑的是第 2 版」悄悄抹成「用最新版」。
+     */
+    val novelSelectedVersion: Int? = null,
+    /** 生成链最后一次落在哪一档：`T0`/`T1`/`T2`/`T3`；null = 没跑过。 */
+    val generationStage: String? = null,
 )

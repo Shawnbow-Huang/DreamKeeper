@@ -1,0 +1,37 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=python scripts/check-migrate.py --dump docs/evidence/plan3/p3-mig-01-baseline.db --out docs/evidence/plan3/p3-mig-01-baseline.json
+
+# p3-mig-01-baseline：升级前的 v1 库（含 2 条非种子行）
+
+设备：emulator-5554（1080x2400 @420dpi），时区 Asia/Shanghai。
+v1 APK：从 HEAD(plan3-generation) 构建，装后 pm clear 再冷启 → 4 条种子 + 7 条历史录制数据。
+在此基础上造基线（否则 destructive 迁移也会假绿）：
+  1) 真实录制 1 条：按住「说梦」2.4s，dreamId=4f3b44fd-4299-4f0f-84c2-994b50989713，
+     rawAudioPath=/data/user/0/com.dreamkeeper/files/audio/<id>.wav，rawAudioMs=2400，
+     转写 FAILED（本机无中文离线识别）；
+  2) seed-dream-1 的 title/novelText 改成用户手写内容（v1 UI 没有编辑入口，改法见报告 D275），
+     app 冷启后 10 月 1 日卡片与「小说化」页显示改后文字（人工核对，见报告）。
+三件拉库：force-stop 后 `adb exec-out run-as com.dreamkeeper cat` 分别拉 .db/-wal/-shm；
+本地 sha256 与设备 `run-as sha256sum` 逐字节一致；本文件由 --dump 生成（脚本会先把三件拷到临时目录再开，
+绝不 checkpoint 证据原件，D274）。
+基线 db sha256 = ea73f2a416613ba4784134c40656b63d7caf961cf710b36ed73f15b4e495c87e（== 设备 db-backup 里那份 v1 快照）。
+
+[check-migrate.py --dump 原文]
+db=p3-mig-01-baseline.db
+p3-mig-01-baseline.db=57344B sha256=ea73f2a416613ba4784134c40656b63d7caf961cf710b36ed73f15b4e495c87e
+p3-mig-01-baseline.db-wal=0B sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+p3-mig-01-baseline.db-shm=32768B sha256=fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb
+user_version=1
+identity_hash=3150a0bccf0e3cb537faa8aac20e4186
+tables=5 raw_tables=6
+android_metadata rows=1 cols=1 indexes=-
+dream_tags rows=4 cols=3 indexes=-
+dreams rows=5 cols=20 indexes=-
+media_assets rows=1 cols=8 indexes=index_media_assets_dreamId
+room_master_table rows=1 cols=2 indexes=-
+tags rows=4 cols=5 indexes=index_tags_name
+integrity_check=ok
+foreign_key_check_rows=0
+RESULT: DUMP-OK
+json=docs/evidence/plan3/p3-mig-01-baseline.json

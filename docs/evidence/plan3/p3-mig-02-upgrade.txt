@@ -1,0 +1,28 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe shell run-as com.dreamkeeper ls -l files/db-backup
+
+# p3-mig-02-upgrade：装 v2 → 冷启 → 迁移前快照落盘 → 迁移执行
+
+[安装]
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk  → Success（设备时间 21:42 前后）
+冷启 am start -n com.dreamkeeper/.MainActivity → topResumedActivity=com.dreamkeeper/.MainActivity，无崩溃。
+
+[v2 APK 的来源（证据里不许抄本地构建产物 hash）]
+adb shell pm path com.dreamkeeper →
+  /data/app/~~-kfDunfIEKEA6ppuF01y9w==/com.dreamkeeper-nDgJCmYsDJh6VB4b-CwQdQ==/base.apk
+adb pull 该路径 → sha256sum = 661d1d6b6c9bfeb555fed40ddf9b9404ca70832131d765f3ad8fa3d0eb9ac093
+设备端 adb shell sha256sum 同一路径 = 661d1d6b... 与 pull 下来的逐字节一致。
+
+[迁移前快照 files/db-backup/（DbBackup.snapshotBeforeMigration，Room 打开前执行）]
+total 100
+-rw------- 1 u0_a237 u0_a237 57344 2026-10-30 21:42 dreamkeeper-v1-20261030-214235.db
+-rw------- 1 u0_a237 u0_a237 32768 2026-10-30 21:42 dreamkeeper-v1-20261030-214235.db-shm
+-rw------- 1 u0_a237 u0_a237     0 2026-10-30 21:42 dreamkeeper-v1-20261030-214235.db-wal
+设备端 sha256sum dreamkeeper-v1-20261030-214235.db =
+  ea73f2a416613ba4784134c40656b63d7caf961cf710b36ed73f15b4e495c87e
+  == docs/evidence/plan3/p3-mig-01-baseline.db 的 sha256（逐字节相同）
+即：快照就是用户升级前那一刻的库；wal/shm 一并拷（只拷 .db 会得到 4096 B/0 表/user_version=0 的假备份，D274）。
+
+[迁移后]
+三件拉库见 p3-mig-02-after.txt/JSON：user_version=2、tables=9、dreams 22 列、四张新表存在、行数与基线相同。

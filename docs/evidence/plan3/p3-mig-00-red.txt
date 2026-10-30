@@ -1,0 +1,31 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests "com.dreamkeeper.data.db.MigrationTest" --rerun-tasks
+
+# p3-mig-00-red：TDD 第一步 —— 迁移还没接上时的红灯
+
+[更正记录：为什么不用 MigrationTestHelper]
+原计划用 AndroidX 的 MigrationTestHelper 跑迁移测试，实测不可行（D271）：
+  - room-testing 只在 testImplementation，且 schemas 目录（1.json）不在测试 assets 里；
+  - MigrationTestHelper 要把 schema 当 asset 读，Robolectric 单测里拿不到 1.json，直接抛「缺 schemas」。
+因此改为手搭 v1 库：@Before 里用 android.database.sqlite.SQLiteDatabase 按 1.json 的四条 createSql
+建表 + room_master_table(identity_hash=3150a0bccf0e3cb537faa8aac20e4186)，再 db.version=1；
+最后用与线上完全相同的 DreamDatabase.create(context) 打开 —— 缺迁移时必抛同一段异常。
+
+[红灯复现方式]
+临时删除 DreamDatabase.create() 里的 .addMigrations(MIGRATION_1_2)，跑上面的 REPLAY；
+本次实测得到下面输出，随后已逐字节恢复（恢复后同一命令 3/3 绿）。
+注意：REPLAY 原样跑是绿（迁移已接上）；要重现红灯必须先做上面这一行删除。
+
+[实测输出]
+MigrationTest > migrationCreatesTheFourNewTablesAndTagIdIndex FAILED
+MigrationTest > v1DatabaseMigratesToV2AndKeepsEveryLegacyValue FAILED
+MigrationTest > fourNewTablesRoundTripChineseAndNewlines FAILED
+3 tests completed, 3 failed
+> Task :app:testDebugUnitTest FAILED
+BUILD FAILED in 22s
+java.lang.IllegalStateException: A migration from 1 to 2 was required but not found. Please provide the necessary Migration path via RoomDatabase.Builder.addMigration(...) or allow for destructive migrations via one of the RoomDatabase.Builder.fallbackToDestructiveMigration* functions.
+java.lang.IllegalStateException: A migration from 1 to 2 was required but not found. Please provide the necessary Migration path via RoomDatabase.Builder.addMigration(...) or allow for destructive migrations via one of the RoomDatabase.Builder.fallbackToDestructiveMigration* functions.
+java.lang.IllegalStateException: A migration from 1 to 2 was required but not found. Please provide the necessary Migration path via RoomDatabase.Builder.addMigration(...) or allow for destructive migrations via one of the RoomDatabase.Builder.fallbackToDestructiveMigration* functions.
+EXCEPTION (identical for all 3 tests):
+java.lang.IllegalStateException: A migration from 1 to 2 was required but not found. Please provide the necessary Migration path via RoomDatabase.Builder.addMigration(...) or allow for destructive migrations via one of the RoomDatabase.Builder.fallbackToDestructiveMigration* functions.

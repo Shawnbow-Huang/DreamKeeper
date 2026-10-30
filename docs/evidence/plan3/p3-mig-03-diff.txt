@@ -1,0 +1,24 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=python scripts/check-migrate.py --diff docs/evidence/plan3/p3-mig-01-baseline.json docs/evidence/plan3/p3-mig-02-after.json
+
+# p3-mig-03-diff：v1 基线 vs 升级后 —— 每一列都要对得上
+
+tables=9 rows_before=14 rows_after=14
+dreams rows=5 equal=5 new_columns_null=10/10
+dreams updatedAt unchanged=5/5
+dreams indexes=-
+tags rows=4 equal=4
+tags indexes=index_tags_name
+dream_tags rows=4 equal=4
+dream_tags indexes=index_dream_tags_tagId
+media_assets rows=1 equal=1
+media_assets indexes=index_media_assets_dreamId
+novel_versions rows=0 indexes=index_novel_versions_dreamId_version
+novel_messages rows=0 indexes=index_novel_messages_dreamId_createdAt
+generation_jobs rows=0 indexes=-
+llm_calls rows=0 indexes=index_llm_calls_dreamId_createdAt
+identity_hash 3150a0bccf0e3cb537faa8aac20e4186 -> 166666e50d40204e526403725c8302ab
+integrity_check=ok -> ok
+foreign_key_check_rows=0 -> 0
+RESULT: GREEN

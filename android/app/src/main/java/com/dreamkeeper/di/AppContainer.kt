@@ -5,6 +5,7 @@ import android.os.Build
 import com.dreamkeeper.audio.AudioScan
 import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
+import com.dreamkeeper.data.db.DbBackup
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.AndroidKeystoreCipher
@@ -67,8 +68,17 @@ class AppContainer(
         )
     }
 
-    /** 进程内唯一的 Room 实例；`DreamDatabase.create` 内部没有 `fallbackToDestructiveMigration` */
-    val database: DreamDatabase by lazy { DreamDatabase.create(appContext) }
+    /**
+     * 进程内唯一的 Room 实例；`DreamDatabase.create` 内部没有 `fallbackToDestructiveMigration`。
+     *
+     * 打开之前先进 [DbBackup]：v1 老库把 db / -wal / -shm 三件拷到 `files/db-backup/`（§0.8），
+     * 这是迁移写坏时唯一的退路。放在 lazy 里而不是 `onCreate`：保证「第一次真正要库」与
+     * 「快照」之间没有别的代码能先把库打开（`DreamKeeperApp` 的种子数据就在启动协程里）。
+     */
+    val database: DreamDatabase by lazy {
+        DbBackup.snapshotBeforeMigration(appContext)
+        DreamDatabase.create(appContext)
+    }
 
     /** 界面/ViewModel 只拿这一个入口，不自己 new DAO */
     val repository: DreamRepository by lazy { DreamRepository(database) }

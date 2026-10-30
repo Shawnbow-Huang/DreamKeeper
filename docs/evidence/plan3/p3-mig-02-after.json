@@ -1,0 +1,425 @@
+{
+  "db_file": "p3-mig-02-after.db",
+  "files": [
+    {
+      "bytes": 114688,
+      "file": "p3-mig-02-after.db",
+      "sha256": "30e8566c2b3711189d5311125d39fd38e7ba94e60957f12cbc5e9136bfc7230e"
+    },
+    {
+      "bytes": 0,
+      "file": "p3-mig-02-after.db-wal",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 32768,
+      "file": "p3-mig-02-after.db-shm",
+      "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+    }
+  ],
+  "foreign_key_check_rows": 0,
+  "identity_hash": "166666e50d40204e526403725c8302ab",
+  "integrity_check": "ok",
+  "table_data": {
+    "android_metadata": {
+      "columns": [
+        "locale"
+      ],
+      "indexes": [],
+      "primary_key": [],
+      "row_count": 1,
+      "rows": [
+        {
+          "locale": "s:en_US"
+        }
+      ]
+    },
+    "dream_tags": {
+      "columns": [
+        "dreamId",
+        "tagId",
+        "confidence"
+      ],
+      "indexes": [
+        "index_dream_tags_tagId"
+      ],
+      "primary_key": [
+        "dreamId",
+        "tagId"
+      ],
+      "row_count": 4,
+      "rows": [
+        {
+          "confidence": "f:1.0",
+          "dreamId": "s:seed-dream-1",
+          "tagId": "s:seed-tag-emotion-fall"
+        },
+        {
+          "confidence": "f:1.0",
+          "dreamId": "s:seed-dream-1",
+          "tagId": "s:seed-tag-object-elevator"
+        },
+        {
+          "confidence": "f:1.0",
+          "dreamId": "s:seed-dream-1",
+          "tagId": "s:seed-tag-object-lift"
+        },
+        {
+          "confidence": "f:1.0",
+          "dreamId": "s:seed-dream-2",
+          "tagId": "s:seed-tag-place-classroom"
+        }
+      ]
+    },
+    "dreams": {
+      "columns": [
+        "id",
+        "ownerId",
+        "dreamDate",
+        "createdAt",
+        "title",
+        "rawTranscript",
+        "faithfulText",
+        "novelText",
+        "novelVersion",
+        "novelChangeLog",
+        "mood",
+        "isDraft",
+        "deletedAt",
+        "updatedAt",
+        "rawAudioPath",
+        "rawAudioMs",
+        "faithfulEditedByUser",
+        "novelEditedByUser",
+        "remoteId",
+        "transcriptStatus",
+        "novelSelectedVersion",
+        "generationStage"
+      ],
+      "indexes": [],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 5,
+      "rows": [
+        {
+          "createdAt": "i:1793366740620",
+          "deletedAt": null,
+          "dreamDate": "s:2026-10-30",
+          "faithfulEditedByUser": "i:0",
+          "faithfulText": null,
+          "generationStage": null,
+          "id": "s:4f3b44fd-4299-4f0f-84c2-994b50989713",
+          "isDraft": "i:1",
+          "mood": null,
+          "novelChangeLog": null,
+          "novelEditedByUser": "i:0",
+          "novelSelectedVersion": null,
+          "novelText": null,
+          "novelVersion": "i:0",
+          "ownerId": "s:local",
+          "rawAudioMs": "i:2400",
+          "rawAudioPath": "s:/data/user/0/com.dreamkeeper/files/audio/4f3b44fd-4299-4f0f-84c2-994b50989713.wav",
+          "rawTranscript": "s:",
+          "remoteId": null,
+          "title": null,
+          "transcriptStatus": "s:FAILED",
+          "updatedAt": "i:1793366740620"
+        },
+        {
+          "createdAt": "i:0",
+          "deletedAt": null,
+          "dreamDate": "s:2026-10-01",
+          "faithfulEditedByUser": "i:0",
+          "faithfulText": "s:我在电梯里，电梯一直往上，按不到一楼。数字过了三十还在涨。",
+          "generationStage": null,
+          "id": "s:seed-dream-1",
+          "isDraft": "i:0",
+          "mood": null,
+          "novelChangeLog": null,
+          "novelEditedByUser": "i:0",
+          "novelSelectedVersion": null,
+          "novelText": "s:【老用户手稿】电梯一直往上，数字过了三十还在涨。我想按一楼，面板上却没有一。",
+          "novelVersion": "i:0",
+          "ownerId": "s:local",
+          "rawAudioMs": null,
+          "rawAudioPath": null,
+          "rawTranscript": "s:我在电梯里，电梯一直往上，按不到一楼。数字过了三十还在涨。",
+          "remoteId": null,
+          "title": "s:电梯（老用户改过的标题）",
+          "transcriptStatus": "s:OK",
+          "updatedAt": "i:0"
+        },
+        {
+          "createdAt": "i:0",
+          "deletedAt": null,
+          "dreamDate": "s:2026-10-08",
+          "faithfulEditedByUser": "i:0",
+          "faithfulText": "s:教室最后一排，黑板上的字在动，像水。同桌递给我一张纸，上面只写了我的名字。",
+          "generationStage": null,
+          "id": "s:seed-dream-2",
+          "isDraft": "i:0",
+          "mood": null,
+          "novelChangeLog": null,
+          "novelEditedByUser": "i:0",
+          "novelSelectedVersion": null,
+          "novelText": null,
+          "novelVersion": "i:0",
+          "ownerId": "s:local",
+          "rawAudioMs": null,
+          "rawAudioPath": null,
+          "rawTranscript": "s:教室最后一排，黑板上的字在动，像水。同桌递给我一张纸，上面只写了我的名字。",
+          "remoteId": null,
+          "title": "s:教室",
+          "transcriptStatus": "s:OK",
+          "updatedAt": "i:0"
+        },
+        {
+          "createdAt": "i:0",
+          "deletedAt": null,
+          "dreamDate": "s:2026-10-15",
+          "faithfulEditedByUser": "i:0",
+          "faithfulText": "s:老房子，走廊很长，尽头有光。我妈在厨房叫我，声音从楼上传来。",
+          "generationStage": null,
+          "id": "s:seed-dream-3",
+          "isDraft": "i:0",
+          "mood": null,
+          "novelChangeLog": "s:补写 2 处：走廊的光、声音的方向",
+          "novelEditedByUser": "i:0",
+          "novelSelectedVersion": null,
+          "novelText": "s:老房子的走廊比记忆里长。尽头有一扇窗，光从那里斜进来，把地板切成两半。厨房里有人在叫我的名字——可那个声音是从楼上来的。",
+          "novelVersion": "i:1",
+          "ownerId": "s:local",
+          "rawAudioMs": null,
+          "rawAudioPath": null,
+          "rawTranscript": "s:老房子，走廊很长，尽头有光。我妈在厨房叫我，声音从楼上传来。",
+          "remoteId": null,
+          "title": "s:老房子",
+          "transcriptStatus": "s:OK",
+          "updatedAt": "i:0"
+        },
+        {
+          "createdAt": "i:0",
+          "deletedAt": null,
+          "dreamDate": "s:2026-10-22",
+          "faithfulEditedByUser": "i:0",
+          "faithfulText": "s:一直在下楼梯，每一层都一样。",
+          "generationStage": null,
+          "id": "s:seed-dream-4",
+          "isDraft": "i:0",
+          "mood": null,
+          "novelChangeLog": null,
+          "novelEditedByUser": "i:0",
+          "novelSelectedVersion": null,
+          "novelText": null,
+          "novelVersion": "i:0",
+          "ownerId": "s:local",
+          "rawAudioMs": null,
+          "rawAudioPath": null,
+          "rawTranscript": "s:一直在下楼梯，每一层都一样。",
+          "remoteId": null,
+          "title": null,
+          "transcriptStatus": "s:OK",
+          "updatedAt": "i:0"
+        }
+      ]
+    },
+    "generation_jobs": {
+      "columns": [
+        "id",
+        "dreamId",
+        "stage",
+        "attemptNo",
+        "error",
+        "createdAt"
+      ],
+      "indexes": [],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 0,
+      "rows": []
+    },
+    "llm_calls": {
+      "columns": [
+        "id",
+        "dreamId",
+        "kind",
+        "model",
+        "reasoningEffort",
+        "cacheHitTokens",
+        "cacheMissTokens",
+        "outputTokens",
+        "reasoningTokens",
+        "isPeak",
+        "priceSnapshotJson",
+        "costMicroYuan",
+        "formulaVersion",
+        "httpStatus",
+        "attemptNo",
+        "requestId",
+        "usageJson",
+        "error",
+        "latencyMs",
+        "createdAt"
+      ],
+      "indexes": [
+        "index_llm_calls_dreamId_createdAt"
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 0,
+      "rows": []
+    },
+    "media_assets": {
+      "columns": [
+        "id",
+        "dreamId",
+        "type",
+        "path",
+        "prompt",
+        "model",
+        "status",
+        "createdAt"
+      ],
+      "indexes": [
+        "index_media_assets_dreamId"
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 1,
+      "rows": [
+        {
+          "createdAt": "i:0",
+          "dreamId": "s:seed-dream-2",
+          "id": "s:seed-media-1",
+          "model": null,
+          "path": null,
+          "prompt": null,
+          "status": "s:PENDING",
+          "type": "s:VIDEO"
+        }
+      ]
+    },
+    "novel_messages": {
+      "columns": [
+        "id",
+        "dreamId",
+        "role",
+        "content",
+        "versionId",
+        "createdAt"
+      ],
+      "indexes": [
+        "index_novel_messages_dreamId_createdAt"
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 0,
+      "rows": []
+    },
+    "novel_versions": {
+      "columns": [
+        "id",
+        "dreamId",
+        "version",
+        "text",
+        "changeLogJson",
+        "origin",
+        "promptId",
+        "promptVersion",
+        "promptHash",
+        "model",
+        "reasoningEffort",
+        "createdAt"
+      ],
+      "indexes": [
+        "index_novel_versions_dreamId_version"
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 0,
+      "rows": []
+    },
+    "room_master_table": {
+      "columns": [
+        "id",
+        "identity_hash"
+      ],
+      "indexes": [],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 1,
+      "rows": [
+        {
+          "id": "i:42",
+          "identity_hash": "s:166666e50d40204e526403725c8302ab"
+        }
+      ]
+    },
+    "tags": {
+      "columns": [
+        "id",
+        "name",
+        "kind",
+        "source",
+        "evidenceText"
+      ],
+      "indexes": [
+        "index_tags_name"
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "row_count": 4,
+      "rows": [
+        {
+          "evidenceText": "s:电梯一直往上，按不到一楼",
+          "id": "s:seed-tag-emotion-fall",
+          "kind": "s:EMOTION",
+          "name": "s:下坠的预感",
+          "source": "s:AUTO"
+        },
+        {
+          "evidenceText": "s:我在电梯里",
+          "id": "s:seed-tag-object-elevator",
+          "kind": "s:OBJECT",
+          "name": "s:电梯",
+          "source": "s:AUTO"
+        },
+        {
+          "evidenceText": "s:电梯一直往上",
+          "id": "s:seed-tag-object-lift",
+          "kind": "s:OBJECT",
+          "name": "s:升降机",
+          "source": "s:USER"
+        },
+        {
+          "evidenceText": "s:教室最后一排",
+          "id": "s:seed-tag-place-classroom",
+          "kind": "s:PLACE",
+          "name": "s:教室",
+          "source": "s:AUTO"
+        }
+      ]
+    }
+  },
+  "tables": [
+    "android_metadata",
+    "dream_tags",
+    "dreams",
+    "generation_jobs",
+    "llm_calls",
+    "media_assets",
+    "novel_messages",
+    "novel_versions",
+    "room_master_table",
+    "tags"
+  ],
+  "user_version": 2
+}

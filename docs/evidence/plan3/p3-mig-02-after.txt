@@ -1,0 +1,17 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-screen.ps1 -OutPath docs/evidence/plan3/p3-mig-02-after.png
+
+PNG_SHA256=00a10fdf36084bfc734354a10f413bc7b031ef7c2f01b3c39ceca45fd00490ef
+# p3-mig-02-after：升级后截图（数据还在的证据）
+
+capture-screen.ps1 输出：RESULT: OK path=... serial=emulator-5554 bytes=70249 dims=1080x2400 sha256=00A10FDF...
+截图内容：日历 10 月 1 日详情 —— 卡片标题仍是宿主改过的「电梯（老用户改过的标题）」，
+原文「我在电梯里，电梯一直往上，按不到一楼。」与三个标签都在；返回首页显示「共 5 天有梦」。
+用户数据（含 2 条非种子行）在升级后仍然可读。
+
+[升级后库（force-stop 后三件拉库）]
+db 114688 B sha256=30e8566c2b3711189d5311125d39fd38e7ba94e60957f12cbc5e9136bfc7230e
+wal 0 B sha256=e3b0c442...b855（空文件）
+shm 32768 B sha256=fd4c9fda...89eb
+设备端 run-as sha256sum 与本地一致。

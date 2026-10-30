@@ -1,0 +1,30 @@
+APK_SHA256=661d1d6b6c9bfeb5 OLD_APK_SHA256=5ff054986f19fc9c
+DEVICE_TIME=Fri Oct 30 21:44:39 CST 2026
+REPLAY=C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe install -r .scratch/p3-v1.apk && C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe shell am force-stop com.dreamkeeper && C:\Users\17383\AppData\Local\Android\Sdk\platform-tools\adb.exe shell am start -n com.dreamkeeper/.MainActivity
+
+# p3-mig-05-downgrade：升到 v2 后再装回 v1 APK —— 必须崩，且证明「升级前留副本」是唯一兜底
+
+[步骤]
+adb install -r .scratch/p3-v1.apk → Success
+adb shell am force-stop com.dreamkeeper
+adb shell am start -n com.dreamkeeper/.MainActivity
+8 秒后 dumpsys activity activities：topResumedActivity=com.google.android.apps.nexuslauncher/.NexusLauncherActivity
+（梦匣已崩回桌面；崩溃对话框可能已被系统收走）
+
+[logcat 崩溃原文（logcat -d -v threadtime，段首是 `--------- beginning of crash`；不是凭记忆写的）]
+--------- beginning of crash
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: FATAL EXCEPTION: DefaultDispatcher-worker-1
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: Process: com.dreamkeeper, PID: 32691
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: java.lang.IllegalStateException: A migration from 2 to 1 was required but not found. Please provide the necessary Migration path via RoomDatabase.Builder.addMigration(...) or allow for destructive migrations via one of the RoomDatabase.Builder.fallbackToDestructiveMigration* functions.
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at androidx.room.BaseRoomConnectionManager.onMigrate(RoomConnectionManager.kt:224)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at androidx.room.RoomConnectionManager$SupportOpenHelperCallback.onUpgrade(RoomConnectionManager.android.kt:165)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at androidx.room.RoomConnectionManager$SupportOpenHelperCallback.onDowngrade(RoomConnectionManager.android.kt:173)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at androidx.sqlite.db.framework.FrameworkSQLiteOpenHelper$OpenHelper.onDowngrade(FrameworkSQLiteOpenHelper.android.kt:269)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at android.database.sqlite.SQLiteOpenHelper.getDatabaseLocked(SQLiteOpenHelper.java:431)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at android.database.sqlite.SQLiteOpenHelper.getWritableDatabase(SQLiteOpenHelper.java:332)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at androidx.sqlite.db.framework.FrameworkSQLiteOpenHelper$OpenHelper.getWritableOrReadableDatabase(FrameworkSQLiteOpenHelper.android.kt:224)
+10-30 21:43:53.582 32691 32724 E AndroidRuntime: 	at androidx.sqlite.db.framework.FrameworkSQLiteOpenHelper$OpenHelper.innerGetDatabase(FrameworkSQLiteOpenHelper.android.kt:180)
+结论：**不可降级**。v2 库 user_version=2，v1 APK 只带 version=1 且没有任何 fallback，
+Room 在 onDowngrade 里找不到 2→1 的迁移路径，直接 IllegalStateException 崩进程（见上原文）。
+唯一兜底是升级前留副本：本任务的 DbBackup 已在迁移前把 files/db-backup/dreamkeeper-v1-*.db 留好。
+[恢复] 重装 v2 APK 后冷启，topResumedActivity=com.dreamkeeper/.MainActivity，app 正常。
