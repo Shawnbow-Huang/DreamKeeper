@@ -139,14 +139,16 @@ T3  不调用模型                                   → faithfulText = rawTran
 
 ## 7. 导出（零新依赖）
 
+> 本节是早期设计；实现与验收以 **Task 10 §0.1–§0.3** 与 D339/D341/D342/D358 为准（口径差异见 D378/D379）。
+
 | 格式 | 实现 | 硬约束 |
 |---|---|---|
-| txt | `contentResolver.openOutputStream` 直写 | UTF-8 无 BOM、统一 `\r\n`；文件名剔除 `/ \ : * ? " < > \|` 与控制字符 |
+| txt | `contentResolver.openOutputStream` 直写 | UTF-8 无 BOM、统一 `\n`（LF；check-export 断言 `\r` 计数 0）；文件名剔除 `/ \ : * ? " < > \|` 与控制字符 |
 | docx | 手搓最小 OOXML（zip 三个 part） | 先剔 `0x00–0x08/0x0B/0x0C/0x0E–0x1F` 再转义 `& < >`；`ZipEntry` 时间戳写死；`[Content_Types].xml` 必须在；`w:rFonts w:eastAsia="宋体"` |
 | pdf | `android.graphics.pdf.PdfDocument` | 单位 pt、A4 595×842、textSize 10–11；中文用系统 CJK fallback（**不指定** MONOSPACE / 自带 ttf）；换行用 `Paint.breakText` 逐字；每页 `finishPage`、最后 `finish()` 再 `writeTo()` |
 
-- 落盘走 SAF `ACTION_CREATE_DOCUMENT`（minSdk 26 拿不到 `MediaStore.Downloads`），不引 FileProvider。
-- 导出内容 = 当前选中版（`novelSelectedVersion` 为空则最新版）+ 元信息头（日期、标签、时长）+ 原样稿可选附录。
+- 落盘走 `MediaStore.Downloads`（API 29+ 免权限）；**API 26–28 不做导出**：按钮禁用 + 提示「系统版本过低」，FINAL-REVIEW 记 PENDING（D379）；不引 FileProvider、不改 manifest。
+- 导出内容 = 当前选中版（`novelSelectedVersion` 为空则最新版，`-raw` 后缀退回 `faithfulText ?: rawTranscript`）+ 元信息头**固定四行**（标题/日期/标签/空行），无「时长」、无原样稿附录（以 Task 10 §0.1 为准，D341/D342）。
 
 ## 8. 任务拆分（10 个 Task）
 
@@ -999,6 +1001,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D376 | T10-26：A5 的「txt/docx 设备可打开」开工前 5 分钟做查看器探针；PENDING 白名单只收环境限制，实现缺陷不许 PENDING | AOSP 镜像常常没有 txt/docx 查看器，当天才发现会让口径当场失效；PENDING 不设白名单会变成「红都记 PENDING」的后门 |
 | D377 | T10-27：`.gitattributes` 补 `docs/evidence/plan3/*.txt text eol=lf` 与 `docs/evidence/plan3/*.db binary`；Task 10 Files 白名单加 `.gitattributes`；`EXPORT_SHA256` 按入库 LF 字节计 | 实测 `core.autocrlf=true` 下 fresh clone 把 `p3-mig-00-red.txt` 转 CRLF、sha256 由 `f6992210…` 漂到 `f604be2c…`；导出 txt 入库后第三方 clone 必在上 `\r` 计数 0 / 逐字节比对 / `EXPORT_SHA256` 上 RED，A21 失效（本机自测会假绿） |
 | D378 | T10-28：导出原件平铺进 `docs/evidence/plan3/`，豁免 §1 命名与 §2 头三行；`EXPORT_SHA256=` 逐文件写在 `p3-e2e-06-export.txt` 里 | 导出原件是交付物、文件名是产品行为的一部分（`-v<n>`/`-raw`），按证据命名规则改名就没法证明导出文件名正确；sha 落点不写死，第三方不知道去哪对 |
+| D379 | T10-29：导出下限定为 **API 29**（`MediaStore.Downloads`）；minSdk 26 的 26–28 不导出，按钮禁用 + 提示，FINAL-REVIEW 记 PENDING | `android/app/build.gradle.kts:13 minSdk = 26`，而 `MediaStore.Downloads` 是 API 29+；首版证据只在 API 37 模拟器，API 26–28 测不到；补 SAF fallback 会改 `adb pull /sdcard/Download/...` 证据形态，成本高于收益 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
