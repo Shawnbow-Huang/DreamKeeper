@@ -748,6 +748,14 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D321 | T8-8：单飞用 per-dream `Mutex`，锁包住「检查闸门 → 占位 → 启动」；并发第二个调用返回 `Protocol("busy")`，不发请求不写行 | 先检查后占位会双开；Busy 不写 `llm_calls` 是为守住「行数 == 尝试数」的 Task 10 断言 |
 | D322 | T8-9：Task 8 测试口径 8 例，仅 #1/#8 需真 Room + Robolectric，其余 fake；全量期望 33 类 / 334 例 | 与 Task 5「能 fake 就 fake」一致；真 Room 只用于原子性与记账两处不可替代的断言 |
 
+| D323 | T7-1：`SPEECH_VERBS` 计划写「8 字」，脚本实测 7 字（说喊道问答叫嚷），实现从脚本 | `scripts/check-faithful.py` 是真源；Kotlin 与脚本逐字一致，计划常量清单为笔误 |
+| D324 | T7-2：计划 Expected 写「30 类 / 326 例」，实际 **32 类 / 326 例** | 基线 31 类/311 例（Task 6 补测后），新增 1 个测试类 → 32；311+15=326。实测 XML `classes=32 tests=326` |
+| D325 | T7-3：空白判定不用 Java 默认 `\s`，显式枚举 Python `\s` 全集（0x09–0x0D、0x1C–0x1F、0x20、0x85、0xA0、0x1680、0x2000–0x200A、0x2028/2029、0x202F、0x205F、0x3000，共 25 码点） | Java 默认 `\s` 只 6 个 ASCII 空白，漏 U+3000/U+00A0/U+2007/U+202F；会话里曾实测全角空格会漏判 |
+| D326 | T7-4：`GateResult.advisory` 默认 `emptyList()`；验收只断 `failed` 集合/顺序与 `passed`，不断 `value/detail/advisory` 内容 | G1/G4/G5 无建议时字段可为空；内容级断言留到 Task 8 的提示载荷用例（#2）覆盖 |
+| D327 | T7-5：15 条向量写成 15 个独立 `@Test`（`case01`..`case15`），不用参数化/循环 | 逐例失败在 XML 里可直接定位（红相 `15 tests completed, 15 failed`），变异时能精确数红例数（7 例） |
+| D328 | T7-6：`p3-gates-01-green` 是变异恢复后的**二次**绿跑（首次绿后先做变异，恢复后再跑并留证） | 证据首三行 `DEVICE_TIME=host-only 2026-10-30T14:50:26Z` 对应第二次跑；恢复后 `sha256 a855bb9f…` 与备份一致 |
+| D329 | T7-7：Task 8 计划 §0.3 的 T2 判据签名修正为 `FaithfulGates.isConservativeOk(input, output)`（Task 7 实作定双参），原稿 `isConservativeOk(report)` 不可编译 | Task 7 的 `isConservativeOk` 直接吃两个字符串并比 `contentChars` 全等；Task 8 orchestrator 传 `(input, out)` 即可 |
+
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
 ## 10. 自审记录
@@ -851,3 +859,26 @@ T3  不调用模型                                   → faithfulText = rawTran
 - PENDING（不阻断）：D309（`processDebugAssets` 在 AGP 9.5 不存在，改用 `mergeDebugAssets`）、D310（多打 7 个 md，约 +93KB）、
   D312（类数笔误）、D313（Sync 接线两种失败方案留注释）；真实 API 与设备侧行为归 Task 8/10。
 - 结论：**Task 6 验收通过**。
+
+---
+
+### Task 7 验收（Lead，2026-10-30）
+
+- 交付：`b4242b4`（父 `0ba8571`，8 文件 / +1152）：`llm/gates/GateResult.kt`（`Gate`/`GateMode`/`GateResult`/`GateReport`，
+  `failed` 用 `LinkedHashSet` 保 G1→G5 序）、`llm/gates/FaithfulGates.kt`（412 行，G1–G5 全算不短路、按码点复刻 Python 语义）、
+  `test/.../FaithfulGatesTest.kt`（310 行、15 个 `@Test`、plain JUnit4 + 手写 MiniJson）、
+  `android/app/build.gradle.kts`（仅 +2 行 `inputs.file(faithful-gate-vectors.json)`）、
+  `docs/evidence/plan3/p3-gates-{00-red,01-green,02-mutation,03-full}.txt`。
+- Lead 独立复跑：targeted `--rerun-tasks` → **15/15**（XML `tests=15 failures=0 errors=0`）；
+  全量 `--rerun-tasks` → XML **32 类 / 326 例 / 0 失败 / 0 错误 / 0 跳过**（31+1 类、311+15 例，与 §0.5 的 32/326 一致）。
+- 语义核对（Lead 脚本逐字比 `scripts/check-faithful.py`）：9 组常量全部命中——`PUNCT` 34、`CN_NUM` 16、`MEASURE` 27、
+  `SPEECH_VERBS` 7、`NEG_PREFIX` 5、`FILLERS` 13、`UNCERTAIN` 14、`CAUSAL` 8、`SCENE_MARKERS` 11、`DIRECTION_WORDS` 26；
+  `PUNCT.length == 34` 由用例 01 自身断言；空白走显式 25 码点（D325）、数字 `\p{Nd}`、bigram/24 码点窗/±6 ctx 全 `IntArray`；
+  15 条向量的期望 `failed` 集合与 `faithful-gate-vectors.json` 逐例一致（12/13 另跑 FAITHFUL 对照）。
+- 变异：G1 恒返回空集 → **7 例红**（02/03/04/05/07/14/15，满足 ≥5），其余 8 例仍绿；恢复后 `sha256 a855bb9f…` 与备份一致、复绿
+  （`p3-gates-02-mutation.txt`）。
+- 证据：`p3-gates-00-red`（15/15 失败，全 `NotImplementedError`，XML `tests=15 failures=15`）→ `01-green`（15/15，D328 二次绿跑）
+  → `02-mutation` → `03-full`（`class_count=32 test_count=326 failure_count=0`）；首三行 `APK_SHA256=n/a` / `DEVICE_TIME=host-only <UTC>` / `REPLAY=gradlew ...`。
+  两真源未动：`git diff b4242b4^ b4242b4 -- scripts/check-faithful.py docs/evidence/plan3/faithful-gate-vectors.json` 为空。
+- PENDING（不阻断）：15 向量外 fuzz；`value/detail/advisory` 内容未断言；未接运行时、未出 APK（归 Task 8）。
+- 结论：**Task 7 验收通过**。
