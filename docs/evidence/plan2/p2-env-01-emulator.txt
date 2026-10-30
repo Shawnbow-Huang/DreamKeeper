@@ -1,0 +1,10 @@
+# Plan 2 环境快照（Lead 记录）
+记录时间: 2026-10-30 15:41:06 +0800
+模拟器启动命令: emulator -avd Medium_Phone_API_37.0 -no-snapshot-save -no-boot-anim
+注意: **未加** -allow-host-audio，按 emulator -help 原文，输入音频将被灌零 → W3 预期为 -inf（信号来源=seam）
+AVD config hw.audioInput: unknown
+List of devices attached
+emulator-5554	device
+
+37
+Fri Oct 30 15:41:06 CST 2026
