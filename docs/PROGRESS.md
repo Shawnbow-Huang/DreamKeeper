@@ -2,7 +2,7 @@
 
 > 这个文件是 todo list 的长期版本：界面上的清单只在单轮里显示、容易看不到，所以把同一份清单写进仓库。**每完成一项我就改这里并 commit**，历史见 `git log -- docs/PROGRESS.md`。
 >
-> 最后更新：2026-10-31 01:31（Task 10 完成：导出 txt/docx/pdf + check-export/check-cost 收口 + 设备 E2E 0–13 步；全量 39 类 362 例绿；待 Lead 终审）
+> 最后更新：2026-10-31 01:45（**Plan 3 完成 10/10**：Lead 终审通过；D406 入口可见性修复后全量 39 类 365 例绿；偏差 D275–D414 已全部登记）
 
 ## 一、当前在做
 
@@ -13,7 +13,7 @@
 | D3 | `scripts/check-faithful.py`：五闸门 G1–G5 + 变异自测 | ✅ `dddf702`→`ba0aedf` | 自测 **11 条**（9 条变异红 + 单字数词红 + 只加标点绿）；G2 修正为只数正文，见 §七 |
 | D4 | 合成回归语料 20 条（`docs/eval/synthetic.jsonl`，进 git） | ✅ `fdd4fd9` | `raw → good_clean` 五闸门 20/20 绿；与真样本连续 8 字重叠 0 |
 | T9 | Plan 1 · Task 9：标签管理 + 库级验收 | ✅ 已验收 | 当轮 95 用例；终审修 P1 后 101 用例；`plan1-done` 已打 |
-| T10 | Plan 3 · Task 10：导出 txt/docx/pdf + 生成链端到端验收 | ✅ 已验收（待 Lead 终审） | 全量 39 类 362 例绿；设备 E2E 0–13 步 + FINAL-REVIEW；证据 `p3-export-00..05`、`p3-e2e-00..14` |
+| T10 | Plan 3 · Task 10：导出 txt/docx/pdf + 生成链端到端验收 | ✅ 已验收（Lead 终审） | 全量 **39 类 365 例**绿；设备 E2E 0–13 步 + FINAL-REVIEW + A1–A24；证据 `p3-export-00..05`、`p3-e2e-00..14`；D406 修复 `a774ebe` |
 
 ## 二、Plan 1（骨架与梦境库）已完成 9/9
 
@@ -52,7 +52,7 @@
 **Plan 2 的目标**：按住一个钮说梦 → 松手得到带音频的草稿 → 崩溃/重启后音频还在、头被修复 → 详情页能播 → 有文字就显示，没有就明确说为什么（**不许伪造转写成功**）。
 
 
-## 二·六、Plan 3（生成、成本、导出、对话改稿）进行中 9/10
+## 二·六、Plan 3（生成、成本、导出、对话改稿）已完成 10/10
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -104,7 +104,8 @@
 - ✅ **Task 9c 可见性口径修正**（D394，Lead）：原 `hasNovelDraft` 把原样整理稿算成小说稿，整理后「小说化」入口永久消失；改为 `hasNovelVersion(dream, versions)`（只认 `promptId != "faithful"` 的版本，无版本行退回 `novelText`/`novelVersion`）+ 3 例，变异只杀 faithful-only 用例（`p3-wire-05-visibility.txt`）。
 - ✅ **Task 10 导出与端到端验收**（代码 `7a7e5d4` / Phase A 证据 `97d841e` / Phase B 证据见本次提交）：export/ 四文件（txt 手写头部+footer、docx 手写 OOXML 三件套零依赖、pdf PdfDocument A4 自动分页）＋ `ExportSheet` 三按钮/分享/失败文案＋详情页两处入口＋`resolveFinalNovel` 取文；`ChatRequest.kind` 透传 + DKLLM 每尝试一行日志（D392）；`scripts/check-export.py` 新建（DB 推导期望串/三格式结构断言/变异自测）＋ `check-cost.py` 的 `--require-rows`/`failed=N`/`[FAILED]`/error 行豁免（D337/D366）。
 - ✅ **设备 E2E 0–13 步**：seed-dream-2「教室」→ 原样整理 v1（+误双击 v2）→ 小说化 v3 → 改稿 v4 → ASK（不建版）→ 选中 v4 → 三格式导出（双侧 sha 相等）→ 查看器探针（txt/docx 无查看器、pdf 黑屏 PENDING）→ 飞行模式失败/重试/联网成功（8 条 error 行）→ force-stop 三件 DB 合并（DEVICE_DB_SHA256==MERGED_SHA256）→ check-cost 对账（rows=14 mismatches=0 failed=10，M=8==logcat）→ check-export 三子命令 GREEN（PDF Type3 字体锚口径修正）→ check-faithful 双链五闸门绿 → font_scale 1.3 截图 → 全量 logcat（FATAL 0）→ `FINAL-REVIEW.md` / `ACCEPTANCE.md ## 3d`。
-- ⏭ 下一步 **Plan 3 收尾**：Lead 终审 + 为本轮偏差候选分配 D 号（纯提问误路由、选 v4 代 v2、PDF Type3 字体锚、A14 nearWhite 2 像素、ExportSheet 形态、docx 首段文案等）；`p3-e2e-12-visibility.png`（seed-dream-2 只显示小说化）需新 APK（D406）后再补拍。
+- ✅ **Task 10 验收（Lead）**：终审通过；偏差候选编号 **D407–D414**；A5/A24/分享接收端等环境限制项收进 PENDING（D376）；D406 入口可见性修复 `a774ebe`（两枚按钮各判各的 + 3 例 + 变异），**全量 39 类 365 例绿**。
+- ⏭ 下一步：Plan 4（UI 打磨/真机/发布）——包括纯提问误路由（D408）、入口刷新时机、t2/t3 兜底文案、release 包与 API26–28 门禁。
 
 - ✅ **设计 v1.4**（`93029a2`）：模式一从「零 LLM」改为「必调 LLM 的理顺」+ 三级失败链（重试温度 0.0 并附违规清单 → 保守版 → 原始转写）；新增 §6.3 对话改稿（最小改动 ≤115% / 歧义先问不改 / 多版本 + 挑选最终稿）；§5 增 `novel_versions` / `novel_messages` / `llm_calls`；§9 收敛 DeepSeek 单厂商 + flash 默认 + 思考档位表 + 「思考开着时温度被忽略」；§14 增对话改稿验收。
 - ✅ **五闸门脚本**（`dddf702`）：`scripts/check-faithful.py`，G1 数量/颜色/方位/专名、G2 长度比、G3 2-gram 覆盖率、G4 跨场景因果、G5 不确定词；9 条变异自测全绿；用真实梦境「只清理 `[em]` 残留」验证判绿（清理格式不算违规）。

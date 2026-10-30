@@ -1028,6 +1028,15 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D398 | T9b-5：设备 smoke 用设置页「清除」清空本地 Key 以复现「不配 Key」失败态，**未恢复** | 设备当时已由用户手工保存真实 Key（00:05）；清空后 `settings.xml` 变空 map，真实 API 冒烟前需重新粘贴。教训：失败态应优先用飞行模式，不要动共享状态 |
 | D399 | T9b-6：变异跑于 16:08 的旧代码，随后只调「闸门顺序/按钮可见性」两处，最终代码在 16:19:47 / 16:20:42 复绿 | 变异目标（按钮回调、retry 入口）两处未被后续调整触碰；证据文件同时收最终代码的绿与全量 |
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
+| D406 | T10-1：生成入口两枚按钮分别收起——`hasFaithfulVersion`（faithful 版本或 `dreams.faithfulText`）与 `hasNovelVersion` 各判各的；E2E 实测忠实稿 v1 后两按钮一起重现、再点又写出 v2 | 旧判据把两枚按钮当一个整体；修后补 3 例单测，变异把判据改回旧口径 → 2 例红（`9 tests completed, 2 failed`），恢复复绿；全量 365 例 |
+| D407 | T10-2：`check-export.py` 字体锚兼容 Android PdfDocument 的 Type3 字体（计划字面只认 `/BaseFont`） | 实测导出 PDF 有 62 处 `/Subtype /Type3` + `/FontMatrix`、无 `/BaseFont`；脚本改为两种锚任一成立，结构断言仍含 `/Type /Pages`、`/Count`、MediaBox、`%%EOF` |
+| D408 | T10-3：设备 E2E 中三次纯提问被模型路由为 REVISE，各建一版（v5/v6/v7）；库行保持原样未删改 | 路由由模型 `action` 决定（Task 9 契约），非 Task 10 实现；已把「ASK 不建版」证据单独取 v4 之前的 04-ask 段；模型分流稳定性列为 Plan 4 打磨项 |
+| D409 | T10-4：导出选 v4 而非计划字面 v2 | v2 是 D406 缺陷下误双击「原样整理」产生的重复忠实稿；v4 是「细节太多」改稿成功版，导出正文取 `resolveFinalNovel(selected ?: max)` = v4，与详情页显示一致 |
+| D410 | T10-5：A14 大字体截图 `nearWhite=2 ratio=0.0029%` 判例外 | 两像素坐标为 (102,2332)/(108,2338)，是系统输入法「隐藏键盘」chevron，非 App 界面；证据与 FINAL-REVIEW §四均已写明坐标与理由，A14 断言改「除 IME 图标外近白 0」 |
+| D411 | T10-6：`check-export.py` 增加 `--sidecar`（默认 `p3-e2e-08-db-sidecar.txt`）与 `--self-test` | 前置断言要按 sidecar 的 `MERGED_SHA256` 验库（D371），路径必须可参数化；`--self-test` 在 `.scratch/` 现场建 9 表 fixture 库做 4 fixture + 7 变异的离线自检 |
+| D412 | T10-7：docx 首段取 `# <title>` 加粗（与 txt 头部一致），计划 §0.5 字面写「首段 == dream.title」 | 两种格式头部必须逐字同源；`check-export` 的 `expected[0]` 同步为 `# <title>`，证据 `p3-export-04` Phase B 段贴了首段 XML 原文 |
+| D413 | T10-8：`ExportSheet` 用 Material3 `AlertDialog` 呈现（计划未限定载体） | 仓库已有同类用法；不改 Manifest/FileProvider，不影响 MediaStore 落点 |
+| D414 | T10-9：`ExportNamingTest` 空壳阶段即绿（红基线 12 例 8 failed），以变异 3 证明可证伪 | 命名/日期口径在可编译空壳里已实现并通过，不为凑「全红」故意写错；变异 3 去掉 `-v<n>` → 该例红，恢复复绿 |
 
 ## 10. 自审记录
 
@@ -1222,3 +1231,29 @@ T3  不调用模型                                   → faithfulText = rawTran
   `BUILD FAILED in 24s`；恢复后复绿；全量 **36 类 / 350 例 / 0/0/0**。
 - 该修复不改变「无稿梦两按钮」的设备表现；faithful-only 状态下入口仍在的端到端走查归 Task 10 E2E。
 - 结论：**通过**；Task 10 的期望基线更新为 **39 类 / 362 例**（350 + 12）。
+
+### Task 10 验收（Lead，2026-10-31）
+
+**交付**：`2fa4538`（基线）→ `7a7e5d4`（导出三格式 + DKLLM 日志/kind 透传 + 两脚本）→ `97d841e`（Phase A 证据
+`p3-export-00..05`）→ `57eee1e`（PDF Type3 锚修正）→ `af88286`（Phase B 证据 `p3-e2e-00..14` + 导出三原件 +
+FINAL-REVIEW + ACCEPTANCE `## 3d` + 看板）→ `a774ebe`（Lead 的 D406 修复 + 3 例 + `p3-e2e-12-visibility.txt`）。
+
+**Lead 独立复跑**：
+- 全量 `:app:testDebugUnitTest --rerun-tasks`：Phase B 代码上 **39 类 / 362 例 / 0/0/0**（BUILD SUCCESSFUL 31s）；
+  D406 修复后 **39 类 / 365 例 / 0/0/0**（39s）。
+- `GenerationPhaseMappingTest` targeted：9/9 绿（XML tests=9 failures=0）；变异「`hasFaithfulVersion` 恒 false」→
+  `9 tests completed, 2 failed`、`BUILD FAILED in 26s`，恢复复绿。
+- `check-export --self-test`：4 个 fixture 全 GREEN、7 个变异全 RED、错 sha DB RED、原件 sha 未变，`RESULT: GREEN`（exit 0）。
+- 真实设备证据逐件核对：`p3-e2e-01-install.txt` 双侧 sha 相等（`8de9a0b4…d27b8`，13,860,885 B 的为 D406 新包
+  `cdc6a2c1…eb5f3`）、`p3-e2e-08-db-sidecar.txt` 三件 sha 主机==设备、`MERGED_SHA256=ed62b2bd…`、
+  `p3-e2e-09-check-cost.txt` `rows=14 mismatches=0 failed=10` 且 `N=10/B=2/M=8==logcat`、负向对照 `cost=1→RED`
+  且原库 sha 未变、`p3-e2e-12-logcat.txt` FATAL 0 / Key 形态 grep 0。
+
+**A1–A24**：除 A5（三格式打开态：模拟器无可用查看器，仅 pdf 结构 GREEN）、A24 下界（API26–28 无镜像）、
+A19（本轮 8 条偏差已编号 D407–D414）外全部 PASS/PARTIAL 并已在 FINAL-REVIEW §三 与 ACCEPTANCE `## 3d` 留痕。
+
+**PENDING（只收环境限制，D376）**：txt/docx/pdf 打开态（无查看器；pdf 打开全黑属模拟器）、API26–28 门禁、
+release 包升级、真机、真实 STT 转写、分享跨应用接收端、D406 的「faithful-only」设备对比截图（当前库无该状态，
+由 3 例单测 + 变异覆盖）。
+
+**结论**：**通过**。Plan 3 全部 10 个 Task 完成，看板 10/10。
