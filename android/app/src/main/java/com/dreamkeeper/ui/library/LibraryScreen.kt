@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.ui.common.DreamCard
+import com.dreamkeeper.ui.common.cardText
 import com.dreamkeeper.ui.common.firstSentence
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.ui.theme.Ember
@@ -199,8 +200,8 @@ private fun Timeline(entries: List<LibraryItem>, onOpen: (String) -> Unit) {
 @Composable
 private fun TimelineEntry(item: LibraryItem, onClick: () -> Unit) {
     val dream = item.dream
-    val heading = dream.title?.takeIf { it.isNotBlank() }
-        ?: firstSentence(dream.faithfulText ?: dream.rawTranscript)
+    // D214：时间轴和卡片必须走同一个文案分派，否则卡片修好了、时间轴还是一条只有日期没内容的空行
+    val heading = cardText(dream.title, dream.faithfulText ?: dream.rawTranscript).heading
 
     Row(
         modifier = Modifier

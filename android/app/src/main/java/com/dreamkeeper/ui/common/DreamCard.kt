@@ -122,9 +122,19 @@ data class CardText(val heading: String, val body: String)
 fun cardText(title: String?, text: String?): CardText {
     val first = firstSentence(text)
     val realTitle = title?.trim().orEmpty()
-    if (realTitle.isNotEmpty()) return CardText(realTitle, first)
-    return CardText(first, restBelowFirstSentence(text))
+    if (realTitle.isNotEmpty()) {
+        return CardText(realTitle, first.ifBlank { NO_TEXT_HINT })
+    }
+    if (first.isNotBlank()) return CardText(first, restBelowFirstSentence(text))
+    // 既没标题也没正文（录完但转写失败/还没转写）：不许画一张没有内容的空卡（D214）
+    return CardText(NO_TEXT_HEADING, NO_TEXT_HINT)
 }
+
+/** 既没标题也没正文时的占位标题（D214） */
+internal const val NO_TEXT_HEADING = "未转写"
+
+/** 没有文字时的副行文案（D214）：卡片得能被认出来是一条梦，不能是一条空白圆角条 */
+internal const val NO_TEXT_HINT = "这条梦还没有文字"
 
 /**
  * 去掉首句之后剩下的正文；太短就当作没有（不足 [MIN_REST_CHARS] 字）。

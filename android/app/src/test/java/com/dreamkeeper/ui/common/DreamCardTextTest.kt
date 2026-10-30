@@ -34,10 +34,10 @@ class DreamCardTextTest {
     }
 
     @Test
-    fun `a title with no text still renders the title only`() {
+    fun `a title with no text shows a hint under it instead of an empty second line`() {
         val t = cardText("只有标题", null)
         assertEquals("只有标题", t.heading)
-        assertEquals("", t.body)
+        assertEquals(NO_TEXT_HINT, t.body)
     }
 
     @Test
@@ -56,9 +56,17 @@ class DreamCardTextTest {
     }
 
     @Test
-    fun `empty text renders nothing at all`() {
+    fun `no title and no text falls back to a placeholder instead of a blank card`() {
+        // D214：录完但没转写出文字时，列表里曾是一条没有任何内容的圆角条
         val t = cardText(null, "  ")
-        assertEquals("", t.heading)
-        assertEquals("", t.body)
+        assertEquals(NO_TEXT_HEADING, t.heading)
+        assertEquals(NO_TEXT_HINT, t.body)
+    }
+
+    @Test
+    fun `blank title plus blank text also falls back to the placeholder`() {
+        val t = cardText("   ", "")
+        assertEquals(NO_TEXT_HEADING, t.heading)
+        assertEquals(NO_TEXT_HINT, t.body)
     }
 }
