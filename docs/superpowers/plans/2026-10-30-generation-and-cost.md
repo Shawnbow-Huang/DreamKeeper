@@ -676,17 +676,76 @@ T3  不调用模型                                   → faithfulText = rawTran
   证据 `p3-revise-00-red.txt`、`01-green.txt`、`02-mutation.txt`、`03-full.txt`（host-only 头）。
   设备截图（输入条/chips、ASK 气泡、版本线、选中态、撤回、失败态）归 **Task 10 端到端**，本任务不做设备证据（D336）。
 
-### Task 10 导出（txt/docx/pdf）+ 验收与证据
+### Task 10 导出（txt/docx/pdf）+ 端到端验收与证据
 
-- Files：`export/Exporter.kt`（`export(dream, format): Uri`）、`export/TxtExporter.kt`、`DocxExporter.kt`、`PdfExporter.kt`、
-  `ui/detail/ExportSheet.kt`、`test/.../DocxStructureTest.kt`、`scripts/check-export.py`、`scripts/check-cost.py`（D337：必须支持 error 行）、
-  `docs/evidence/plan3/**`、`docs/evidence/plan1/ACCEPTANCE.md` 追加 `## 3d 生成与成本证据表`、
-  `docs/evidence/plan3/FINAL-REVIEW.md`。
-- Steps：docx 结构测试（zip 三件、XML 可解析、`w:t` 文本与期望一致、非法字符被剔除）；pdf 用
-  `PdfRenderer.pageCount ≥ 1` + 逐页渲染非空白；txt 编码断言；真机导出三个文件 → `adb pull` →
-  `scripts/check-export.py` 硬校验；成本复算 `scripts/check-cost.py`；五闸门与 A1–A21 对同一批输出各跑一次。
-- Expected：三个导出文件全部可打开；docx 文本 sha256 与源一致；`check-export.py` 退出码 0；
-  `check-cost.py` `mismatches=0` 且 summary 打 `failed=N`、每个 `error IS NOT NULL` 行断言 `cost == 0 && usageJson IS NULL`（D337，只断 `mismatches=0` 会假绿）；证据首三行绑定 APK sha 与设备时间。
+- Files：`export/Exporter.kt`（`suspend fun export(dreamId: String, format: ExportFormat): ExportResult`）、`export/TxtExporter.kt`、
+  `export/DocxExporter.kt`、`export/PdfExporter.kt`、`ui/detail/ExportSheet.kt`、`ui/detail/DetailViewModel.kt`（导出动作）、
+  `ui/detail/DetailScreen.kt`（导出入口两处）、`data/DreamRepository.kt`（读 `resolveFinalNovel` 与选中版本）、
+  `test/.../export/TxtExporterTest.kt`、`test/.../export/DocxExporterTest.kt`、`test/.../export/ExportNamingTest.kt`、
+  `scripts/check-export.py`（新）、`scripts/check-cost.py`（D337：必须支持 error 行）、
+  `docs/evidence/plan3/p3-export-*`、`docs/evidence/plan3/p3-e2e-*`、`docs/evidence/plan1/ACCEPTANCE.md` 追加 `## 3d 生成与成本证据表`、
+  `docs/evidence/plan3/FINAL-REVIEW.md`、`docs/PROGRESS.md`。
+
+- §0.1 导出内容（D342）：正文 = `resolveFinalNovel(dreamId)` 的 `novelText`（`selected ?: maxVersion`，与详情页/列表契约一致）；
+  该梦没有小说稿 → 退回 `faithfulText ?: rawTranscript`，文件名带 `-raw` 后缀。头部元信息固定四行：
+  `# <dream.title>`、`<dreamDate yyyy-MM-dd HH:mm>`、`标签：a、b、c`（空则省略该行）、空行。**不用** `dreams.novelText`
+  （它永远是最新生成版，不是用户选中的那版）。
+
+- §0.2 三格式（D340/D341）：
+  - **txt**：UTF-8 无 BOM、`\n` 换行、正文写完追加一行 `\n共 <N> 字`（`contentCharCount` 不计标点空白）。
+  - **docx**：手写 OOXML 三件套（`[Content_Types].xml` / `_rels/.rels` / `word/document.xml`），零新依赖；每个段落一个
+    `w:p`，标题用 `w:pStyle w:val="Heading1"` 且同文档定义 styles；XML 转义 `& < > " '`，剔除 `\u0000-\u0008\u000B\u000C\u000E-\u001F`
+    与孤立代理项。
+  - **pdf**：`android.graphics.pdf.PdfDocument`（API 19+，仓库 minSdk 26）；A4 595x842pt、页边距 48pt、正文 11sp 自动分页，
+    每页页脚 `第 n / N 页`；写完 `close()` 后 `File.length() > 0` 且头 5 字节 `%PDF-`。
+  文件名 `<yyyyMMdd>-<title 清洗后前 20 字>-v<n>.{txt,docx,pdf}`，清洗规则：去 `\/:*?"<>|`、连续空白压一个、空标题用 `dream`。
+
+- §0.3 落点与分享（D339）：用 `MediaStore.Downloads` 写入 `Download/DreamKeeper/`（API 29+ 无需权限、不新增 FileProvider、
+  不改 manifest）；`ExportResult(uri, displayName, bytes)`；`ExportSheet` 三个按钮 + 成功后一行「已保存到 下载/DreamKeeper/<名>」
+  + 「分享」按钮（`ACTION_SEND` + `FLAG_GRANT_READ_URI_PERMISSION`）。失败给可读文案（磁盘满/无存储/未生成小说稿），不静默吞。
+
+- §0.4 导出闸门（D342）：只有 `resolveFinalNovel != null` 或 `faithfulText ?: rawTranscript` 非空才允许导出；正文为空 →
+  `ExportSheet` 按钮禁用 + 一行「这篇还没有可导出的正文」。导出的 docx/txt 正文必须与详情页当前显示**逐字相同**（同一函数取文），
+  这是 E2E 断言的锚。
+
+- §0.5 `scripts/check-export.py`（纯标准库）：
+  - `--txt <f> --expect-sha <sha>`：字节 sha256 比对 + 无 BOM + `\r` 计数 0；
+  - `--docx <f> --expect <json>`：zip 三件齐全、`word/document.xml` 可被 `xml.etree` 解析、抽出的 `w:t` 串接 == 期望正文
+    （逐字，含标点与换行归一）、无非法控制字符、`_rels` 关系完整；
+  - `--pdf <f>`：头 `%PDF-`、尾 200 字节内 `%%EOF`、`/Type /Page` 计数 ≥1、`/Type /Pages` 存在、字节数 > 2KB、无
+    `/Encrypt`；**不做像素级非空白判定**（D338：像素级要设备端 PdfRenderer，见 §0.6）。
+  - 三个子命令都 `RESULT: GREEN|RED` + 非零退出码约定，便于证据粘贴。
+
+- §0.6 端到端设备流程（真机/模拟器 emulator-5554，APK 用本次 `assembleDebug` 产物）：
+  1. 安装（`adb install -r`）→ `pm path` 拉 APK → 算 sha256 → 与 `aapt2 dump badging` 的包名/版本对齐；
+  2. 录制一条 8–15s 中文梦（真实 Mic 走 STT）→ 等 T0 原样稿出来（截 `p3-e2e-01-generated.png`）；
+  3. 手动点「小说化」→ 等新版本（截 `p3-e2e-02-novel.png`，含版本线与「补写 N 处」）；
+  4. 改稿一句（如「删掉最后一句」）→ 截新版本与对话气泡（`p3-e2e-03-revise.png`）；再发一句纯提问 → 截 ASK 气泡
+     （`p3-e2e-04-ask.png`，版本数不变）；
+  5. 选中 v2 → 截选中态与「当前 v2 · 已选中」（`p3-e2e-05-selected.png`）；
+  6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ `adb pull /sdcard/Download/DreamKeeper/` 三个文件；
+  7. pdf 用系统「文件」打开截图（`p3-e2e-07-pdf-open.png`）；打不开 → 记 PENDING 并在 FINAL-REVIEW 写明；
+  8. `adb shell run-as com.dreamkeeper cp databases/dreamkeeper.db /data/local/tmp/` 不行，用
+     `cmd /c "... exec-out run-as com.dreamkeeper cat databases/dreamkeeper.db > p3-e2e-08-db.db"`；同时拉 `-wal/-shm` 仅用于
+     本地校验、不入库（D279 口径）；
+  9. `check-cost.py --db-copy p3-e2e-08-db.db --expect-attempts <脚本自己数>` → 断言 `mismatches=0` 且 `failed=<N>`
+     与 `llm_calls` 里 `error IS NOT NULL` 行数一致；每个 error 行 `cost==0 && usageJson IS NULL`；
+  10. 同一批导出的 txt/docx/pdf 跑 `check-export.py` 三个子命令 + `scripts/check-faithful-gates.py`（A1–A21 里与生成相关的项）
+      + `check-near-white.ps1 -TopOffset 100 -MaxRatio 0` 扫全部截图。
+
+- §0.7 验收清单（每项一行结论 + 证据文件）：A1 生成链路（T0 原样稿真实入库）；A2 五闸门全绿批次；A3 版本线/选中/撤回；
+  A4 ASK 不建版；A5 导出三格式可打开；A6 成本复算 `mismatches=0` + `failed=N`；A7 失败行记账（`error`/`cost==0`/`usageJson NULL`）；
+  A8 提示词指纹与三件 sha 一致；A9 Key 只在 Keystore（复用 Plan 2 证据 + 本轮 review）；A10 无新依赖（`libs.versions.toml` 未增）；
+  A11 表数 9 / `user_version=2` 不被 Task 10 改动；A12 列表页仍显示原样稿（D332 知情）；A13 导出文件名清洗；A14 大字体下输入条不被键盘遮挡；
+  A15 全程无崩溃（logcat `FATAL EXCEPTION` 计数 0）；A16 证据头三行齐全且 sha 可复算；A17 复跑命令逐条可执行；
+  A18 PENDING 清单与理由；A19 计划 §9 偏差全部有 D 号；A20 看板 10/10 与验收段；A21 FINAL-REVIEW 结论可被第三方复现。
+
+- §0.8 `docs/evidence/plan3/FINAL-REVIEW.md` 结构固定六节：结论（Plan 3 是否可交付）→ 交付物与提交链 → 证据索引（文件 ↔ 断言）→
+  偏差索引（D275–D343）→ PENDING 与理由 → 复跑命令（逐条可粘贴）。`ACCEPTANCE.md` 的 `## 3d` 只放一张表：能力 / 证据文件 / 结论。
+
+- Expected：`TxtExporterTest` / `DocxExporterTest` / `ExportNamingTest` 全绿（JVM，无设备）；全量 **38 类 / 356 例** 0 失败
+  （344 + 12）；设备端三格式文件全部 `check-export.py` GREEN；`check-cost.py --db-copy` `mismatches=0` 且 `failed=N`；
+  截图全部 `nearWhite=0`；`FINAL-REVIEW.md` 六节齐全、A1–A21 逐项有结论；证据首三行绑定本次 APK sha 与设备时间。
 
 ## 9. 偏差登记（从 D218 起）
 
@@ -818,6 +877,13 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D335 | T9-6：6 个快捷按钮点一下填入输入框（空则填、非空则末尾「，」追加），可编辑；撤回 = 选中上一版，不删版本行 | 设计 §6.3「点一下填入输入框，可再编辑」；删版本行会破坏 `(dreamId, version)` 唯一序与 export 引用 |
 | D336 | T9-7：Task 9 只做 JVM 证据（8+2 例）；设备截图与「正在改」瞬态归 Task 10 端到端 | ASK 是模型概率行为、瞬态是毫秒级，设备上无法稳定复现；端到端真机流程（录制→生成→改稿→选版→导出）在 Task 10 一次取证更可信，也与 README 的 APK sha 首三行口径一致 |
 | D337 | T9-8：Task 10 Files 补 `scripts/check-cost.py`，Expected 补 `failed=N` 与 error 行断言 | D316 已要求失败行落库；现有 `check-cost.py:60` 对未知 `formulaVersion` 直接 exit 2，不改脚本会在 Task 10 必红；只断 `mismatches=0` 会把 error 行漏成假绿 |
+
+| D338 | T10-1：PDF 验收只做结构级（头/尾/页数/非加密/字节数），不做像素级非空白；视觉校验用设备「文件」打开截图，打不开记 PENDING | 像素级要设备端 `PdfRenderer`，Robolectric 对 `PdfDocument` 写真实 PDF 字节的支持不确定；与其假装绿，不如把「能打开」降级成可判的结构断言 + 一张截图 |
+| D339 | T10-2：导出落点 `MediaStore.Downloads` → `Download/DreamKeeper/`，不新增 FileProvider、不改 manifest | API 29+ 自己插入的 MediaStore 行无需权限；`adb pull /sdcard/Download/...` 直接可取，比 `run-as` 方便；新增 provider 要动 manifest + res/xml，Task 10 白名单尽量别碰 |
+| D340 | T10-3：docx 手写三件套 OOXML，零新依赖（不引 poi/docx4j） | Plan 3 全局约束「零新依赖」；仓库已有 zip 能力（`java.util.zip`），三件套足以生成可打开的 docx |
+| D341 | T10-4：txt 用 UTF-8 无 BOM + `\n`；文件名清洗规则写死 | Windows 记事本打开无 BOM 的 UTF-8 中文会猜 GBK，但 Plan 3 只在 Android/PC 现代查看器验收；BOM 会破坏 `expect-sha` 逐字比对，所以选择无 BOM + sha 锚 |
+| D342 | T10-5：导出正文统一取 `resolveFinalNovel`（selected ?: maxVersion），无小说稿退回 `faithfulText ?: rawTranscript` 且文件名带 `-raw` | 详情页 Task 9 已按此契约显示；导出若取 `dreams.novelText` 会导出「最新生成版」而不是用户选中的版本，与 D332 的已知偏差口径冲突 |
+| D343 | T10-6：A1–A21 与五闸门、三个校验脚本对**同一批**导出文件各跑一次，结果写进 FINAL-REVIEW 的同一张表 | 分开跑会出现「脚本绿但对象不是同一份文件」；同批跑才能让第三方只凭证据目录复现结论 |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
