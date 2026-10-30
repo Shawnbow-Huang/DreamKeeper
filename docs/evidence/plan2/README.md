@@ -49,6 +49,33 @@ cmd /c "`"$adb`" exec-out run-as com.dreamkeeper cat files/audio/<id>.wav > docs
 & $adb shell appops set com.dreamkeeper RECORD_AUDIO ignore
 ```
 
+## 模拟器音频前提（先读这一条再看 W3）
+
+- 本机 emulator 37.2.12.0 的 `-help` 原文：`-allow-host-audio  Allows sending of audio from audio input devices. Otherwise, zeroes out audio.`
+  → **默认输入是零**，「文件有字节」不等于「录到声音」。
+- AVD `Medium_Phone_API_37.0` 的 `config.ini` 里是 `hw.audioInput=yes`，但**仓库里没有任何地方记录模拟器启动命令行**，
+  所以「这台机上没加 `-allow-host-audio` 就会灌零」目前是**假设**，不是实测事实。要断言它，就把启动命令记进本轮证据。
+- 因此在没有宿主麦克风证据时，W3 只能写 `信号来源 = seam`（全零 PCM，`RMS level dB: -inf`），
+  **不许**写成「录音功能正常」。反过来，`-inf` 也不能证明 App 坏了——它证明的是这一路没有真实声源。
+
+## 三路权限证据（三条路必须分开写，不许混）
+
+| 路径 | 前置 | 命令 | 期望（判据） | 不能下的结论 |
+|---|---|---|---|---|
+| **A 录制中被吊销** | 正在录音，字节在涨 | `pm revoke com.dreamkeeper android.permission.RECORD_AUDIO` | 11+ 会**直接杀进程**：`pidof` 前后不同或为空、`dumpsys activity services` 里服务消失、两次 `stat` 字节冻结、WAV 头仍是占位（`offset 40..44 == FF FF FF FF`，留给 Task 6 扫描修复） | 不能宣称「App 优雅处理了吊销」——进程被杀时 App 没有机会反应 |
+| **B 先吊销再从页面起** | 已吊销，UI 可操作 | 同上吊销后 `am start` 进录音页并按住 3 秒 | `snapshot.fail("没有录音权限")` → `stopSelf()`：无通知、无服务残留、无 `files/audio/` 新文件、`logcat` 无 `FATAL` | 不能拿这条路证明 A 的行为 |
+| **C appops 软拒** | 权限仍是 granted | `appops set com.dreamkeeper RECORD_AUDIO ignore` 后录音 | **待实测**：可能走到 `AudioRecord` 创建/启动失败（`UnsupportedOperationException`/`SecurityException`/静音），也可能返回全零 | 现在**不许**在验收文档里给它写判据；先跑一次把异常类型记下来，再回来补 |
+
+## 前台服务四连判据（Task 3 的 3.7，抄自计划）
+
+1. `dumpsys activity services com.dreamkeeper` 同一段：`started=true` **且** `isForeground=true` **且** `foregroundId=42` **且**类型含 `microphone`。
+2. `dumpsys notification --noredact`：本包 `id=42`、`flags` 含 `0x40`（FLAG_FOREGROUND_SERVICE）、ongoing。
+3. 两次 `run-as com.dreamkeeper stat -c %s files/audio/<id>.wav` 间隔 ≥3 s，`Δbytes/Δt` 在 **32000 B/s ±2%**——这是「AudioRecord 真的在按硬件节奏供数」的唯一自动判据。
+4. `logcat -d` 里 `FATAL` / `ForegroundServiceStartNotAllowed` / `DidNotStartInTime` 全空。
+
+跑法固定为：`am start -n com.dreamkeeper/.MainActivity` → 点「说梦」→ `input swipe 540 1600 540 1600 3000`（或手按住 3 秒）。
+**不要**用 `am start-foreground-service`（shell 是后台，14+ 必抛 `ForegroundServiceStartNotAllowedException`），证据目录里出现这条命令的失败日志就算违规。
+
 ## 硬规矩
 
 - **不许伪造转写成功**：系统识别器不可用时，证据就是「探测结果 + FAILED 状态 + 手动补字可用」，写成「转写成功」等于造假。
