@@ -246,6 +246,13 @@ def index_rows(table, data):
 
 
 def diff(before, after):
+    pair = (before["user_version"], after["user_version"])
+    if pair == (2, 3):
+        return diff_2_3(before, after)
+    return diff_1_2(before, after)
+
+
+def diff_1_2(before, after):
     problems = []
     notes = []
 
@@ -350,6 +357,94 @@ def diff(before, after):
 
     lines.append(f"integrity_check={before['integrity_check']} -> {after['integrity_check']}")
     lines.append(f"foreign_key_check_rows={before['foreign_key_check_rows']} -> {after['foreign_key_check_rows']}")
+
+    return lines, problems, notes
+
+
+
+def diff_2_3(before, after):
+    """v2 -> v3：只加 dreams.transcriptMs，并校验回填口径。"""
+    problems = []
+    notes = []
+
+    if before["user_version"] != 2 or after["user_version"] != 3:
+        problems.append(
+            f"user_version 必须 2→3，实际 {before['user_version']}→{after['user_version']}"
+        )
+    for side, payload in (("迁移前", before), ("迁移后", after)):
+        if payload["integrity_check"].lower() != "ok":
+            problems.append(f"{side} integrity_check={payload['integrity_check']}")
+        if payload["foreign_key_check_rows"] != 0:
+            problems.append(f"{side} foreign_key_check 有行（v3 也不许加外键）")
+
+    before_tables = set(before["tables"])
+    after_tables = set(after["tables"])
+    missing = before_tables - after_tables
+    if missing:
+        problems.append(f"升级后丢了表: {sorted(missing)}")
+    added = after_tables - before_tables
+    if added:
+        problems.append(f"v2→v3 不许新增表，实际 {sorted(added)}")
+
+    business = [t for t in sorted(before_tables & after_tables) if t not in FRAMEWORK_TABLES]
+    lines = [f"pair=2->3 business_tables={len(business)}"]
+
+    for table in business:
+        b = before["table_data"][table]
+        a = after["table_data"][table]
+        b_cols, a_cols = b["columns"], a["columns"]
+        if table == "dreams":
+            extra = [c for c in a_cols if c not in b_cols]
+            if extra != ["transcriptMs"]:
+                problems.append(f"dreams 新增列必须恰好是 ['transcriptMs']，实际 {extra}")
+            if [c for c in a_cols if c in b_cols] != b_cols:
+                problems.append("dreams 老列顺序/集合被改了")
+        elif a_cols != b_cols:
+            problems.append(f"{table} 列集合被改了: {b_cols} → {a_cols}")
+
+        if b["row_count"] != a["row_count"]:
+            problems.append(f"{table} 行数变了: {b['row_count']} → {a['row_count']}")
+            lines.append(f"{table} rows={b['row_count']}->{a['row_count']} FAIL")
+            continue
+
+        if set(b["indexes"]) != set(a["indexes"]):
+            problems.append(f"{table} 索引集合变了: {sorted(b['indexes'])} → {sorted(a['indexes'])}")
+
+        b_rows = index_rows(table, b)
+        a_rows = index_rows(table, a)
+        equal = 0
+        for key, brow in b_rows.items():
+            arow = a_rows.get(key)
+            if arow is None:
+                problems.append(f"{table} 丢行: {key}")
+                continue
+            for col in b_cols:
+                if brow[col] != arow.get(col):
+                    problems.append(f"{table} 列值变了: {key} {col}: {brow[col]!r} → {arow.get(col)!r}")
+            if table == "dreams":
+                raw_ok = bool((brow.get("rawTranscript") or "").strip())
+                expected = (
+                    brow.get("rawAudioMs")
+                    if brow.get("rawAudioPath") not in (None, "")
+                    and brow.get("rawAudioMs") is not None
+                    and brow.get("transcriptStatus") == "OK"
+                    and raw_ok
+                    else 0
+                )
+                if arow.get("transcriptMs") != expected:
+                    problems.append(
+                        f"dreams transcriptMs 回填错: {key} 期望 {expected} 实际 {arow.get('transcriptMs')}"
+                    )
+            equal += 1
+        lines.append(f"{table} rows={a['row_count']} equal={equal}")
+
+    if before.get("identity_hash") == after.get("identity_hash"):
+        problems.append("identity_hash 没变：schema 没换（或迁移根本没跑）")
+    lines.append(f"identity_hash {before.get('identity_hash')} -> {after.get('identity_hash')}")
+    lines.append(f"integrity_check={before['integrity_check']} -> {after['integrity_check']}")
+    lines.append(
+        f"foreign_key_check_rows={before['foreign_key_check_rows']} -> {after['foreign_key_check_rows']}"
+    )
 
     return lines, problems, notes
 
