@@ -307,6 +307,32 @@ class RecorderCoreTest {
     }
 
     @Test
+    fun `sync failure still finishes the header`() {
+        val clock = FakeClock(0L)
+        val sink = RecordingSink(failOnSync = true)
+
+        val stop = RecorderCore(ScriptedSource(clock, Read.Bytes(BLOCK, 0x11)), sink, { clock.now })
+            .run(0L) { _, _ -> }
+
+        assertEquals("sync 失败也要报 error", "error", stop.reason)
+        assertEquals("头必须回填：finish 仍要调一次", 1, sink.finishCount)
+        assertEquals("真实字节照常记账", BLOCK.toLong(), stop.bytes)
+    }
+
+    @Test
+    fun `finish failure ends with error and keeps real bytes`() {
+        val clock = FakeClock(0L)
+        val sink = RecordingSink(failOnFinish = true)
+
+        val stop = RecorderCore(ScriptedSource(clock, Read.Bytes(BLOCK, 0x11)), sink, { clock.now })
+            .run(0L) { _, _ -> }
+
+        assertEquals("error", stop.reason)
+        assertEquals("finish 抛异常时 sync 已经做过一次", 1, sink.syncCount)
+        assertEquals(BLOCK.toLong(), stop.bytes)
+    }
+
+    @Test
     fun `source read exception ends with error`() {
         val clock = FakeClock(0L)
         val sink = RecordingSink()
@@ -393,6 +419,8 @@ private class ScriptedSource(
 private class RecordingSink(
     private val initialBytes: Long = 0L,
     private val failOnWrite: Boolean = false,
+    private val failOnSync: Boolean = false,
+    private val failOnFinish: Boolean = false,
 ) : PcmSink {
     val data = ByteArrayOutputStream()
     val writeLengths = mutableListOf<Int>()
@@ -414,12 +442,14 @@ private class RecordingSink(
     }
 
     override fun sync() {
+        if (failOnSync) throw java.io.IOException("模拟 sync 失败")
         syncCount++
     }
 
     override fun bytesWritten(): Long = initialBytes + appended
 
     override fun finish() {
+        if (failOnFinish) throw java.io.IOException("模拟 finish 失败")
         finishCount++
     }
 }

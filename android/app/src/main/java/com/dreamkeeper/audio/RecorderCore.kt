@@ -69,8 +69,14 @@ class RecorderCore(
 
         fun finishWith(reason: String): RecorderStop {
             var finalReason = reason
+            // sync 与 finish 分开兜：sync 失败（磁盘满、IO 错）也必须尝试 finish 回填头，
+            // 否则文件永远停在 0xFFFFFFFF 占位头，只能靠启动扫描补救。
             try {
                 sink.sync()
+            } catch (e: Exception) {
+                finalReason = REASON_ERROR
+            }
+            try {
                 sink.finish()
             } catch (e: Exception) {
                 finalReason = REASON_ERROR
