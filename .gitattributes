@@ -7,3 +7,8 @@ docs/evidence/plan3/*.json text eol=lf
 # 提示词以文件 sha256 为唯一真源（D267/D285）：Task 6 的哈希断言必须在 fresh clone 里也成立。
 # 实测 core.autocrlf=true 且无此规则时，clone 出来的三份 md 会变 CRLF，sha256 全漂移（D284）。
 prompts/*.md text eol=lf
+
+# 证据 txt 会被 check-export 逐字节复跑（`\r` 计数必须为 0、EXPORT_SHA256 按 LF 字节计）：
+# 实测 fresh clone 后 p3-mig-00-red.txt 由 LF 变 CRLF、sha256 漂移（D377）。二进制证据不转换。
+docs/evidence/plan3/*.txt text eol=lf
+docs/evidence/plan3/*.db binary

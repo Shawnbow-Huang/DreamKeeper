@@ -722,6 +722,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   `test/.../export/TxtExporterTest.kt`、`test/.../export/DocxExporterTest.kt`、`test/.../export/ExportNamingTest.kt`、
   `llm/DeepSeekClient.kt`（D370：只加一行每次尝试的 logcat 日志，供 `failed=N` 独立对账）、
   `scripts/check-export.py`（新）、`scripts/check-cost.py`（D337/D366：必须支持 error 行；新增 `--require-rows` 硬门，
+  `.gitattributes`（D377：补 `docs/evidence/plan3/*.txt text eol=lf` 与 `*.db binary`；只加规则，不动已有条目）、
   输出 `failed=N` 与逐行 `[FAILED] <httpStatus> <error> cost=<n> usage=NULL|SET` 格式）、
   `docs/evidence/plan3/p3-export-*`、`docs/evidence/plan3/p3-e2e-*`、`docs/evidence/plan1/ACCEPTANCE.md` 追加 `## 3d 生成与成本证据表`、
   `docs/evidence/plan3/FINAL-REVIEW.md`、`docs/PROGRESS.md`。
@@ -782,7 +783,7 @@ T3  不调用模型                                   → faithfulText = rawTran
   5. 选中 v2 → 截选中态与「当前 v2 · 已选中」（`p3-e2e-05-selected.png`）。
   6. 导出三种格式 → 截导出成功态（`p3-e2e-06-export.png`）→ 等 MediaStore `IS_PENDING` 清（`ls -l` 见 3 文件且 size>0、
      间隔 2s 两次 `sha256sum` 稳定）→ 设备 `ls -l` + `sha256sum` → `adb pull /sdcard/Download/DreamKeeper/` 三件 →
-    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件原样存入 `docs/evidence/plan3/`（保留原文件名，另记 `EXPORT_SHA256=`，第三方只凭仓库即可复跑 check-export）。
+    主机 `ls -l` + `sha256sum`，两侧逐行相等（「N files pulled」原文入库）；三个导出原件原样存入 `docs/evidence/plan3/`（保留原文件名，另记 `EXPORT_SHA256=`（按入库 blob 的 LF 字节计），第三方只凭仓库即可复跑 check-export）。
     同时贴 `SELECT novelSelectedVersion FROM dreams` 与 `SELECT version FROM novel_versions WHERE dreamId=…` 原始行，证明文件名里的 `-v<n>` 就是选中版（D373）。
   7. 系统「文件」打开 txt/docx 截图；pdf 打开态记 PENDING（AOSP 无 viewer），`p3-e2e-07-pdf-open.png` 若拍到则单独说明、
      **排除**在 nearWhite=0 之外（D359）。
@@ -996,6 +997,7 @@ T3  不调用模型                                   → faithfulText = rawTran
 | D374 | T10-24：docx 段映射定死（正文空行也生成空 `w:p`；头部第 4 行空行不单独成段，故**不进** docx 期望串，期望串 = 标题/日期/标签 + 正文），断言首段加粗 `<w:rPr><w:b/></w:rPr>`；pdf 补 `/BaseFont` 至少一处 | 不定义段映射会让「段数==期望行数」假绿/假红；头部空行若既不入段又留在期望串，字面实现必恒 RED；`/Contents` 非空会被页脚恒真满足 |
 | D375 | T10-25：§0.6 步骤 6 等 MediaStore `IS_PENDING` 清且 sha 稳定两次再 pull；每步当场抓 `adb shell date` 落 timeline；`adb logcat -d` 在 force-stop 后、重装/清空前抓全量 | MediaStore 未落盘会 pull 到半截文件；DEVICE_TIME 事后补会重演 Task 4 的「一批同值」；logcat 清了就再也拿不到 A15/A9 原文 |
 | D376 | T10-26：A5 的「txt/docx 设备可打开」开工前 5 分钟做查看器探针；PENDING 白名单只收环境限制，实现缺陷不许 PENDING | AOSP 镜像常常没有 txt/docx 查看器，当天才发现会让口径当场失效；PENDING 不设白名单会变成「红都记 PENDING」的后门 |
+| D377 | T10-27：`.gitattributes` 补 `docs/evidence/plan3/*.txt text eol=lf` 与 `docs/evidence/plan3/*.db binary`；Task 10 Files 白名单加 `.gitattributes`；`EXPORT_SHA256` 按入库 LF 字节计 | 实测 `core.autocrlf=true` 下 fresh clone 把 `p3-mig-00-red.txt` 转 CRLF、sha256 由 `f6992210…` 漂到 `f604be2c…`；导出 txt 入库后第三方 clone 必在上 `\r` 计数 0 / 逐字节比对 / `EXPORT_SHA256` 上 RED，A21 失效（本机自测会假绿） |
 
 > 规则：每发现一处与计划的偏离就追加一行；「原因」必须写能被别人复现的实测依据，并注明是「我以为的坑」还是「实测结论」。
 
