@@ -123,6 +123,10 @@
 | D507 | 2026-10-31 | T1 | `ApiKeyStore.save(key, provider = DEEPSEEK)`：key 在前、provider 带默认值 | 保 40+ 处旧调用点（含测试）零改动；`load/clear` 只有 provider 参数 |
 | D508 | 2026-10-31 | T1 | `AndroidKeystoreCipher.decrypt` 失败不再删除共用别名，只返回 null；坏 pref 由 store 单独清 | 别名被五家共用，原实现的 `deleteKey()` 会让一处坏密文连坐清掉所有 Key（P0 安全修复，Builder 预审） |
 | D509 | 2026-10-31 | T1 | T1 由 Lead 直接实施；设置页在 T4 前仍只操作 DeepSeek 默认槽 | 实施者 subagent 不可寻址、等待成本高于改动本身；本任务只动存储层，不改接线 |
+| D510 | 2026-10-31 | T2 | DeepSeek 不改成薄包装，继续用原 `DeepSeekClient`；新增 `ProviderChatClient` 只服务其余四家 | 请求体基线是历史契约，合并重构的回归风险高于 ~300 行重复；两条路径都由测试钉住 |
+| D511 | 2026-10-31 | T2 | MiniMax 的 `base_resp` 假成功在**状态判定阶段**翻成 `BAD_REQUEST`（不重试）；解析阶段再兜一层 | 若只在解析处翻，`attempts` 会先被记为成功行，与 `llm_calls` 口径冲突 |
+| D512 | 2026-10-31 | T2 | Qwen 的 `HIGH`/`MAX` 都映射到 `xhigh`；`LOW→low` | Qwen 官方 effort 只有 low/medium/xhigh，没有 high/max；发非法枚举会被服务端拒 |
+| D513 | 2026-10-31 | T2 | T2 由 Lead 直接实施；`providerClients` 只在容器建映射，生成链仍走 DeepSeek | 派工/等待成本高于本层改动；按 provider 派发属于 T4/T5 的接线范围 |
 
 ## §0.10 顺序与闸门
 
@@ -219,3 +223,10 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 契约：DeepSeek 沿用 `api_key_packed`（零迁移）；其他四家 `api_key_packed.<wire>`；只读自己；clear 只清自己；坏密文只清自己。
 - P0：共用别名不再被删（D508）。
 - 结论：通过。PENDING：真 Keystore 设备侧（Robolectric 无 shadow）、五家 UI（T4）。
+
+### T2 Provider 传输层（Lead，2026-10-31）
+- 交付：`llm/ProviderSpec.kt`（ProviderSpec/ModelSpec/ThinkingStyle/Registry）、`llm/ProviderChatClient.kt`、`ChatModels.kt`（provider/maxTokens）、`di/AppContainer.kt`（providerClients 映射）、测试三类 16 例、`docs/evidence/plan6/p6-llm-01-providers.txt`。
+- 独立复跑：`--tests "com.dreamkeeper.llm.*"` BUILD SUCCESSFUL 54s（含 DeepSeek 基线 4 例）；全量 62→68s，XML **57 类 469 例 0 失败**。
+- 契约：MiMo 不发 effort；MiniMax 永不发 response_format；Qwen 用 `enable_thinking` 且 `HIGH/MAX→xhigh`；GLM/DeepSeek 用 thinking 对象；`max_tokens` 仅显式传入时出现；未知模型回落默认。
+- 错误：MiniMax 200 假成功→BAD_REQUEST 且 attempts=1；401 单次；429 用满预算；空 content/非 JSON 不重试。
+- 结论：通过。PENDING：五家真连通、强制思考模型、地域/端点实测。

@@ -1,0 +1,44 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-31T15:08:45Z
+REPLAY=cd android && ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.llm.*" --rerun-tasks --console=plain
+REPLAY_FULL=cd android && ./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks --console=plain
+
+## 这份证据回答什么
+五家供应商能不能共用同一套「OpenAI 兼容」传输层，同时让每家的方言差异（思考开关、effort、JSON 模式、
+假成功、usage 形状）都落在可断言的纯函数里？DeepSeek 的请求体有没有被改坏？
+
+## 设计（Plan 6 §0.5）
+- `ProviderSpec` / `ModelSpec` 用能力位描述每家：`thinkingStyle`（thinking 对象 / MiniMax adaptive / Qwen enable_thinking）、
+  `supportsEffort`、`supportsJsonMode`、`supportsResponseFormat`、`effortWire` 映射。
+- 非 DeepSeek 走 `ProviderChatClient`；DeepSeek **继续走 `DeepSeekClient` 原实现**，由
+  `p6-contract-01-deepseek-baseline.json` 的 4 组请求体基线钉住（本仓库的 `DeepSeekRequestBaselineTest` 4/4 仍绿）。
+- `ChatRequest` 新增 `provider`/`maxTokens`，均带默认值：DeepSeek 既有请求体一个字节不变。
+
+## 五家请求体要点（`ProviderBodiesTest`，7 例）
+| 家 | thinking | effort | response_format | temperature |
+| --- | --- | --- | --- | --- |
+| DeepSeek | `thinking.type` | 支持（low/high/max） | 支持 | 仅关思考 |
+| MiMo | `thinking.type` | 不发（无文档支持） | 支持 | 仅关思考 |
+| MiniMax | `thinking.type=adaptive/disabled` | 不发 | **永不发** | 仅关思考 |
+| Qwen | `enable_thinking: true/false` | `high→xhigh`、`max→xhigh` | 支持 | 仅关思考 |
+| GLM | `thinking.type` | 支持 | 支持 | 仅关思考 |
+
+另断言：`max_tokens` 只在显式传入时出现；未知模型回落到该家默认模型。
+
+## 错误与 usage（`ProviderErrorsTest` 6 例 + `ProviderUsageTest` 3 例）
+- **MiniMax HTTP 200 + `base_resp.status_code != 0`** 必须翻成 `BAD_REQUEST` 且**不重试**（attempts=1）。
+- 401/403 → `AUTH`（只发一次）；429 → `RATE_LIMIT`（用满重试预算）；5xx → `SERVER`；4xx → `BAD_REQUEST`。
+- 空 content → `EMPTY_CONTENT` 不重试；jsonMode 下非 JSON → `INVALID_JSON` 不重试。
+- usage 三种形状：DeepSeek `prompt_cache_hit/miss`、OpenAI `prompt_tokens_details.cached_tokens`（命中=缓存，未命中=其余）、
+  缺字段时回 0；`reasoning_tokens` 既认顶层也认 `completion_tokens_details`。
+
+## 全量
+- `--tests "com.dreamkeeper.llm.*"` BUILD SUCCESSFUL in 54s（含 DeepSeek 基线 4 例与既有 DeepSeekClientTest 8 例）。
+- 全量 `--rerun-tasks` BUILD SUCCESSFUL in 1m 8s；XML 重数 **classes=57 tests=469 failures=0 errors=0 skipped=0**
+  （基线 54/453 + 3 类 16 例）。
+
+## 未覆盖（写清楚）
+- 五家**真实连通** PENDING（无真实 Key；端点/模型见 `p6-contract-00-spec.txt`，标「需实测确认」）。
+- 强制思考模型（MiniMax-M3.1-Flash、GLM-5.3）不在 v1；`ModelSpec.forcedThinking` 已留位但本任务无模型使用。
+- Qwen 的 Key 与地域绑定、MiniMax 的 base URL 两套候选，都只有实测能定；本层只证「按 spec 发请求」。
+- 流式、模型自动发现、自定义 BaseUrl 不在本任务（D499）。

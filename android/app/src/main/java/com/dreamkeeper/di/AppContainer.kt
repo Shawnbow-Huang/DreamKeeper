@@ -18,6 +18,9 @@ import com.dreamkeeper.data.security.KeystoreApiKeyStore
 import com.dreamkeeper.llm.AssetPriceCardSource
 import com.dreamkeeper.llm.AssetPromptSource
 import com.dreamkeeper.llm.DeepSeekClient
+import com.dreamkeeper.llm.ProviderChatClient
+import com.dreamkeeper.llm.ProviderId
+import com.dreamkeeper.llm.ProviderRegistry
 import com.dreamkeeper.llm.GenerationOrchestrator
 import com.dreamkeeper.llm.LlmClient
 import com.dreamkeeper.llm.PriceCard
@@ -190,6 +193,23 @@ class AppContainer(
 
     /** DeepSeek 客户端（baseUrl/超时/RetryPolicy 都用 Task 3 的默认值）。 */
     val llmClient: LlmClient by lazy { DeepSeekClient() }
+
+    /**
+     * 五家客户端（Plan 6 T2）。
+     *
+     * DeepSeek 复用 [llmClient]（请求体基线不许回归）；其他四家走 spec 驱动的
+     * [ProviderChatClient]。调用方按 `ChatRequest.provider` 取；本任务只建映射，
+     * 真正按 provider 派发在 T4/T5 接进生成链。
+     */
+    val providerClients: Map<ProviderId, LlmClient> by lazy {
+        ProviderId.entries.associateWith { provider ->
+            if (provider == ProviderId.DEEPSEEK) {
+                llmClient
+            } else {
+                ProviderChatClient(ProviderRegistry.of(provider))
+            }
+        }
+    }
 
     /**
      * 生成档位（模型 + 小说化思考档位，Plan 5 Task 2）。

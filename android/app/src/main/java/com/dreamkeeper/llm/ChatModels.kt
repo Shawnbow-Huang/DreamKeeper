@@ -50,6 +50,16 @@ data class ChatRequest(
      * 失败对账靠它把 logcat 的 failed 行限制在生成链（改稿不记账，D387）。
      */
     val kind: String = "",
+    /**
+     * Plan 6：这条请求发给哪家供应商。默认 DeepSeek，旧的 DeepSeek 客户端不看这个字段，
+     * 由 `ProviderRouter` / 生成链在派发时使用。
+     */
+    val provider: ProviderId = ProviderId.DEEPSEEK,
+    /**
+     * D504：`max_tokens` 上限，`null` 表示不发。测试连接用 `1` 控制消耗；
+     * DeepSeek 既有请求体不传这个字段，所以基线不变。
+     */
+    val maxTokens: Int? = null,
 ) {
     override fun toString(): String =
         "ChatRequest(model=$model, messages=${messages.size} 条, thinking=$thinking, " +
