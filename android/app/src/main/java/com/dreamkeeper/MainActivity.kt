@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                     layoutPrefs = container.layoutPrefs,
                     // Key 的加密存储同理：设置页只认容器里的这一份
                     apiKeyStore = container.apiKeyStore,
+                    generationPrefs = container.generationPrefs,
                     // 标签页的重命名/删除走 DAO；合并仍在仓库层（要动关联表，必须事务）
                     tagDao = container.tagDao,
                     session = container.recordingSession,

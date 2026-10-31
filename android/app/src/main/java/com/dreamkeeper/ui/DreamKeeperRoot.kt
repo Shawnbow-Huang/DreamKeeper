@@ -39,6 +39,7 @@ import com.dreamkeeper.audio.WavStore
 import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.ApiKeyStore
+import com.dreamkeeper.data.settings.GenerationPrefs
 import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.service.RecordingStarter
@@ -80,6 +81,8 @@ fun DreamKeeperRoot(
     layoutPrefs: LayoutPrefs,
     // Key 的加密存储由容器注入：设置页保存/读取都走它，界面不碰 Keystore
     apiKeyStore: ApiKeyStore,
+    /** 生成档位（Plan 5 Task 2）：只给设置页读写；容器里的编排器自己现取。 */
+    generationPrefs: GenerationPrefs,
     tagDao: TagDao,
     session: RecordingSession,
     audioStore: WavStore,
@@ -206,7 +209,7 @@ fun DreamKeeperRoot(
             }
             // 设置页同理不进底部栏：showBottomBar 只按 calendar / library 等值判定
             composable(DreamRoute.Settings.route) {
-                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore) }
+                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore, generationPrefs) }
                 SettingsScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable("detail/{dreamId}") { backStackEntry ->

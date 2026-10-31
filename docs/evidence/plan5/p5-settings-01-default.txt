@@ -1,0 +1,18 @@
+APK_SHA256=dfe2655580115dcb (debug T2 构建)
+DEVICE_TIME=Sat Oct 31 14:03:48 GMT 2026（本机 CST 22:03:48）
+REPLAY=adb -s emulator-5554 shell am start -W -n com.dreamkeeper/.MainActivity ; adb shell input tap 1020 130 ; adb exec-out screencap -p > p5-settings-01-default.png
+
+PNG_SHA256=718bfdb3fc659dc7
+PNG_BYTES=153137
+NEAR_WHITE_245=0.0000%（TopOffset=100，排除状态栏；全图 1080x2400）
+NEAR_WHITE_250=0.0000%（同上）
+MEAN_Y=0.0823
+P99_LUMA=0.5806
+
+[画面事实]
+设置页：DeepSeek Key 卡（已保存，只显示 sk-…2605 后四位）+「生成」卡（小说化模型：DeepSeek Flash / DeepSeek V4 Pro；小说化思考：关/低/高/最高）+ 说明行。
+01-default：Flash 与「高」为 Ember 描边选中态（默认档位）。
+
+[读法]
+截图证明档位 UI 与「选中即持久化」；请求体是否随档位变化由 p5-settings-00-tiers.txt 的 JVM 断言证明，两者互不替代。
+状态栏像素属系统 UI，nearWhite 以 TopOffset=100 口径计 0。

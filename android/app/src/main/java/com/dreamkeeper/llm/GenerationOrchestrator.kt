@@ -71,7 +71,11 @@ class GenerationOrchestrator(
     private val id: () -> String = { UUID.randomUUID().toString() },
     private val gate: (String, String, GateMode) -> GateReport = FaithfulGates::check,
     private val onProgress: (GenerationKind, GenerationStage, Int) -> Unit = { _, _, _ -> },
-    private val model: String = DEFAULT_MODEL,
+    /**
+     * 生成档位（Plan 5 Task 2）：每次请求现取，设置页改完立即生效。
+     * 默认值 = flash + 小说化思考高。
+     */
+    private val options: () -> GenerationOptions = { GenerationOptions() },
     private val apiKey: () -> String = { "" },
     /** 标签名列表（§0.5 的「标签 / 选填」槽）；空列表表示不传这一槽。 */
     private val tagsFor: suspend (String) -> List<String> = { emptyList() },
@@ -218,7 +222,7 @@ class GenerationOrchestrator(
             run,
             GenerationKind.FAITHFUL,
             ChatRequest(
-                model = model,
+                model = options().model,
                 messages = listOf(ChatMessage("user", rendered.text)),
                 thinking = Thinking.DISABLED,
                 temperature = temperature,
@@ -288,15 +292,20 @@ class GenerationOrchestrator(
             ),
         )
 
+        // 设计 §9：小说化默认「思考高、不发 temperature」；只有用户把档位调到「关」时
+        // 才退回 temperature=0.9（思考开着时服务端会忽略该字段，发出去只会让请求体难以断言）。
+        val cfg = options()
+        val level = cfg.novelThinking
         val response = try {
             chat(
                 run,
                 GenerationKind.NOVEL,
                 ChatRequest(
-                    model = model,
+                    model = cfg.model,
                     messages = listOf(ChatMessage("user", rendered.text)),
-                    thinking = Thinking.DISABLED,
-                    temperature = 0.1,
+                    thinking = level.thinking,
+                    effort = level.effort,
+                    temperature = if (level.effort == null) NOVEL_TEMPERATURE_NO_THINKING else null,
                     jsonMode = true,
                     apiKey = apiKey(),
                     kind = "NOVEL",
@@ -412,7 +421,7 @@ class GenerationOrchestrator(
         } else {
             price(
                 card = priceCard,
-                model = model,
+                model = options().model,
                 hit = usage.promptCacheHitTokens,
                 miss = usage.promptCacheMissTokens,
                 out = usage.completionTokens,
@@ -425,7 +434,7 @@ class GenerationOrchestrator(
             id = id(),
             dreamId = run.dreamId,
             kind = kind.name,
-            model = model,
+            model = options().model,
             cacheHitTokens = if (failed) null else usage?.promptCacheHitTokens?.toInt(),
             cacheMissTokens = if (failed) null else usage?.promptCacheMissTokens?.toInt(),
             outputTokens = if (failed) null else usage?.completionTokens?.toInt(),
@@ -536,7 +545,7 @@ class GenerationOrchestrator(
         // Plan 4 T5：版本形如 v2 / v2.1，主版本号进 Int 列（v2.1 -> 2）。
         promptVersion = promptVersion.removePrefix("v").substringBefore('.').toIntOrNull() ?: 0,
         promptHash = promptHash,
-        model = model,
+        model = options().model,
         reasoningEffort = null,
         createdAt = clock(),
     )
@@ -645,7 +654,10 @@ class GenerationOrchestrator(
     private class ChangeLog(val json: String, val kept: Int, val dropped: Int)
 
     companion object {
-        const val DEFAULT_MODEL = "deepseek-flash"
+        const val DEFAULT_MODEL = GenerationOptions.FLASH
+
+        /** 思考关掉时小说化的温度（设计 §9 的 0.9）。 */
+        const val NOVEL_TEMPERATURE_NO_THINKING = 0.9
 
         /** 同档 HTTP 重试预算：只对 [LlmException.Kind.isRetryable] 生效，用完即失败、不降档。 */
         const val MAX_ATTEMPTS_PER_STAGE = 2

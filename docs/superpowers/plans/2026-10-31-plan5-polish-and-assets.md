@@ -139,6 +139,10 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 | D468 | 2026-10-31 | T0 | 资产定为 1 个矢量图标前景 + 4 张空态插画（库/日/小说/素材位），页头纹理不做 | Builder/UI 预审：纹理是 P2 可选项；五处空态点收敛为四处，搜索/标签保持纯文字（低刺激） |
 | D469 | 2026-10-31 | T0 | Voice AI 的 A1–A3 列为 Plan 5 P0 实现缺陷（不许 PENDING），A4 最小守卫同期做 | 三者都会让「半截原文」进入生成或尾巴永久丢失，属实现缺陷而非环境限制 |
 | D470 | 2026-10-31 | T0 | 任务重排为 T0–T8（原 T0–T6 六任务 → 九任务），测试终态按 52 类/440 例对账 | 新增档位 UI（T2）与可靠性（T5）；原 T1–T6 映射为 T1/T3/T4/T6/T7/T8 |
+| D471 | 2026-10-31 | T2 | 改稿（revise）思考档位保持 DISABLED + 0.3/0.0，未按 §0.6/设计「固定 LOW」改；模型仍跟随设置 | `ReviseOrchestratorTest:198-199` 断言 0.3/0.0，改 LOW 会同时废掉两条断言并改写「温度 0.0 重试」的确定性链；本任务只做需求 #1 的档位 UI，改稿采样参数另立评审 |
+| D472 | 2026-10-31 | T2 | T2 由 Lead 直接实施、以变异代红；全量基线实为 423（T1 +5），+5 prefs +3 编排器 = 431，不是计划写的 430 | 单任务内 Lead 写实现再补测，先红等价物=变异（默认档位 HIGH→OFF 必红）；计数按 XML 实测对账 |
+| D473 | 2026-10-31 | T2 | 设置页「思考开着时忽略 temperature」只保留在「生成」卡内；删掉列表尾重复的「说明」段 | 首版两处重复（卡内 + 独立说明段），截图复核实物后去重 |
+| D474 | 2026-10-31 | T2 | 档位持久化用 debug 包 + force-stop/冷启在模拟器取证；截图取证后把档位改回默认 Flash/高 | 证明 UI 与 SharedPreferences；默认档位作为后续生成链验收的已知起点 |
 
 ---
 
@@ -197,7 +201,7 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 5. 追加 3 例编排器测试：novel 请求体 `thinking.type=enabled` 且 `reasoning_effort` 与档位一致；faithful 请求体恒 `disabled`；改模型后请求体 `model` 变化。
 6. 证据 `docs/evidence/plan5/p5-settings-00-tiers.txt`（先红/后绿/变异/全量）。
 
-**Expected**：`GenerationPrefsTest` 5/5；全量 **51 类/430 例**。
+**Expected**：`GenerationPrefsTest` 5/5；全量 **51 类/431 例**（D472 实测对账）。
 
 ---
 
@@ -278,9 +282,31 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 **Steps**：全量复跑（期望 52 类/440 例）；FINAL-REVIEW 六节（基线→终态、提交清单、任务表、需求对照、PENDING 白名单、风险结论）；`ACCEPTANCE.md` 追加 `## 3f`；看板 Plan 5 8/8（修 Plan 4 §二·七 标题与需求表 #6）；`p5-device-01-checklist.md`；D471 起收尾偏差。
 **Expected**：证据目录自洽、sha 齐全、结论「候选版通过（真机 PENDING）」。
 
+## §10 验收记录
+
+### Task 0 验收（Lead，2026-10-31）
+- 交付 `9f3f742`：计划 §0.1–§0.9 定稿（T0–T8、D461–D470）、`docs/evidence/plan5/README.md`、`.gitattributes` plan5 规则、决策记录 `.superpowers/sdd/2026-10-31-plan5-polish/decisions.md`。
+- 证据口径：命名 `p5-<area>-<nn>-<state>`；txt 首三行 host-only 或设备头；艺术图 nearWhite 例外写进 README（阈值 250、≤0.5%）；release 空态必须 release 空库。
+- 结论：契约冻结，T1 起可开工。
+
+### Task 1 验收（Lead，2026-10-31）
+- 交付 `f9d5236`：4 张插画（`illus_library_empty/day/novel/media`）+ 图标前景 vector + 背景色；母版 `docs/art/plan5/`；`AssetCatalogTest` 5 例。
+- 实测：WebP 合计 72,220 B（预算 400 KB）、单张最大 31,728 B（预算 120 KB）；近白 0.0000%、meanY ≤0.018、P99 ≤0.124。
+- 复跑：`AssetCatalogTest` 5/5 绿（XML failures=0）。
+- 证据 `p5-asset-00-master.txt`（逐张 sha256/尺寸/门槛判定）。
+- 结论：通过；设备渲染在 T4/T6 复用。
+
+### Task 2 验收（Lead，2026-10-31）
+- 交付（本提交）：`GenerationOptions.kt`、`GenerationPrefs.kt`、设置页「生成」卡、`GenerationOrchestrator`/`ReviseOrchestrator`/`AppContainer`/`DreamKeeperRoot`/`MainActivity` 透传；测试 `GenerationPrefsTest` 5 例 + `GenerationOrchestratorTest` +3 例。
+- Lead 独立复跑：targeted 2 类/20 例/0 失败；全量 **51 类/431 例/0 失败**（1m4s）；变异（默认 HIGH→OFF）只杀 `小说化默认发思考高且不发 temperature`，恢复后 `GenerationOptions.kt` sha256 `40f37f46…62562` 逐字节同。
+- 证据 `p5-settings-00-tiers.txt`、`p5-settings-01-default.{png,txt}`、`p5-settings-02-persist.{png,txt}`（APS sha、设备时刻、nearWhite TopOffset=100 口径 0）。
+- 契约：faithful 恒 DISABLED+0.1；novel 默认 ENABLED/HIGH 且不发 temperature、思考关时发 0.9；模型跟随设置；改稿档位按 D471 延后。
+- PENDING：真实 API 用 v4-pro 端到端（T7/T8）；改稿思考档位（D471）。
+- 结论：通过。
+
 ## Self-Review（写完后自查）
 
 - **Spec 覆盖**：需求 #6（离线资源）→ T1/T2/T3/T4；发布就绪 → T5；真机 PENDING → T6；UI 打磨 → T31/T4。无遗漏。
 - **占位符**：无 TBD/TODO；每个代码步骤给了可直接粘贴的代码。
 - **类型一致**：`EmptyState(art, title, hint, modifier)` 在 T3 定义、T3 四处调用一致；资源名 T1 产出、T2/T3/T4 引用一致；`AssetCatalogTest` 的清单与 §0.4 表一致。
-- **测试计数**：49/418 + 1 类 4 例 = 50/422，T2/T3/T4 不新增用例。
+- **测试计数**：49/418 + T1 5 例 + T2 8 例 = **51 类/431 例**（D472 实测）；T3/T4 新增用例时按 XML 重算。

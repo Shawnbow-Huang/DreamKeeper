@@ -361,6 +361,54 @@ class GenerationOrchestratorTest {
         assertNull(jobs.single().error)
     }
 
+    // ------------------------------------------------------------ Plan 5 T2
+
+    @Test
+    fun `小说化默认发思考高且不发 temperature`() = runTest {
+        val llm = FakeLlm().apply { enqueue(ok(novelJson(body = "改写后的正文。", quotes = emptyList()))) }
+        val store = FakeStore(dreamDomain())
+
+        newOrchestrator(llm, store).generateNovel(DREAM_ID)
+
+        val request = llm.requests.single()
+        assertEquals(Thinking.ENABLED, request.thinking)
+        assertEquals(ReasoningEffort.HIGH, request.effort)
+        assertNull("思考开着时温度必须留空（服务端会忽略它）", request.temperature)
+        assertEquals(GenerationOptions.DEFAULT_MODEL, request.model)
+    }
+
+    @Test
+    fun `小说化档位关掉时退回 disabled 与 0点9 温度`() = runTest {
+        val llm = FakeLlm().apply { enqueue(ok(novelJson(body = "改写后的正文。", quotes = emptyList()))) }
+        val store = FakeStore(dreamDomain())
+
+        newOrchestrator(llm, store, options = {
+            GenerationOptions(model = GenerationOptions.PRO, novelThinking = ThinkingLevel.OFF)
+        }).generateNovel(DREAM_ID)
+
+        val request = llm.requests.single()
+        assertEquals(GenerationOptions.PRO, request.model)
+        assertEquals(Thinking.DISABLED, request.thinking)
+        assertNull(request.effort)
+        assertEquals(0.9, request.temperature!!, 1e-9)
+    }
+
+    @Test
+    fun `忠实整理不吃小说化思考档位`() = runTest {
+        val llm = FakeLlm().apply { enqueue(ok(CLEAN_T1)) }
+        val store = FakeStore(dreamDomain())
+
+        newOrchestrator(llm, store, options = {
+            GenerationOptions(model = GenerationOptions.PRO, novelThinking = ThinkingLevel.MAX)
+        }).generateFaithful(DREAM_ID)
+
+        val request = llm.requests.single()
+        assertEquals(GenerationOptions.PRO, request.model)
+        assertEquals(Thinking.DISABLED, request.thinking)
+        assertNull(request.effort)
+        assertEquals(0.1, request.temperature!!, 1e-9)
+    }
+
     // -------------------------------------------------------------- fixtures
 
     private fun room(): DreamDatabase = (database ?: Room.inMemoryDatabaseBuilder(
@@ -372,6 +420,7 @@ class GenerationOrchestratorTest {
         llm: LlmClient,
         store: GenerationStore,
         onProgress: (GenerationKind, GenerationStage, Int) -> Unit = { _, _, _ -> },
+        options: () -> GenerationOptions = { GenerationOptions() },
     ): GenerationOrchestrator = GenerationOrchestrator(
         llm = llm,
         prompts = prompts,
@@ -381,6 +430,7 @@ class GenerationOrchestratorTest {
         id = ids(),
         gate = FaithfulGates::check,
         onProgress = onProgress,
+        options = options,
         apiKey = { "sk-test-key" },
     )
 

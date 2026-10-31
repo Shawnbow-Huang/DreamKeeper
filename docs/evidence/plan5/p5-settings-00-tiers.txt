@@ -1,0 +1,37 @@
+APK_SHA256=dfe2655580115dcb (debug T2 构建；完整 sha256=dfe2655580115dcbbc7c09661390c1771fe795315cc3b74332b692b3f43011c9)
+DEVICE_TIME=Sat Oct 31 14:03:48 GMT 2026（本机 CST 22:03:48；设备时区 GMT，与本地时钟同刻）
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.data.settings.GenerationPrefsTest" --tests "com.dreamkeeper.llm.GenerationOrchestratorTest" --rerun-tasks --console=plain
+
+[为什么]
+需求 #1「只接 DeepSeek 官方 API；模型 + 思考强度按钮」自 Plan 1 起只做了 Key 接线，设置页没有档位。
+设计 §9:365-372 要求：默认 deepseek-flash；小说化思考 high、温度 0.9 仅在思考关闭时生效；忠实整理固定思考关；改稿思考 low。
+代码原先在 GenerationOrchestrator.kt:223/:298 把 thinking 硬编码为 DISABLED、温度固定 0.1/0.0，设置页无从调整。
+
+[改法]
+1. 新 llm/GenerationOptions.kt：MODELS=(deepseek-flash, deepseek-v4-pro)；ThinkingLevel=(OFF 关 / LOW 低 / HIGH 高 / MAX 最高)，每个档位带 effort；默认 GenerationOptions(FLASH, HIGH)。
+2. 新 data/settings/GenerationPrefs.kt：SharedPreferences 文件 settings（键 dk_generation_model / dk_generation_thinking），options() 对非法值回退默认，setModel 走白名单。
+3. SettingsScreen 加「生成」卡：模型 chips + 思考 chips + 一句说明「思考开着时，服务端会忽略 temperature；忠实整理固定关闭思考」；SettingsViewModel 读/写 prefs。
+4. 透传：GenerationOrchestrator 拿 options() —— faithful 恒 DISABLED + 0.1；novel 用档位（默认 ENABLED/HIGH，temperature 不发，思考关时发 0.9）；ReviseOrchestrator 的模型跟随设置（改稿思考档位仍 DISABLED + 0.3/0.0，见 D471）。
+5. AppContainer 注入 generationPrefs；DreamKeeperRoot/MainActivity 传下去。
+
+[先红]
+本任务以变异代红（T2 由 Lead 直接实施，见 D472）：把 GenerationOptions 默认 novelThinking 从 HIGH 改 OFF
+→ GenerationOrchestratorTest > 小说化默认发思考高且不发 temperature FAILED
+   java.lang.AssertionError: expected:<Thinking(type=ENABLED, effort=HIGH)> but was:<Thinking(type=DISABLED, effort=null)>
+   15 tests completed, 1 failed
+   BUILD FAILED in 53s
+恢复后 GenerationOptions.kt sha256=40f37f4691662c631d0de5c26b1f4be4b3d6cc16b5595be81f397a58ff062562（逐字节与备份同）。
+
+[后绿]
+targeted：GenerationPrefsTest 5/5 + GenerationOrchestratorTest 15/15 = 2 类 20 例 0 失败（XML failures=0）。
+全量 --rerun-tasks：classes=51 tests=431 failures=0 errors=0 skipped=0（BUILD SUCCESSFUL 1m4s）。
+
+[设备证据]
+p5-settings-01-default.png：默认态截图（DeepSeek Flash + 思考「高」选中，Ember 描边）。sha256 前16=718bfdb3fc659dc7，153137 B。
+p5-settings-02-persist.png：点 V4 Pro + 低 → force-stop → 冷启 → 重进设置，两枚 chips 仍是 V4 Pro / 低。sha256 前16=2939c35175898021，152659 B。
+（截图取证后已点回 Flash / 高；结束时 run-as cat shared_prefs/settings.xml 可见 dk_generation_model=deepseek-flash、dk_generation_thinking=HIGH，证据文件不复制 Key 内容。）
+
+[读法]
+1. 本文件证明「设置页有档位 UI + 选择持久化 + 请求体按档位发送」：units 证明请求体，截图证明 UI 与持久化。
+2. 变异证明测试不是空转：默认档位变化会让 novel 请求体的 thinking 断言失败。
+3. 未覆盖：真实 API 用 v4-pro 的端到端（需联网 Key 与费用，留 T7/T8）；改稿思考档位（D471）。

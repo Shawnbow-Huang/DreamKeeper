@@ -33,6 +33,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dreamkeeper.llm.GenerationOptions
+import com.dreamkeeper.llm.ThinkingLevel
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.ErrorText
@@ -77,13 +79,14 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            SectionLabel("说明")
-            Text(
-                text = "思考模式开着时，服务端会忽略 temperature。",
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 4.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = InkDim,
+            SectionLabel("生成")
+            GenerationCard(
+                model = state.model,
+                novelThinking = state.novelThinking,
+                onModel = vm::setModel,
+                onThinking = vm::setNovelThinking,
             )
+
         }
     }
 }
@@ -230,6 +233,83 @@ private fun KeyCard(
             if (state.busy) {
                 Text("处理中…", style = MaterialTheme.typography.labelSmall, color = InkDim)
             }
+        }
+    }
+}
+
+/**
+ * 模型与思考档位（Plan 5 Task 2）。
+ *
+ * 为什么只暴露「小说化的思考档位」：忠实整理恒关（逐字保守、更快更便宜），
+ * 改稿的 low + 固定温度链属于另一条契约（D471），不在这张卡里给用户假开关。
+ */
+@Composable
+private fun GenerationCard(
+    model: String,
+    novelThinking: ThinkingLevel,
+    onModel: (String) -> Unit,
+    onThinking: (ThinkingLevel) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(NightRaised)
+            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+    ) {
+        Text("小说化模型", style = MaterialTheme.typography.bodyMedium, color = Paper)
+        Spacer(modifier = Modifier.height(8.dp))
+        ChoiceRow(
+            options = GenerationOptions.MODELS.mapIndexed { index, id -> index to id },
+            selected = GenerationOptions.MODELS.indexOf(model),
+            label = { GenerationOptions.modelLabel(it) },
+            onSelect = { index -> GenerationOptions.MODELS.getOrNull(index)?.let(onModel) },
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("小说化思考", style = MaterialTheme.typography.bodyMedium, color = Paper)
+        Spacer(modifier = Modifier.height(8.dp))
+        ChoiceRow(
+            options = ThinkingLevel.entries.mapIndexed { index, level -> index to level },
+            selected = ThinkingLevel.entries.indexOf(novelThinking),
+            label = { it.label },
+            onSelect = { index -> ThinkingLevel.entries.getOrNull(index)?.let(onThinking) },
+        )
+
+        Text(
+            text = "思考开着时，服务端会忽略 temperature；忠实整理固定关闭思考。",
+            modifier = Modifier.padding(top = 12.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = InkFaint,
+        )
+    }
+}
+
+/** 单行胶囊选择器：选中 Ember 边 + Paper 字，未选 Line 边 + InkDim 字。 */
+@Composable
+private fun <T> ChoiceRow(
+    options: List<Pair<Int, T>>,
+    selected: Int,
+    label: (T) -> String,
+    onSelect: (Int) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (value, item) ->
+            val active = value == selected
+            Text(
+                text = label(item),
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (active) Night else Night)
+                    .border(1.dp, if (active) Ember else Line, RoundedCornerShape(20.dp))
+                    .clickable { onSelect(value) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = if (active) Paper else InkDim,
+            )
         }
     }
 }

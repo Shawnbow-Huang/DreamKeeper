@@ -13,6 +13,7 @@ import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.AndroidKeystoreCipher
 import com.dreamkeeper.data.security.ApiKeyStore
+import com.dreamkeeper.data.settings.GenerationPrefs
 import com.dreamkeeper.data.security.KeystoreApiKeyStore
 import com.dreamkeeper.llm.AssetPriceCardSource
 import com.dreamkeeper.llm.AssetPromptSource
@@ -179,6 +180,16 @@ class AppContainer(
     /** DeepSeek 客户端（baseUrl/超时/RetryPolicy 都用 Task 3 的默认值）。 */
     val llmClient: LlmClient by lazy { DeepSeekClient() }
 
+    /**
+     * 生成档位（模型 + 小说化思考档位，Plan 5 Task 2）。
+     *
+     * 与排布偏好共用 `settings` 文件；编排器每次请求现取，所以设置页一保存就生效，
+     * 不必重建容器。
+     */
+    val generationPrefs: GenerationPrefs by lazy {
+        GenerationPrefs(appContext.getSharedPreferences(GenerationPrefs.PREFS_NAME, Context.MODE_PRIVATE))
+    }
+
     val generationStore: GenerationStore by lazy { RoomGenerationStore(database) }
 
     /**
@@ -194,6 +205,7 @@ class AppContainer(
             prompts = PromptRepositoryAdapter(promptRepository),
             store = generationStore,
             priceCard = priceCard,
+            options = { generationPrefs.options() },
             apiKey = { apiKeyStore.load().orEmpty() },
             tagsFor = { dreamId ->
                 repository.observeTagsForDream(dreamId).first().map { it.name }

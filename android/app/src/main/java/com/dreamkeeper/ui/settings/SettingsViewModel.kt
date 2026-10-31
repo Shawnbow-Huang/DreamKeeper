@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dreamkeeper.data.security.ApiKeyStore
 import com.dreamkeeper.data.security.maskApiKey
+import com.dreamkeeper.data.settings.GenerationPrefs
+import com.dreamkeeper.llm.GenerationOptions
+import com.dreamkeeper.llm.ThinkingLevel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,8 @@ import kotlinx.coroutines.launch
  */
 class SettingsViewModel(
     private val apiKeyStore: ApiKeyStore,
+    /** 生成档位（Plan 5 Task 2）：SharedPreferences 读写都是轻量同步操作，不必切 IO。 */
+    private val generationPrefs: GenerationPrefs? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -41,6 +46,10 @@ class SettingsViewModel(
         val error: String? = null,
         /** IO 进行中，按钮置灰 */
         val busy: Boolean = false,
+        /** 当前模型（`deepseek-flash` / `deepseek-v4-pro`） */
+        val model: String = GenerationOptions.DEFAULT_MODEL,
+        /** 小说化思考档位（faithful 恒关，改稿仍走关闭 + 温度，见 D471） */
+        val novelThinking: ThinkingLevel = GenerationOptions.DEFAULT.novelThinking,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -49,6 +58,24 @@ class SettingsViewModel(
     init {
         // 进页面就去读一次：Task 2 之后 keyConfigured 是真实状态，不再恒为 false
         refresh()
+        val options = generationPrefs?.options()
+        if (options != null) {
+            _state.update { it.copy(model = options.model, novelThinking = options.novelThinking) }
+        }
+    }
+
+    /** 换模型：白名单外的值由 [GenerationPrefs.setModel] 忽略，状态也不动。 */
+    fun setModel(model: String) {
+        val prefs = generationPrefs ?: return
+        prefs.setModel(model)
+        _state.update { it.copy(model = prefs.options().model) }
+    }
+
+    /** 换小说化思考档位；忠实整理与改稿不受影响（§0.2 / D471）。 */
+    fun setNovelThinking(level: ThinkingLevel) {
+        val prefs = generationPrefs ?: return
+        prefs.setNovelThinking(level)
+        _state.update { it.copy(novelThinking = prefs.options().novelThinking) }
     }
 
     /** 重读本机存储。解密失败时 store 返回 null，界面自然回到「还没配置」。 */

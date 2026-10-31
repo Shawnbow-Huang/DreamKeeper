@@ -33,7 +33,10 @@ class ReviseOrchestrator(
     private val clock: () -> Long = System::currentTimeMillis,
     private val id: () -> String = { UUID.randomUUID().toString() },
     private val gate: (String, String, GateMode) -> GateReport = FaithfulGates::check,
-    private val model: String = GenerationOrchestrator.DEFAULT_MODEL,
+    /**
+     * 生成档位（Plan 5 Task 2）：模型现取；改稿的思考档位暂仍为关闭 + 温度 0.3/0.0（D471）。
+     */
+    private val options: () -> GenerationOptions = { GenerationOptions() },
     private val apiKey: () -> String = { "" },
 ) {
 
@@ -209,7 +212,7 @@ class ReviseOrchestrator(
             promptVersion = rendered.promptVersion.removePrefix("v").removePrefix("V")
                 .substringBefore('.').toIntOrNull() ?: 0,
             promptHash = rendered.promptSha256,
-            model = model,
+            model = options().model,
             reasoningEffort = null,
             createdAt = clock(),
         )
@@ -251,7 +254,7 @@ class ReviseOrchestrator(
 
     private suspend fun call(text: String, temperature: Double): CallOutcome {
         val request = ChatRequest(
-            model = model,
+            model = options().model,
             messages = listOf(ChatMessage("user", text)),
             thinking = Thinking.DISABLED,
             temperature = temperature,
@@ -399,7 +402,7 @@ val AppContainer.orchestrator: ReviseOrchestrator
                 prompts = PromptRepositoryAdapter(promptRepository),
                 store = generationStore,
                 generation = generationOrchestrator,
-                model = GenerationOrchestrator.DEFAULT_MODEL,
+                options = { generationPrefs.options() },
                 apiKey = { apiKeyStore.load().orEmpty() },
             )
         }
