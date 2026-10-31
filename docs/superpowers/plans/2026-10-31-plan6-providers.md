@@ -120,6 +120,9 @@
 | D504 | 2026-10-31 | T0 | `ChatRequest` 加 `maxTokens: Int? = null`（null 不发） | 测试连接要 `max_tokens=1` 控制消耗，又不能改动 DeepSeek 既有请求体 |
 | D505 | 2026-10-31 | T0 | 空 Key 本地拦截（0 HTTP）；失败文案只给人话分类，不显示 URL/响应体 | `DeepSeekClient.kt:203` 会发 `Bearer ` 空头；OkHttp 报文含 URL |
 | D506 | 2026-10-31 | T0 | 单例 OkHttpClient 注入全部 provider | 5 个默认 `OkHttpClient()` 会各自建连接池/Dispatcher，浪费且难统一 |
+| D507 | 2026-10-31 | T1 | `ApiKeyStore.save(key, provider = DEEPSEEK)`：key 在前、provider 带默认值 | 保 40+ 处旧调用点（含测试）零改动；`load/clear` 只有 provider 参数 |
+| D508 | 2026-10-31 | T1 | `AndroidKeystoreCipher.decrypt` 失败不再删除共用别名，只返回 null；坏 pref 由 store 单独清 | 别名被五家共用，原实现的 `deleteKey()` 会让一处坏密文连坐清掉所有 Key（P0 安全修复，Builder 预审） |
+| D509 | 2026-10-31 | T1 | T1 由 Lead 直接实施；设置页在 T4 前仍只操作 DeepSeek 默认槽 | 实施者 subagent 不可寻址、等待成本高于改动本身；本任务只动存储层，不改接线 |
 
 ## §0.10 顺序与闸门
 
@@ -202,3 +205,17 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 4. commit + 向用户汇报（明确「五家离线契约已证、真连通 PENDING」）。
 
 **Expected**：证据齐；全量绿；工作树干净；用户能看到「支持哪几家、哪里还没验证」。
+
+## §10 验收记录
+
+### T0 契约冻结（Lead，2026-10-31）
+- 交付：`docs/superpowers/plans/2026-10-31-plan6-providers.md`（§0.1–§0.10 + D494–D506）、`docs/evidence/plan6/README.md`、`p6-contract-01-deepseek-baseline.json`、`DeepSeekRequestBaselineTest.kt`；commit `65ce99e`。
+- 独立复跑：基线测试 4/4 绿（BUILD SUCCESSFUL in 47s），四组请求体逐字冻结（faithful 有 temperature 无 reasoning；novel 有 reasoning 无 temperature；jsonMode 有 response_format；无 temperature 变体）。
+- 结论：通过；T2 重构后这 4 例必须仍绿（DeepSeek 不回归的硬约束）。
+
+### T1 Key 存储与迁移（Lead，2026-10-31）
+- 交付：`llm/ProviderId.kt`；`data/security/ApiKeyStore.kt`（per-provider 接口 + 实现）；`KeystoreCipher.kt`（失败不再删别名）；`PerProviderApiKeyTest` 6 例；`docs/evidence/plan6/p6-key-00-migration.txt`。
+- 独立复跑：`--tests "com.dreamkeeper.data.security.*"` BUILD SUCCESSFUL 50s；全量 `--rerun-tasks` BUILD SUCCESSFUL 62s，XML 54 类 453 例 0 失败。
+- 契约：DeepSeek 沿用 `api_key_packed`（零迁移）；其他四家 `api_key_packed.<wire>`；只读自己；clear 只清自己；坏密文只清自己。
+- P0：共用别名不再被删（D508）。
+- 结论：通过。PENDING：真 Keystore 设备侧（Robolectric 无 shadow）、五家 UI（T4）。

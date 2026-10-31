@@ -14,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.dreamkeeper.llm.ProviderId
 import java.util.Base64
 import javax.crypto.AEADBadTagException
 
@@ -196,25 +197,30 @@ class FakeCipher : KeystoreCipher {
     private fun b64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
 }
 
-/** 界面/ViewModel 用的内存版（brief §0.10：测试桩只许放 test 源集）。 */
+/** 界面/ViewModel 用的内存版（测试桩只许放 test 源集）。按供应商隔离。 */
 class FakeApiKeyStore(initial: String? = null) : ApiKeyStore {
 
-    var stored: String? = initial
-        private set
+    val storedByProvider = linkedMapOf<ProviderId, String>().apply {
+        if (initial != null) put(ProviderId.DEEPSEEK, initial)
+    }
     var saveCount = 0
         private set
     var clearCount = 0
         private set
 
-    override fun load(): String? = stored
+    /** DeepSeek 的兼容读取，旧测试用。 */
+    val stored: String? get() = storedByProvider[ProviderId.DEEPSEEK]
 
-    override fun save(key: String) {
-        stored = key.trim()
+    override fun load(provider: ProviderId): String? = storedByProvider[provider]
+
+    override fun save(key: String, provider: ProviderId) {
+        val trimmed = key.trim()
+        if (trimmed.isEmpty()) storedByProvider.remove(provider) else storedByProvider[provider] = trimmed
         saveCount++
     }
 
-    override fun clear() {
-        stored = null
+    override fun clear(provider: ProviderId) {
+        storedByProvider.remove(provider)
         clearCount++
     }
 }

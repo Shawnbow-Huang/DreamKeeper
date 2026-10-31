@@ -106,7 +106,7 @@ class SettingsViewModel(
         viewModelScope.launch(io) {
             _state.update { it.copy(busy = true, error = null) }
             try {
-                apiKeyStore.save(trimmed)
+                apiKeyStore.save(key = trimmed)
                 _state.update {
                     it.copy(
                         keyConfigured = true,

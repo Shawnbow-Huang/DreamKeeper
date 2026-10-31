@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
     private fun applyDebugKeyIntent(intent: Intent?) {
         if (!BuildConfig.DEBUG) return
         val container = (application as DreamKeeperApp).container
-        intent?.getStringExtra("dk_debug_save_key")?.let { container.apiKeyStore.save(it) }
+        intent?.getStringExtra("dk_debug_save_key")?.let { container.apiKeyStore.save(key = it) }
         if (intent?.getBooleanExtra("dk_debug_clear_key", false) == true) {
             container.apiKeyStore.clear()
         }

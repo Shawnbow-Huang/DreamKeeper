@@ -25,7 +25,9 @@ interface KeystoreCipher {
 
     /**
      * 解密 [encrypt] 的产物。任何失败（AEADBadTag / GeneralSecurity / 坏 base64）都
-     * **不抛**，删掉 Keystore 别名后返回 `null`，由调用方清 pref 并当未配置处理。
+     * **不抛**，返回 `null`，由调用方只清自己那一条 pref 并当未配置处理。
+     *
+     * **绝不删 Keystore 别名**：别名是五家供应商共用的，删一次会让所有已保存的 Key 一起失效。
      */
     fun decrypt(packed: String): String?
 }
@@ -62,11 +64,12 @@ class AndroidKeystoreCipher : KeystoreCipher {
         cipher.init(Cipher.DECRYPT_MODE, loadOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
         String(cipher.doFinal(cipherText), Charsets.UTF_8)
     } catch (e: Exception) {
-        // §0.4：AEADBadTag / GeneralSecurity / UnrecoverableKey / Provider / 坏 base64 一律
-        // 当「这份密文不可用」：删别名、返回 null，由 KeystoreApiKeyStore 清 pref。
+        // AEADBadTag / GeneralSecurity / UnrecoverableKey / Provider / 坏 base64 一律
+        // 当「这份密文不可用」：**只返回 null**，不动别名——
+        // 别名被五家供应商共用，删掉会让其他家的 Key 一起失效（D495）。
+        // 由 KeystoreApiKeyStore 只清坏掉的那一条 pref。
         // 只记异常类名——异常文本可能带输入片段，不进日志。
-        Log.w(TAG, "解密失败，删除别名：${e.javaClass.simpleName}")
-        deleteKey()
+        Log.w(TAG, "解密失败（保留别名）：${e.javaClass.simpleName}")
         null
     }
 
@@ -89,12 +92,6 @@ class AndroidKeystoreCipher : KeystoreCipher {
         return generator.generateKey()
     }
 
-    /** 删别名本身也可能抛（Keystore 不可用）；这条路径已经在失败兜底里，不能再炸一次。 */
-    private fun deleteKey() {
-        runCatching {
-            KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.deleteEntry(ALIAS)
-        }
-    }
 
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"

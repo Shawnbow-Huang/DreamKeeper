@@ -1,0 +1,42 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-31T15:01:24Z
+REPLAY=cd android && ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.data.security.*" --rerun-tasks --console=plain
+REPLAY_FULL=cd android && ./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks --console=plain
+
+## 这份证据回答什么
+Plan 6 把「一把 DeepSeek Key」扩成「五家各一把 Key」时，老用户的 Key 会不会丢？
+不同供应商会不会串用同一把 Key？一条坏密文会不会把五家一起清掉？
+
+## 设计（Plan 6 §0.3）
+- DeepSeek 继续读写旧键 `api_key_packed`（Plan 1 起就在用，永不改名）→ 升级后**不需要任何迁移步骤**，老用户零重输。
+- 其他四家用 `api_key_packed.<wire>`：`mimo` / `minimax` / `qwen` / `glm`。
+- 任何一家只读自己的键；DeepSeek 的旧键**不会**回退给别家（防串 Key）。
+- `clear(provider)` 只删自己那条 pref。
+- 解密失败（坏 base64 / 别名损坏）：只清自己那条 pref，返回 null。
+
+## P0 修复（Builder 预审）
+`AndroidKeystoreCipher.decrypt` 原来在失败时调用 `deleteKey()` 删除共用别名
+`dreamkeeper.api.key` —— 五家 Key 共用同一个别名，一处坏密文会让**全部**已保存 Key 一起失效。
+已改为只返回 null、保留别名；坏的那条 pref 由 `KeystoreApiKeyStore` 单独清掉。
+（代码见 `android/app/src/main/java/com/dreamkeeper/data/security/KeystoreCipher.kt` 的 decrypt catch 分支。）
+
+## 测试（新增 6 例，全绿）
+`android/app/src/test/java/com/dreamkeeper/data/security/PerProviderApiKeyTest.kt`
+1. `deepseek keeps the legacy key while others use suffixed keys` —— 保存两家后 pref 键集合恰为 {api_key_packed, api_key_packed.mimo}
+2. `a legacy deepseek key is readable without any migration step` —— 只预置旧键时 DeepSeek 可读，MiMo/GLM 为 null
+3. `all five providers are isolated` —— 五家各存各读，pref 恰好 5 条
+4. `clear removes only the selected provider` —— 清 Qwen 后 DeepSeek 仍在
+5. `blank save clears only that provider` —— 空串只清自己
+6. `corrupt ciphertext removes only that provider residue` —— 坏 GLM 密文只清 GLM，DeepSeek 幸存
+
+既有的 `ApiKeyStoreTest`（单 Key 的存取/trim/日志不含明文）保持全绿。
+
+## 全量
+`./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks` → BUILD SUCCESSFUL in 1m 2s；
+XML 重数 **classes=54 tests=453 failures=0 errors=0 skipped=0**
+（基线 52/443 + T0 的 DeepSeek 基线 4 例 + 本任务 6 例 = 54 类 453 例）。
+
+## 未覆盖（写清楚）
+- 真 AndroidKeystore 的加密/解密仍在设备侧（Robolectric 无 shadow）；本证据只证**键选择与隔离**。
+- 设置页仍只有一把 Key 输入框（SettingsViewModel 暂用默认 provider=DEEPSEEK）——T4 才换成五家 UI。
+- 五家真实连通 PENDING（D502）；真实 Key 不进任何证据/REPLAY。
