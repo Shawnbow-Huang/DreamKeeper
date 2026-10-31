@@ -12,6 +12,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import com.dreamkeeper.ui.common.glassDialogModifier
 import androidx.compose.ui.unit.dp
 import com.dreamkeeper.export.ExportFormat
 import com.dreamkeeper.export.ExportResult
@@ -41,7 +43,8 @@ fun ExportSheet(
     val labelStyle = MaterialTheme.typography.bodyMedium
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DreamColors.nightRaised,
+        modifier = glassDialogModifier(),
+        containerColor = Color.Transparent,
         title = {
             Text(text = "导出", color = DreamColors.paper, style = MaterialTheme.typography.titleMedium)
         },

@@ -1,0 +1,64 @@
+# p6-ui-13 材质与浅色插画（液态玻璃 / 说梦钮两种物理 / 晨光纸插画）
+
+APK_SHA256=n/a (debug + release 交叉取证，逐图见下)
+DEVICE_TIME=host-only 2026-11-01T02:25:39+08:00
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease --console=plain
+NOTE=截图由 `adb exec-out screencap -p` 取得；nearWhite 按裁掉顶部 100px（状态栏）后统计 RGB 三通道均 ≥245 的像素占比
+
+## 为什么改（用户 2026-11-01 01:51 指令）
+
+「在一些界面或者元素上可以加一些液态玻璃感，还有说话按钮的颜色有点违和，似乎得换一下；
+还是否需要使用生图模型加入一些元素进去提升美学。」
+
+两位设计专家的只读结论（只读，不写代码）：
+
+- 违和来源不是"橙色不好看"，而是**同一个橙色在一屏出现三次**（今天环、底栏指示线、说梦钮填充），
+  且钮内部是哑光圆、外部是发光晕——**物体与光源同体**；晨光纸上光晕反相（ΔL* −13.2），看起来像污渍。
+- 判据定死为「**会留下来的 → 纸；不会留下的 → 玻璃**」：玻璃只用于弹层（5 个 AlertDialog + 1 个 ModalBottomSheet；
+  底栏背后没有内容流过，不算玻璃），正文永不上玻璃；说梦钮是全屏唯一常驻物体，必须保持实体、不玻璃化。
+- 暗皮肤玻璃 = 白 8–12% 填充 + 1px 白 18–20% 内高光 + 接触阴影；晨光纸玻璃物理不成立（白 8% 叠米色只有 ΔL* 0.4），
+  改为「透光纸」：96% 白纸 + 1px 墨边 + 软阴影，不做高光/模糊。
+
+## 改法
+
+1. **说梦钮两种物理**（`ui/calendar/CalendarScreen.kt`）
+   - 暗（LAMP/INDIGO）：`Brush.radialGradient(ember → emberDeep)` 灯芯 + 极淡接触晕，字 `onLamp`；
+   - 亮（MORNING）：实心 `paper` 的一滴墨 + `nightRaised` 字，**取消发光**；
+   - 今天环 `1.5dp ember` → `1dp inkDim`；底栏指示线 `ember` → `paper@35%`（把唯一强调让给钮）。
+2. **液态玻璃**（新 `ui/common/Glass.kt`）：`glassSurface(dark, shape)`；暗=白 8% + 白 20%→6% 渐变边 + 18dp 阴影；
+   亮=96% 纸面 + 纸色 12%→6% 边 + 10dp 软阴影；**不使用 RenderEffect 实时模糊**（成本与兼容性），
+   应用于 DetailScreen×2、ExportSheet、TagsScreen×2 的 AlertDialog 与 TagsScreen 的底部表。
+3. **浅色插画一套**（本轮新生成 4 张）：`illus_{library,day,novel,media}_*_light.webp`，米白纸底 + 深褐墨线稿 + 一点琥珀；
+   背景按皮肤底 `#F4EEE2` 校准（Pillow 通道缩放），避免"贴纸"矩形边；`Illustrations.kt` 按 `SkinRuntime.current.isDark` 选图。
+4. **跟随系统皮肤**：`Skin.SYSTEM`，`paletteOf(skin, systemDark)` → 夜间 LAMP / 白天 MORNING；`Theme` 收 `systemDark`，`MainActivity` 用 `isSystemInDarkTheme()`。
+5. **顺手修**：`FollowUpScreen` 背景硬编码 `NightVoid`、正文硬编码 `#B8C1CF` → 全部 `DreamColors` 令牌（否则晨光纸下仍是黑页）；
+   纸面卡片/正文加 `inkFaint@16%` 发丝线（浅色皮肤纸/桌 ΔL 仅 1.07:1，需要一根几乎看不见的界线）。
+6. **文案**：空态「按那个橙色的钮」→「按那个大钮」（橙色可能不是橙——晨光纸下是深墨）。
+
+## 门槛与判据
+
+- 每张截图裁顶 100px 后 nearWhite=0.0000%（艺术图另见插画门槛：≥250 的像素 ≤0.5%）。
+- 全量 JVM：**61 类 / 496 例 / 0 失败**（新增 `systemSkinFollowsSystemDark`；SkinTest 对三套皮肤断言正文 ≥7:1、次要 ≥4.5:1、强调 ≥3:1）。
+- 玻璃参数与专家规格逐项对齐；未引 RenderEffect，故"玻璃"是**参数化材质**，不是实时背景模糊。
+
+## 证据索引（均为 1080×2400 PNG，nearWhite 见上）
+
+| 文件 | 内容 | sha256 前16 | 字节 |
+| --- | --- | --- | --- |
+| p6-ui-13-lamp-home.png | 灯下纸首页：灯芯钮 + inkDim 今天环 | 38265240c2de6060 | 167901 |
+| p6-ui-13-lamp-glass.png | 灯下纸导出弹层（玻璃，背后正文可透见） | 0a1d7dbb4b1fba0a | 145501 |
+| p6-ui-13-morning-home.png | 晨光纸首页：墨滴钮（无发光） | 0d0654039fdcd48f | 138081 |
+| p6-ui-13-morning-library-empty.png | 晨光纸空态（浅色线稿插画与纸底融合） | 74f10c706ae90d7a | 116036 |
+| p6-ui-13-morning-novel-empty.png | 晨光纸「还没有小说稿」 | debf6a1d67073d34 | 282377 |
+| p6-ui-13-morning-detail.png | 晨光纸正文纸面 + 发丝线 | 3cab6c8eae4537cf | 172181 |
+| p6-ui-13-morning-record.png | 晨光纸录屏页（跟随主题，非硬编码深底） | 4645510beba10c35 | 59920 |
+| p6-ui-13-morning-glass.png | 晨光纸导出弹层（透光纸：白面 + 墨边 + 软阴影） | 0adbe2b1e3d8ee41 | 148580 |
+| p6-ui-13-settings-skins.png | 设置页四行皮肤（含「跟随系统」） | 1b3905e21a564b12 | 193431 |
+
+## 未做 / 未验证
+
+- **不内嵌 CJK 字体**：Windows 自带宋体不可分发；Noto Serif SC 全量约 +9MB，且需按常用字子集化（字体子集工具未引入）。
+  当前用 `FontFamily.Serif` 走系统衬线（模拟器与多数国产 ROM 有 Noto Serif CJK），KDoc 已写明"≥20sp 才用宋体"的降级策略。
+  若要真正内嵌，需单开任务做子集化（Plan 7）。
+- 未使用 RenderEffect 实时模糊（性能/兼容），因此弹层是"参数化玻璃"而非背景模糊。
+- 未验证：真机 vendor ROM 的衬线可用性、1.3× 字号下弹层换行、TalkBack 对玻璃弹层的朗读顺序。

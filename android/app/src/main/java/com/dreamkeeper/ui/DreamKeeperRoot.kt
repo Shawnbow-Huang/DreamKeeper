@@ -362,13 +362,14 @@ private fun RowScope.BottomBarTab(
             color = if (selected) DreamColors.paper else DreamColors.inkDim,
         )
         // 指示线始终占位：未选中时画成 DreamColors.night（与底栏同色，看不见），
-        // 这样切换选中不会让文字上下跳 6dp。不引透明色，配色只取 Color.kt 里的常量。
+        // 这样切换选中不会让文字上下跳 6dp。
+        // 指示线不再用 ember：ember 全屏只留给「说梦」，这里改纸色 35%，与选中文字同源。
         Box(
             modifier = Modifier
                 .padding(top = 4.dp)
                 .width(20.dp)
                 .height(2.dp)
-                .background(if (selected) DreamColors.ember else DreamColors.night),
+                .background(if (selected) DreamColors.paper.copy(alpha = 0.35f) else DreamColors.night),
         )
     }
 }

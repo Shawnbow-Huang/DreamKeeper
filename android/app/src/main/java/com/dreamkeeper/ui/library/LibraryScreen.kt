@@ -43,6 +43,7 @@ import com.dreamkeeper.ui.common.firstSentence
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.R
 import com.dreamkeeper.ui.common.EmptyState
+import com.dreamkeeper.ui.common.libraryEmptyPainter
 import androidx.compose.ui.res.painterResource
 
 /** 分段控件总宽：两段各 76dp。见 [LayoutSwitch] 为什么不用「无界宽度 + weight」 */
@@ -272,8 +273,8 @@ private fun CardStream(entries: List<LibraryItem>, onOpen: (String) -> Unit) {
 @Composable
 private fun EmptyLibrary() {
     EmptyState(
-        illustration = painterResource(R.drawable.illus_library_empty),
+        illustration = libraryEmptyPainter(),
         title = "还没有梦",
-        hint = "去日历页，按那个橙色的钮",
+        hint = "去日历页，按那个大钮",
     )
 }

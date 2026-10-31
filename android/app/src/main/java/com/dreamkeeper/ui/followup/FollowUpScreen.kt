@@ -57,7 +57,6 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.service.RecordingStarter
 import com.dreamkeeper.ui.theme.DreamMotion
-import com.dreamkeeper.ui.theme.NightVoid
 import kotlinx.coroutines.delay
 
 /**
@@ -66,7 +65,6 @@ import kotlinx.coroutines.delay
  * 不在 `Color.kt` 里定义是**故意**的：Task 5 的允许改动清单不含 `ui/theme/Color.kt`，
  * 而这个颜色目前只有这一屏用，先就地放这里，别为了一个色值去改共享调色板。
  */
-private val FollowUpBody = Color(0xFFB8C1CF)
 
 /**
  * 松手后的 30 秒追问窗口。
@@ -141,7 +139,7 @@ fun FollowUpScreen(
     // record 路由已被 popUpTo(inclusive) 清掉，没有返回键会退到桌面（§0-10）。
     BackHandler(enabled = true) { vm.onDoneNow() }
 
-    Box(modifier = Modifier.fillMaxSize().background(NightVoid)) {
+    Box(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         AnimatedVisibility(
             visible = state.visible,
             enter = fadeIn(tween(DreamMotion.Quick)),
@@ -163,7 +161,7 @@ fun FollowUpScreen(
                 )
                 Text(
                     text = if (state.recording) "在听，松手就接上" else "还想补充点什么吗？",
-                    color = FollowUpBody,
+                    color = DreamColors.inkDim,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -262,7 +260,7 @@ private fun TranscriptField(
                 }
             },
         textStyle = TextStyle(
-            color = FollowUpBody,
+            color = DreamColors.inkDim,
             fontSize = 20.sp,
             lineHeight = 30.sp,
         ),

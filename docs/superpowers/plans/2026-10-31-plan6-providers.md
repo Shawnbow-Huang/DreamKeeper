@@ -154,7 +154,16 @@
 | D540 | 2026-11-01 | T8 | 状态栏/导航栏图标随皮肤深浅切换 | 浅色皮肤下白色状态栏图标不可见（实测晨光纸） |
 | D541 | 2026-11-01 | T8 | 皮肤键独立 `dk_theme_skin`，与生成档位共文件但互不影响 | 换皮肤不应牵动模型/思考档位 |
 | D542 | 2026-11-01 | T8 | 新增 `SkinTest`/`ThemeControllerTest` 7 例，把可读性写成 WCAG 断言 | 「好看」不可测，但「不可读」可测：正文 ≥7、次要 ≥4.5、强调 ≥3 |
-| D543 | 2026-11-01 | T8 | 浅色皮肤的插画仍是暗色版，未重绘 | 四张插画按皮肤出浅色版属于美术产能，本轮先交付可切换的配色骨架 |
+| D543 | 2026-11-01 | T8 | 浅色皮肤的插画仍是暗色版，未重绘 | 四张插画按皮肤出浅色版属于美术产能，本轮先交付可切换的配色骨架（**D547 已补齐**） |
+| D544 | 2026-11-01 | T8 | 说梦钮改「两种物理」：暗=灯芯渐变+接触晕，晨光纸=实心墨滴不发光；今天环降 1dp inkDim、底栏指示线降 paper@35% | 视觉审计：同一橙色一屏出现三次、物体与光源同体、晨光纸光晕反相 ΔL* −13.2 |
+| D545 | 2026-11-01 | T8 | 液态玻璃只用于 5 个 AlertDialog + 1 个 ModalBottomSheet，用参数化 `glassSurface`，**不引 RenderEffect** | 专家判据「会留下来的→纸，不会留下的→玻璃」；底栏无内容流过不算玻璃；实时模糊成本/兼容不可控 |
+| D546 | 2026-11-01 | T8 | 晨光纸的「玻璃」改透光纸（96% 白纸 + 墨 10% 边 + 软阴影，无高光/模糊） | 亮底上白 8% 叠加只有 ΔL* 0.4，玻璃物理不成立 |
+| D547 | 2026-11-01 | T8 | 浅色插画一套 4 张（`illus_*_light.webp`），按 `SkinRuntime.current.isDark` 选图；背景按 `#F4EEE2` 校准 | D543 遗留项；插画自带深底在晨光纸上≈13:1 黑砖，必须换线稿并贴纸底 |
+| D548 | 2026-11-01 | T8 | `FollowUpScreen` 背景/正文从硬编码 `NightVoid`/`#B8C1CF` 改 `DreamColors` 令牌 | 换肤后该页仍是黑底暗字，属令牌漏网 |
+| D549 | 2026-11-01 | T8 | 纸面卡片/正文加 `inkFaint@16%` 发丝线 | 浅色皮肤纸/桌 ΔL 仅 1.07:1，无界线则卡片边界消失 |
+| D550 | 2026-11-01 | T8 | 新增 `Skin.SYSTEM`（跟随系统深浅），`paletteOf(skin, systemDark)` 解析 | 用户要「保留暗色 + 多套皮肤」；跟随系统是常见预期 |
+| D551 | 2026-11-01 | T8 | **不内嵌 CJK 字体**：继续用 `FontFamily.Serif`（系统衬线） | Windows 宋体不可分发；Noto Serif SC 全量约 +9MB，需子集化工具，留 Plan 7 |
+| D552 | 2026-11-01 | T8 | 空态文案「按那个橙色的钮」→「按那个大钮」 | 晨光纸下钮是深墨而非橙色，文案不能写死颜色 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -300,3 +309,13 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - release 重打：9,745,114 B sha 前16 `c0c64d6869cc7868`。
 - 证据：`docs/evidence/plan6/p6-skin-04-skins.txt`。
 - 结论：通过。PENDING：浅色插画重绘（D543）、宋体内嵌、跟随系统主题。
+
+### 材质与浅色插画（Lead，2026-11-01）
+
+- 交付：`ui/common/Glass.kt`（参数化玻璃，无 RenderEffect）；`CalendarScreen` 说梦钮两种物理；`Skin.SYSTEM`；
+  `Illustrations.kt` + 4 张 `illus_*_light.webp`（背景校准 `#F4EEE2`）；`FollowUpScreen` 令牌化；纸面发丝线。
+- 独立复跑：`--tests "com.dreamkeeper.ui.theme.*" "com.dreamkeeper.assets.*"` 全绿；全量 **61 类 / 496 例 / 0 失败**。
+- 证据：`docs/evidence/plan6/p6-ui-13-material.txt` + 9 张截图（nearWhite 全 0）。
+- 判据：专家「会留下来的→纸 / 不会留下的→玻璃」；正文永不上玻璃；说梦钮保持实体。
+- PENDING：真机衬线可用性、1.3× 弹层换行、TalkBack 朗读顺序；字体内嵌留 Plan 7（D551）。
+- 结论：通过（模拟器级）。

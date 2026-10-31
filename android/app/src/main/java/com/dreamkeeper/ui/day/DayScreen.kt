@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.ui.common.DreamCard
 import com.dreamkeeper.R
 import com.dreamkeeper.ui.common.EmptyState
+import com.dreamkeeper.ui.common.dayEmptyPainter
 import androidx.compose.ui.res.painterResource
 
 /**
@@ -76,7 +77,7 @@ fun DayScreen(
         } else if (state.items.isEmpty()) {
             // 空态：插画 + 两行，不给箭头——箭头暗示「这里还有一层」，但这里就是尽头
             EmptyState(
-                illustration = painterResource(R.drawable.illus_day_empty),
+                illustration = dayEmptyPainter(),
                 title = "这天没有梦",
                 hint = "回日历页看看别的日子",
             )

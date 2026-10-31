@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.dreamkeeper.ui.common.glassDialogModifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -89,6 +90,8 @@ import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.R
 import com.dreamkeeper.ui.common.EmptyState
+import com.dreamkeeper.ui.common.mediaHintPainter
+import com.dreamkeeper.ui.common.novelEmptyPainter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
@@ -602,7 +605,8 @@ private fun ManualTranscriptDialog(
     var draft by rememberSaveable(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DreamColors.nightRaised,
+        modifier = glassDialogModifier(),
+        containerColor = Color.Transparent,
         titleContentColor = DreamColors.paper,
         textContentColor = DreamColors.paper,
         title = { Text("手动补字") },
@@ -771,7 +775,7 @@ private fun NovelTab(
             val body = novelText?.takeIf { it.isNotBlank() }
             if (body == null) {
                 EmptyState(
-                    illustration = painterResource(R.drawable.illus_novel_empty),
+                    illustration = novelEmptyPainter(),
                     title = NOVEL_EMPTY_TITLE,
                     hint = NOVEL_EMPTY_HINT,
                     modifier = Modifier.height(320.dp),
@@ -782,6 +786,7 @@ private fun NovelTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(DreamColors.paperSurface, RoundedCornerShape(18.dp))
+                                    .border(1.dp, DreamColors.inkFaint.copy(alpha = 0.16f), RoundedCornerShape(18.dp))
                         .padding(horizontal = 18.dp, vertical = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -833,6 +838,8 @@ private fun NovelIdeaDialog(
     var idea by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = glassDialogModifier(),
+        containerColor = Color.Transparent,
         title = { Text("小说化", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column {
@@ -864,7 +871,6 @@ private fun NovelIdeaDialog(
                 Text("取消", color = DreamColors.inkDim)
             }
         },
-        containerColor = DreamColors.nightRaised,
     )
 }
 
@@ -1012,7 +1018,7 @@ private fun MediaTab() {
             contentAlignment = Alignment.Center,
         ) {
             Image(
-                painter = painterResource(R.drawable.illus_media),
+                painter = mediaHintPainter(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,

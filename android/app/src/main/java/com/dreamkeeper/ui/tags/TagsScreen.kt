@@ -44,6 +44,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.dreamkeeper.ui.common.glassSurface
+import com.dreamkeeper.ui.theme.LocalDream
+import androidx.compose.ui.graphics.Color
+import com.dreamkeeper.ui.common.glassDialogModifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -346,7 +350,8 @@ private fun RenameDialog(tag: Tag, onDismiss: () -> Unit, onConfirm: (String) ->
     var text by remember(tag.id) { mutableStateOf(tag.name) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DreamColors.nightRaised,
+        modifier = glassDialogModifier(),
+        containerColor = Color.Transparent,
         titleContentColor = DreamColors.paper,
         textContentColor = DreamColors.inkDim,
         title = { Text("重命名标签", style = MaterialTheme.typography.titleMedium) },
@@ -378,7 +383,8 @@ private fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DreamColors.nightRaised,
+        modifier = glassDialogModifier(),
+        containerColor = Color.Transparent,
         titleContentColor = DreamColors.paper,
         textContentColor = DreamColors.inkDim,
         title = { Text(title, style = MaterialTheme.typography.titleMedium) },
@@ -414,7 +420,8 @@ private fun MergeSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = DreamColors.nightRaised,
+        modifier = Modifier.glassSurface(LocalDream.current.isDark, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+        containerColor = Color.Transparent,
         contentColor = DreamColors.paper,
         dragHandle = {
             Box(

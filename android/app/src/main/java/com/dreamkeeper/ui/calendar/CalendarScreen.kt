@@ -1,6 +1,7 @@
 package com.dreamkeeper.ui.calendar
 
 import com.dreamkeeper.ui.theme.DreamColors
+import com.dreamkeeper.ui.theme.LocalDream
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -125,9 +126,11 @@ fun CalendarScreen(
             }
         }
 
-        // 说梦大钮叠在内容之上（Box 后者盖前者），所以网格必须自己留出 112dp
-        // 说梦是"光"：外层径向渐变做晕（不是 shadow——矩形阴影会在近黑底上露边），
-        // 内层是实心琥珀 + 深墨字；不再用砖红填充 + 亮环补丁。
+        // 说梦大钮：同一件东西，两种物理。
+        // - 暗皮肤：它是灯芯——内层有从中心到边缘的明度衰减（不是哑光色块），晕由"接触"给出；
+        // - 晨光纸：它不是灯，是一滴未干的墨——实心暖墨 + 纸色字，取消发光（浅底上发光=污渍）。
+        // 两种物理都不使用 M3 FAB 语汇，也不与月份水印叠加（水印只在钮附近淡出，见下方 alpha 处理）。
+        val isDark = LocalDream.current.isDark
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -135,27 +138,38 @@ fun CalendarScreen(
                 .size(132.dp)
                 .background(
                     Brush.radialGradient(
-                        0.0f to DreamColors.ember.copy(alpha = 0.30f),
-                        0.55f to DreamColors.ember.copy(alpha = 0.10f),
+                        0.0f to if (isDark) DreamColors.ember.copy(alpha = 0.22f) else DreamColors.paper.copy(alpha = 0.08f),
+                        0.55f to if (isDark) DreamColors.ember.copy(alpha = 0.07f) else DreamColors.paper.copy(alpha = 0.03f),
                         1.0f to Color.Transparent,
                     ),
                 ),
             contentAlignment = Alignment.Center,
         ) {
-        Box(
-            modifier = Modifier
-                .size(76.dp)
-                .background(DreamColors.ember, CircleShape)
-                .clickable { onRecord() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                "说梦",
-                color = DreamColors.onLamp,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .background(
+                        if (isDark) {
+                            // 灯芯：中心亮、边缘略深，圆本身像"发热"而不是一块贴纸
+                            Brush.radialGradient(
+                                listOf(DreamColors.ember, DreamColors.emberDeep),
+                            )
+                        } else {
+                            // 墨滴：暖墨实心（不再用琥珀），对比与"白天没有灯"都成立
+                            Brush.linearGradient(listOf(DreamColors.paper, DreamColors.paper))
+                        },
+                        CircleShape,
+                    )
+                    .clickable { onRecord() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "说梦",
+                    color = if (isDark) DreamColors.onLamp else DreamColors.nightRaised,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
@@ -297,8 +311,9 @@ private fun DayCell(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                // 今天用 DreamColors.ember 描边，不用 DreamColors.line：DreamColors.line 在 DreamColors.night 上只有 1.34:1，等于看不见
-                .then(if (isToday) Modifier.border(1.5.dp, DreamColors.ember, CircleShape) else Modifier),
+                // 今天用 inkDim 描边（原 ember）：ember 全屏只留给「说梦」，否则两处强调互相抢。
+                // inkDim 在 night 上约 5.9:1，比 line 的 1.34:1 清楚得多。
+                .then(if (isToday) Modifier.border(1.dp, DreamColors.inkDim, CircleShape) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

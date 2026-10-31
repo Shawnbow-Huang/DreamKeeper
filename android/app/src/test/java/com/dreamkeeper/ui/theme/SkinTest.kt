@@ -74,6 +74,13 @@ class SkinTest {
     }
 
     @Test
+    fun systemSkinFollowsSystemDark() {
+        // 「跟随系统」不引入第四套色板：白天用晨光纸、夜里用灯下纸。
+        assertTrue(paletteOf(Skin.SYSTEM, systemDark = true).isDark)
+        assertTrue(paletteOf(Skin.SYSTEM, systemDark = false).isDark.not())
+    }
+
+    @Test
     fun unknownIdFallsBackToLamp() {
         assertEquals(Skin.LAMP, Skin.of("does-not-exist"))
         assertEquals(Skin.LAMP, Skin.of(null))

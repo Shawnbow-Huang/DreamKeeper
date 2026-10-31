@@ -17,6 +17,7 @@ enum class Skin(val id: String, val label: String, val blurb: String) {
     LAMP("lamp", "灯下纸", "暖暗 · 夜里写"),
     MORNING("morning", "晨光纸", "明亮 · 白天写"),
     INDIGO("indigo", "冷夜", "冷暗 · 屏幕感"),
+    SYSTEM("system", "跟随系统", "白天浅色 · 夜里深色"),
     ;
 
     companion object {
@@ -179,10 +180,12 @@ val IndigoPalette = DreamPalette(
     errorContainer = Color(0xFF4A2620),
 )
 
-fun paletteOf(skin: Skin): DreamPalette = when (skin) {
+fun paletteOf(skin: Skin, systemDark: Boolean = false): DreamPalette = when (skin) {
     Skin.LAMP -> LampPalette
     Skin.MORNING -> MorningPalette
     Skin.INDIGO -> IndigoPalette
+    // 跟随系统不做第三套色板：白天用晨光纸、夜里用灯下纸。
+    Skin.SYSTEM -> if (systemDark) LampPalette else MorningPalette
 }
 
 val LocalDream = staticCompositionLocalOf { LampPalette }

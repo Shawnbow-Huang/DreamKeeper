@@ -14,12 +14,17 @@ import org.junit.Test
  */
 class AssetCatalogTest {
 
-    private val expected = listOf(
+    private val dark = listOf(
         "illus_library_empty",
         "illus_day_empty",
         "illus_novel_empty",
         "illus_media",
     )
+
+    /** 晨光纸专用的一套墨线稿（同一场景的浅色版）。 */
+    private val light = dark.map { "${it}_light" }
+
+    private val expected = dark + light
 
     private fun repoRoot(): File {
         var dir = File(System.getProperty("user.dir") ?: ".").absoluteFile
@@ -36,7 +41,7 @@ class AssetCatalogTest {
         File(res(), "drawable-nodpi/$name.webp")
 
     @Test
-    fun fourIllustrationsExistAndAreWebp() {
+    fun allIllustrationsExistAndAreWebp() {
         expected.forEach { name ->
             val f = webp(name)
             assertTrue("缺少资源: $f", f.isFile)

@@ -12,6 +12,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -84,7 +85,7 @@ class MainActivity : ComponentActivity() {
             val container = (application as DreamKeeperApp).container
             // 皮肤是 Activity 级状态：切一次重组整棵树，业务对象不重建。
             val skin by container.themeController.skin.collectAsState()
-            DreamKeeperTheme(skin = skin) {
+            DreamKeeperTheme(skin = skin, systemDark = isSystemInDarkTheme()) {
                 // Activity 是可见的 Context：startForegroundService 才带前台豁免；
                 // 同一个实例跨旋转复用，避免每次重组都新建一个 starter。
                 val starter = remember { AndroidRecordingStarter(this) }
