@@ -172,6 +172,8 @@
 | D558 | 2026-11-01 | 模型发现 | 检测结果只做候选（写 `dk_generation_models.<wire>`），**不覆盖当前选择** | 「检测」回答的是「有什么」，选不选是下一步；自动改选会在用户不知情时换模型、换价格 |
 | D559 | 2026-11-01 | 双模型 | 拆 `GenerationOptions.faithfulModel`（默认跟随小说化）：忠实链请求、`llm_calls.model`、价卡重算都按实际请求的模型 | 用户问「第一模式就不需要参数吗」；忠实只补标点顺语序，配便宜模型是合理省钱路径；记账必须跟真实请求走，否则成本失真 |
 | D560 | 2026-11-01 | 双模型 | 忠实链思考仍固定关闭，UI 只给说明不给开关 | 设计 §9 的逐字保守约束；思考开着会改写句子结构，与「整理稿不动措辞」冲突 |
+| D561 | 2026-11-01 | 模型 UI | 模型候选从胶囊平铺改为下拉（当前值 + ▾，菜单内 ✓）；思考仍用 4 枚胶囊 | 用户反馈：一家 3–4 个模型时会出现一排圆角矩形，下拉更美观、更贴「选一个」的语义 |
+| D562 | 2026-11-01 | 模型 UI | 卡内顺序改为 忠实整理 → 小说化 → 思考；下拉容器改纸面 + 发丝线 | 忠实是流程第一步、也是更省的一步；M3 默认淡紫容器与皮肤冲突 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -345,3 +347,12 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - **证据**：`docs/evidence/plan6/p6-ui-15-{models,faithful,detect-nokey}.png` + `p6-ui-15-models.txt`，nearWhite 全 0.0000%；未配 Key 点检测 → 本地提示「还没有配置 Key」，0 HTTP。
 - **PENDING**：真实 DeepSeek `/models` 与四家非 DeepSeek 的真实模型列表需有效 Key（模拟器未配置）；真机滚动/长列表未覆盖。
 - **结论**：通过；「自动检测 → 候选 → 手动选」闭环成立，忠实链获得独立模型档位且成本仍按实际模型记账。
+
+### 模型下拉与顺序（Lead，2026-11-01）
+
+- 用户配好真实 DeepSeek Key 后反馈：3–4 个模型时「一排圆角矩形」不美观，希望用下拉；并问「忠实在上、小说化在下是否更合逻辑」。
+- **交付**：`ModelDropdown`（一行当前值 + ▾ + 纸面菜单 + 当前项 ✓，长标签省略号，48dp 触控）；`GenerationCard` 顺序改为 忠实 → 小说化 → 思考；`DropdownMenu(containerColor=paperSurface, tonalElevation=0, border=发丝线)`。
+- **真机**：真实 `/models` 返回 2 个模型 → 「检测到 2 个可用模型」；下拉切换忠实到 V4 Pro 后小说化仍 Flash（两档独立）。
+- **证据**：`docs/evidence/plan6/p6-ui-16-{order,dropdown,switched}.png` + `p6-ui-16-order-dropdown.txt`，nearWhite 全 0.0000%。
+- **测试**：纯 UI 改动，未加新单测；相关行为由既有 10 例守住（含「setFaithfulModel 不改 model」）。全量 63 类/512 例绿。
+- **结论**：通过；模型选择从「数量一多就换行」变为「数量无关的一行」。

@@ -1,9 +1,11 @@
 package com.dreamkeeper.ui.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -21,6 +23,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -28,11 +32,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.llm.ModelSpec
@@ -285,7 +295,7 @@ private fun GenerationCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "小说化模型",
+                text = "模型",
                 style = MaterialTheme.typography.bodyMedium,
                 color = DreamColors.paper,
                 modifier = Modifier.weight(1f),
@@ -302,13 +312,6 @@ private fun GenerationCard(
                 color = if (discovering) DreamColors.inkFaint else DreamColors.inkDim,
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        ChoiceRow(
-            options = models.map { it.id },
-            selected = novelModel,
-            label = { id -> models.firstOrNull { it.id == id }?.label ?: id },
-            onSelect = onNovelModel,
-        )
         if (discoveryNote != null) {
             Text(
                 text = discoveryNote,
@@ -318,21 +321,22 @@ private fun GenerationCard(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // 顺序按「先整理、后小说化」：忠实是第一步，也是更省的那一步。
+        Spacer(modifier = Modifier.height(14.dp))
         Text("忠实整理模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
-        Spacer(modifier = Modifier.height(8.dp))
-        ChoiceRow(
-            options = models.map { it.id },
-            selected = faithfulModel,
-            label = { id -> models.firstOrNull { it.id == id }?.label ?: id },
-            onSelect = onFaithfulModel,
-        )
+        Spacer(modifier = Modifier.height(6.dp))
+        ModelDropdown(models = models, selected = faithfulModel, onSelect = onFaithfulModel)
         Text(
             text = "整理只做「补标点、顺语序」，思考固定关闭；可以单独选一个更便宜的模型。",
             modifier = Modifier.padding(top = 6.dp),
             style = MaterialTheme.typography.labelSmall,
             color = DreamColors.inkFaint,
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("小说化模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
+        Spacer(modifier = Modifier.height(6.dp))
+        ModelDropdown(models = models, selected = novelModel, onSelect = onNovelModel)
 
         Spacer(modifier = Modifier.height(16.dp))
         Text("小说化思考", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
@@ -350,6 +354,74 @@ private fun GenerationCard(
             style = MaterialTheme.typography.labelSmall,
             color = DreamColors.inkFaint,
         )
+    }
+}
+
+/**
+ * 模型下拉：一家可能上架 3–4 个模型，胶囊铺开会把卡片撑成两列换行，
+ * 所以模型用「一行当前值 + 下拉候选」，金额/思考仍用胶囊（固定 4 档）。
+ */
+@Composable
+private fun ModelDropdown(
+    models: List<ModelSpec>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = models.firstOrNull { it.id == selected }?.label ?: selected
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(DreamColors.night)
+                .border(1.dp, DreamColors.line, RoundedCornerShape(10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .semantics { contentDescription = "选择模型，当前 $current" },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = current,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = DreamColors.paper,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text("▾", style = MaterialTheme.typography.labelLarge, color = DreamColors.inkDim)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = DreamColors.paperSurface,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, DreamColors.inkFaint.copy(alpha = 0.16f)),
+        ) {
+            models.forEach { model ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = model.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (model.id == selected) DreamColors.ember else DreamColors.paper,
+                        )
+                    },
+                    trailingIcon = {
+                        if (model.id == selected) {
+                            Text("✓", style = MaterialTheme.typography.bodyMedium, color = DreamColors.ember)
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(model.id)
+                    },
+                )
+            }
+        }
     }
 }
 
