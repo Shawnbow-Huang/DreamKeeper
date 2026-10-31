@@ -249,6 +249,11 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 契约：已保存 Key 才测；`maxAttempts=1`；20/15/10s；连点只发一次；失败分 AUTH / RATE_LIMITED / TIMEOUT / NETWORK / BAD_REQUEST / SERVER / BAD_CONTENT / NO_KEY。
 - 结论：通过。PENDING：五家真连通（无真实 Key）、UI 三态（T4）。
 
+### T6 终审（Lead，2026-10-31）
+- 交付：`docs/evidence/plan6/FINAL-REVIEW.md`（基线对照 / 提交清单 / 证明索引 / 五家矩阵 / PENDING P1–P9 / 风险）、`docs/evidence/plan1/ACCEPTANCE.md` `## 3g`（B1–B14）、看板收口。
+- 结论：离线契约通过；真实连通 PENDING（P1）。不宣称「已支持五家真实调用」，只宣称「五家请求体/错误/用量契约已证 + Key 按家隔离 + 测试连接可用」。
+- PENDING：P1–P9（真实 Key、真价卡、MiniMax 路径、强制思考模型、Qwen 地域、切家竞态、chip 小点、主题/TalkBack、真机）。
+
 ### T5 生成链按供应商派发 + 成本诚实（Lead，2026-10-31）
 - 交付：`GenerationOrchestrator.kt`（`clientFor`/`apiKeyFor`/`keyFor`、`newRun` 快照 provider+model、faithful/novel 请求带 provider/model/对应 Key、`attemptRow` 按 provider 决定计价）、`ReviseOrchestrator.kt`（同一套派发）、`di/AppContainer.kt`（`providerClients`/`apiKeyStore.load(provider)` 接线）、`scripts/check-cost.py`（`price-missing` 白名单 + 短路复算）、`GenerationOrchestratorTest` 新增 3 例。
 - 独立复跑：`--tests com.dreamkeeper.llm.GenerationOrchestratorTest` 19 例绿（54s）；全量 `--rerun-tasks` BUILD SUCCESSFUL 65s，XML **59 类 488 例 0 失败**。

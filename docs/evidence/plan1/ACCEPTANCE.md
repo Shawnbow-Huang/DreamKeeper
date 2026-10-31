@@ -218,3 +218,26 @@ design v1.5 的 §14 共 8 条；本节只写「本轮（Plan 2 / Task 9）结�
 | B13 首启为空（release 无种子） | `p5-release-02` + `p5-empty-00`（0 天有梦） | ✅ PASS（真机全新安装 P2） |
 | B14 API 26–28 / 导出打开态 | 复用 Plan 4 `p4-api26-01.txt` | ⚠️ PENDING（P3/P4） |
 | B15 证据/偏差/密钥纪律 | 全量 XML 52/443/0；`git ls-files` 密钥文件 0；D461–D491 全部登记 | ✅ PASS |
+
+## 3g 多供应商 Key 与测试连接证据表（Plan 6 / T6）
+
+> 分支 `plan6-providers`，基线 `e1f34a1`；终态全量 **59 类 / 488 例 / 0 失败**（versionCode 2 / 0.9.0）。
+> 逐项细节见 `docs/evidence/plan6/FINAL-REVIEW.md`；PENDING 白名单见其 §七（P1–P9）。
+> 口径：**离线契约可证，真实连通 PENDING**——不宣称任何一家真实连通成功。
+
+| 能力/断言 | 证据文件 | 结论 |
+|---|---|---|
+| B1 DeepSeek 请求体在重构后逐字不变 | `p6-contract-01-deepseek-baseline.json` + `DeepSeekRequestBaselineTest` 4 例 | ✅ PASS |
+| B2 五家 Key 隔离 + 旧 DeepSeek 键零迁移 | `p6-key-00-migration.txt`、`PerProviderApiKeyTest` 6 例 | ✅ PASS |
+| B3 坏密文不再连坐删别名 | 同上（P0 修复：只返回 null + Log.w） | ✅ PASS |
+| B4 五家请求体按能力位构造 | `p6-llm-01-providers.txt`、`ProviderBodiesTest` 7 例 | ✅ PASS |
+| B5 错误映射（含 MiniMax 假 200 / 空 content / 非 JSON） | 同上、`ProviderErrorsTest` 6 例 | ✅ PASS |
+| B6 用量解析三形状 | 同上、`ProviderUsageTest` 3 例 | ✅ PASS |
+| B7 测试连接单飞 / 空 Key 0 请求 / 超时分类 | `p6-conn-01-tester.txt`、`ConnectionTesterTest` 6 例 | ✅ PASS（真连通 P1） |
+| B8 生成链按 provider 派发 + 开始快照 | `p6-llm-02-generation-routing.txt`（QWEN 只调 QWEN client、DeepSeek 0 次） | ✅ PASS |
+| B9 非 DeepSeek 成本诚实（0 元 / 无快照 / `price-missing`） | 同上 + `check-cost.py --self-test` 6/0 | ✅ PASS（真价卡 P2） |
+| B10 DeepSeek 计价回归 | 同上（`cost-v1` + 快照仍非空） | ✅ PASS |
+| B11 设置页五家切换 / 按家 Key / 模型随家 / 持久化 | `p6-ui-00-settings.txt` + 3 张截图（nearWhite 0） | ✅ PASS（真 Key 输入 P1） |
+| B12 全量不退化 + 密钥零泄漏 + 偏差登记 | XML 59/488/0；`git ls-files` 密钥 0；D494–D525 | ✅ PASS |
+| B13 五家真实连通 | — | ⚠️ PENDING（P1，需真实 Key） |
+| B14 MiniMax/GLM 端点路径、强制思考模型、地域差异 | — | ⚠️ PENDING（P3/P4/P5） |
