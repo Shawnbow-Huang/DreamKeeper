@@ -1,0 +1,82 @@
+{
+  "captured_at": "2026-10-31T22:55:13+08:00",
+  "head": "e1f34a1",
+  "test": "com.dreamkeeper.llm.DeepSeekRequestBaselineTest",
+  "note": "Provider 化前的 DeepSeek 请求体基线；T2 重构后必须逐字节不变。键顺序已规范化。",
+  "bodies": {
+    "faithful": {
+      "messages": [
+        {
+          "content": "你是梦境记录助手。",
+          "role": "system"
+        },
+        {
+          "content": "记录：屋顶有鲸鱼。",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek-flash",
+      "stream": false,
+      "temperature": 0.1,
+      "thinking": {
+        "type": "disabled"
+      }
+    },
+    "novel": {
+      "messages": [
+        {
+          "content": "你是梦境记录助手。",
+          "role": "system"
+        },
+        {
+          "content": "记录：屋顶有鲸鱼。",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek-flash",
+      "reasoning_effort": "high",
+      "stream": false,
+      "thinking": {
+        "type": "enabled"
+      }
+    },
+    "json": {
+      "messages": [
+        {
+          "content": "你是梦境记录助手。",
+          "role": "system"
+        },
+        {
+          "content": "记录：屋顶有鲸鱼。",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek-flash",
+      "response_format": {
+        "type": "json_object"
+      },
+      "stream": false,
+      "temperature": 0.1,
+      "thinking": {
+        "type": "disabled"
+      }
+    },
+    "no-temp": {
+      "messages": [
+        {
+          "content": "你是梦境记录助手。",
+          "role": "system"
+        },
+        {
+          "content": "记录：屋顶有鲸鱼。",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek-flash",
+      "stream": false,
+      "thinking": {
+        "type": "disabled"
+      }
+    }
+  }
+}
