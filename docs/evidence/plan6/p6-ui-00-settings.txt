@@ -1,0 +1,34 @@
+APK_SHA256=fd6c6872f7efc7ea (release, versionCode 2 / 0.9.0)
+DEVICE_TIME=host-only 2026-10-31T15:22:00Z (screenshots taken 2026-10-31 03:19-03:22 device time)
+REPLAY=adb install -r android/app/build/outputs/apk/release/app-release.apk && adb shell am start -n com.dreamkeeper/.MainActivity
+REPLAY_SHOT=adb shell screencap -p /sdcard/x.png && adb exec-out cat /sdcard/x.png > docs/evidence/plan6/<name>.png
+
+## 这份证据回答什么
+设置页能不能选五家供应商、切过去会不会串 Key、五家的模型清单对不对、
+「测试连接」按钮在没配 Key 时是不是不可点、选中的供应商冷启后还在不在。
+
+## 改动（Plan 6 T4，D517–D521）
+- SettingsScreen.kt：顶部栏固定，正文改成 Column(weight(1f).verticalScroll(...).imePadding())——
+  Plan 5 的 1.3× 把「关于」卡顶到屏底，再加供应商区必然被裁（D518）。
+- 新增「模型供应商」五枚 48dp 胶囊（DeepSeek / 小米 MiMo / MiniMax / 通义千问 / 智谱 GLM），FlowRow 自动换行。
+- Key 卡标题、占位符、状态文案全部跟随当前供应商；按钮：保存 / 测试连接 / 清除，均 ≥48dp。
+- 「测试连接」只在已保存 Key 时可点；结果行显示「连上了 · <ms> · <model>」或「没连上：<人话>」。
+- 「生成」卡模型清单来自 ProviderRegistry.of(provider)；思考档位四枚不变。
+- GenerationPrefs 增 dk_generation_provider 与按家记忆的模型键（DeepSeek 继续用旧键 dk_generation_model，零迁移）。
+- warningFor 去掉「必须 sk- 开头」（五家格式不同，D517）。
+
+## 截图（裁掉顶部 100px 后统计近白）
+| 文件 | bytes | sha256 前16 | nearWhite(≥245) |
+| --- | --- | --- | --- |
+| p6-ui-01-providers.png | 228463 | 6f708e33d58c6bf6 | 0（0.0000%） |
+| p6-ui-02-mimo.png | 230657 | 74062cd43c5967db | 0（0.0000%） |
+| p6-ui-03-persist.png | 230475 | 206901fafbacfd82 | 0（0.0000%） |
+
+- 01：默认 DeepSeek，Key 卡「还没配置」，「测试连接」置灰；模型 DeepSeek Flash / V4 Pro。
+- 02：点「小米 MiMo」→ 卡标题变「小米 MiMo API Key」、占位符「粘贴 小米 MiMo 的 API Key」、模型变 MiMo V2.6 Pro / Flash。
+- 03：force-stop 后冷启再进设置，仍停在小米 MiMo（prefs 持久化生效）。
+
+## 未覆盖 / 需要真实 Key 的部分
+- 五家真连通全部 PENDING：本轮设备上五家 Key 均未配置（见 D521），截图只证 UI 与「未配置时按钮不可点」。
+- 「测试中…」三态与成功毫秒数只由 JVM 用例覆盖（SettingsViewModelTest 10 例 + ConnectionTesterTest 6 例）。
+- 供应商 chip 上的「已配置」小点本轮未做（D519）：五家都未配 Key，做了也没有可拍的状态。

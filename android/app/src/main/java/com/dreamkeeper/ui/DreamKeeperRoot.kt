@@ -83,6 +83,7 @@ fun DreamKeeperRoot(
     apiKeyStore: ApiKeyStore,
     /** 生成档位（Plan 5 Task 2）：只给设置页读写；容器里的编排器自己现取。 */
     generationPrefs: GenerationPrefs,
+    connectionTester: com.dreamkeeper.llm.ConnectionTester? = null,
     tagDao: TagDao,
     session: RecordingSession,
     audioStore: WavStore,
@@ -211,7 +212,7 @@ fun DreamKeeperRoot(
             }
             // 设置页同理不进底部栏：showBottomBar 只按 calendar / library 等值判定
             composable(DreamRoute.Settings.route) {
-                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore, generationPrefs) }
+                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore, generationPrefs, connectionTester) }
                 SettingsScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable("detail/{dreamId}") { backStackEntry ->

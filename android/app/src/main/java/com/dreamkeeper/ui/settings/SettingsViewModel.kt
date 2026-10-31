@@ -5,7 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.dreamkeeper.data.security.ApiKeyStore
 import com.dreamkeeper.data.security.maskApiKey
 import com.dreamkeeper.data.settings.GenerationPrefs
+import com.dreamkeeper.llm.ConnectionOutcome
+import com.dreamkeeper.llm.ConnectionTester
 import com.dreamkeeper.llm.GenerationOptions
+import com.dreamkeeper.llm.ModelSpec
+import com.dreamkeeper.llm.ProviderId
+import com.dreamkeeper.llm.ProviderRegistry
 import com.dreamkeeper.llm.ThinkingLevel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -16,38 +21,75 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * 设置页状态与 Key 的保存/清除。
+ * 设置页状态：供应商、Key 的保存/清除、测试连接、生成档位（Plan 6 Task 4）。
  *
- * 三条纪律：
+ * 四条纪律：
  * 1. **明文只在 [UiState.draft] 里短暂存在**，落盘后立刻清空；[UiState.maskedKey] 只存
- *    `sk-…abcd` 这种掩码，保证截图/日志永远拿不到完整 Key。
- * 2. 所有 [ApiKeyStore] 调用都走 [io]（Keystore 加密 + `commit()` 都是阻塞 IO），
- *    主线程只负责状态更新。
- * 3. 本任务**不校验 Key 可用性**（§0.7：可用性校验留 Task 5），所以文案只能是
- *    「已保存（还没验证）」，不许出现「已验证」。
+ *    `sk-…abcd` 掩码，截图/日志拿不到完整 Key。
+ * 2. Key 的读写都带 [UiState.provider]：五家的 Key 互相隔离（Plan 6 D507）。
+ * 3. [ApiKeyStore] 与 [ConnectionTester] 调用都走 [io]（Keystore 加密 + 网络都是阻塞/长耗时）。
+ * 4. 「测试连接」只测**已保存的 Key**；测试中的结果回来时若用户已切走（provider 或 nonce 不匹配），
+ *    直接丢弃，避免串台（T3 契约）。
  */
 class SettingsViewModel(
     private val apiKeyStore: ApiKeyStore,
     /** 生成档位（Plan 5 Task 2）：SharedPreferences 读写都是轻量同步操作，不必切 IO。 */
     private val generationPrefs: GenerationPrefs? = null,
+    /** 测试连接（Plan 6 T3）；为 null 时按钮只提示「不可用」，不抛异常。 */
+    private val connectionTester: ConnectionTester? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
+    /** 一次「测试连接」的界面结果；[nonce] 用于丢弃切走后回来的旧结果。 */
+    data class ConnectionUi(
+        val provider: ProviderId,
+        val nonce: Long,
+        val ok: Boolean,
+        val latencyMs: Long? = null,
+        val httpStatus: Int? = null,
+        val model: String? = null,
+        val reason: ConnectionOutcome.Reason? = null,
+    ) {
+        /** 失败原因的人话版本（UI 只读这一行）。 */
+        val reasonText: String?
+            get() = reason?.let {
+                when (it) {
+                    ConnectionOutcome.Reason.NO_KEY -> "还没填 Key"
+                    ConnectionOutcome.Reason.AUTH -> "Key 不对，或没有这个模型的权限"
+                    ConnectionOutcome.Reason.RATE_LIMITED -> "请求太频繁，稍后再试"
+                    ConnectionOutcome.Reason.TIMEOUT -> "超时了，检查网络"
+                    ConnectionOutcome.Reason.NETWORK -> "连不上，检查网络"
+                    ConnectionOutcome.Reason.BAD_REQUEST -> "请求被服务端拒绝了（可能是模型名或参数不对）"
+                    ConnectionOutcome.Reason.SERVER -> "服务端出错了，稍后再试"
+                    ConnectionOutcome.Reason.BAD_CONTENT -> "服务端回了看不懂的内容"
+                    ConnectionOutcome.Reason.UNKNOWN -> "测试没完成，再试一次"
+                }
+            }
+    }
+
     data class UiState(
-        /** 本机是否存着一份能解开的 Key */
+        /** 当前供应商 */
+        val provider: ProviderId = ProviderId.DEEPSEEK,
+        /** 当前供应商的模型清单（设置页只摆这一家） */
+        val models: List<ModelSpec> = ProviderRegistry.of(ProviderId.DEEPSEEK).models,
+        /** 本机是否存着这家能解开的 Key */
         val keyConfigured: Boolean = false,
         /** 已配置时给界面看的掩码（`sk-…abcd`），未配置为空串 */
         val maskedKey: String = "",
         /** 输入框里的原始草稿；保存成功后清空 */
         val draft: String = "",
-        /** 软提示（长度 < 20 / 不是 sk- 开头），**不阻止保存** */
+        /** 软提示（偏短等），**不阻止保存** */
         val warning: String? = null,
         /** 硬错误（IO/Keystore 异常）；与 [warning] 分开，颜色也不同 */
         val error: String? = null,
         /** IO 进行中，按钮置灰 */
         val busy: Boolean = false,
-        /** 当前模型（`deepseek-flash` / `deepseek-v4-pro`） */
-        val model: String = GenerationOptions.DEFAULT_MODEL,
+        /** 测试连接进行中 */
+        val testing: Boolean = false,
+        /** 最近一次测试结果（只属于 [ConnectionUi.provider]） */
+        val connection: ConnectionUi? = null,
+        /** 当前模型（各家自己的 id） */
+        val model: String = ProviderRegistry.of(ProviderId.DEEPSEEK).defaultModel().id,
         /** 小说化思考档位（faithful 恒关，改稿仍走关闭 + 温度，见 D471） */
         val novelThinking: ThinkingLevel = GenerationOptions.DEFAULT.novelThinking,
     )
@@ -55,13 +97,41 @@ class SettingsViewModel(
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    private var pendingNonce: Long = 0L
+
     init {
-        // 进页面就去读一次：Task 2 之后 keyConfigured 是真实状态，不再恒为 false
-        refresh()
         val options = generationPrefs?.options()
         if (options != null) {
-            _state.update { it.copy(model = options.model, novelThinking = options.novelThinking) }
+            val spec = ProviderRegistry.of(options.provider)
+            _state.update {
+                it.copy(provider = options.provider, models = spec.models, model = options.model, novelThinking = options.novelThinking)
+            }
         }
+        refresh()
+    }
+
+    /** 换供应商：只换 Key 卡与模型清单，不动已保存的任何 Key。 */
+    fun selectProvider(provider: ProviderId) {
+        if (_state.value.provider == provider) return
+        generationPrefs?.setProvider(provider)
+        val spec = ProviderRegistry.of(provider)
+        val model = generationPrefs?.options()?.model?.takeIf { id -> spec.models.any { it.id == id } }
+            ?: spec.defaultModel().id
+        _state.update {
+            it.copy(
+                provider = provider,
+                models = spec.models,
+                model = model,
+                draft = "",
+                warning = null,
+                error = null,
+                keyConfigured = false,
+                maskedKey = "",
+                connection = null,
+                testing = false,
+            )
+        }
+        refresh()
     }
 
     /** 换模型：白名单外的值由 [GenerationPrefs.setModel] 忽略，状态也不动。 */
@@ -78,12 +148,14 @@ class SettingsViewModel(
         _state.update { it.copy(novelThinking = prefs.options().novelThinking) }
     }
 
-    /** 重读本机存储。解密失败时 store 返回 null，界面自然回到「还没配置」。 */
+    /** 重读本机存储（当前供应商）。解密失败时 store 返回 null，界面自然回到「还没配置」。 */
     fun refresh() {
+        val provider = _state.value.provider
         viewModelScope.launch(io) {
-            val key = apiKeyStore.load()
+            val key = apiKeyStore.load(provider)
             _state.update {
-                it.copy(
+                // 回来时用户可能已经切走：只更新同 provider 的状态
+                if (it.provider != provider) it else it.copy(
                     keyConfigured = key != null,
                     maskedKey = key?.let(::maskApiKey).orEmpty(),
                     busy = false,
@@ -103,17 +175,19 @@ class SettingsViewModel(
             _state.update { it.copy(error = "先输入 Key 再保存", warning = null) }
             return
         }
+        val provider = _state.value.provider
         viewModelScope.launch(io) {
             _state.update { it.copy(busy = true, error = null) }
             try {
-                apiKeyStore.save(key = trimmed)
+                apiKeyStore.save(key = trimmed, provider = provider)
                 _state.update {
-                    it.copy(
+                    if (it.provider != provider) it else it.copy(
                         keyConfigured = true,
                         maskedKey = maskApiKey(trimmed),
                         draft = "",
                         warning = null,
                         busy = false,
+                        connection = null,
                     )
                 }
             } catch (e: Exception) {
@@ -124,11 +198,22 @@ class SettingsViewModel(
     }
 
     fun clear() {
+        val provider = _state.value.provider
         viewModelScope.launch(io) {
             _state.update { it.copy(busy = true, error = null) }
             try {
-                apiKeyStore.clear()
-                _state.update { UiState() }
+                apiKeyStore.clear(provider)
+                _state.update {
+                    if (it.provider != provider) it else it.copy(
+                        keyConfigured = false,
+                        maskedKey = "",
+                        draft = "",
+                        warning = null,
+                        error = null,
+                        busy = false,
+                        connection = null,
+                    )
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(busy = false, error = "清除失败（${e.javaClass.simpleName}）") }
             }
@@ -136,17 +221,56 @@ class SettingsViewModel(
     }
 
     /**
-     * 只做「像不像一个 Key」的软提示：DeepSeek 之外的中转 Key 不该被拦（§0.6）。
+     * 测试连接：只测已保存的 Key。未配置时本地直接给结论（0 HTTP），
+     * 配置了才真的发一次最小请求。
+     */
+    fun testConnection() {
+        val tester = connectionTester ?: return
+        val provider = _state.value.provider
+        val nonce = tester.nextNonce()
+        pendingNonce = nonce
+        if (!_state.value.keyConfigured) {
+            _state.update {
+                it.copy(connection = ConnectionUi(provider, nonce, ok = false, reason = ConnectionOutcome.Reason.NO_KEY))
+            }
+            return
+        }
+        _state.update { it.copy(testing = true, connection = null) }
+        viewModelScope.launch {
+            val outcome = tester.test(provider, nonce)
+            _state.update {
+                // 切走或又点了一次：旧结果直接丢弃
+                if (it.provider != provider || pendingNonce != nonce) return@update it
+                when (outcome) {
+                    is ConnectionOutcome.Ok -> it.copy(
+                        testing = false,
+                        connection = ConnectionUi(
+                            provider = provider,
+                            nonce = nonce,
+                            ok = true,
+                            latencyMs = outcome.latencyMs,
+                            httpStatus = outcome.httpStatus,
+                            model = outcome.model,
+                        ),
+                    )
+                    is ConnectionOutcome.Failed -> it.copy(
+                        testing = false,
+                        connection = ConnectionUi(provider, nonce, ok = false, reason = outcome.reason),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 只做「像不像一个 Key」的软提示。**不再要求 `sk-` 前缀**（Plan 6 D517）：
+     * 五家的 Key 格式不同，前缀断言只会误伤；只剩「偏短」一条。
      * 空输入不提示——还没开始输入就红一片很吵。
      */
     private fun warningFor(raw: String): String? {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return null
-        val notes = buildList {
-            if (!trimmed.startsWith("sk-")) add("通常以 sk- 开头")
-            if (trimmed.length < MIN_PLAUSIBLE_LENGTH) add("只有 ${trimmed.length} 位，偏短")
-        }
-        return if (notes.isEmpty()) null else notes.joinToString("；") + "（仍可保存）"
+        return if (trimmed.length < MIN_PLAUSIBLE_LENGTH) "只有 ${trimmed.length} 位，偏短（仍可保存）" else null
     }
 
     private companion object {

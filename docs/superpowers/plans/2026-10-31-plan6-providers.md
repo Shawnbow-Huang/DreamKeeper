@@ -130,6 +130,11 @@
 | D514 | 2026-10-31 | T3 | 单飞用 `AtomicBoolean` 而非 Mutex：第二个调用立即返回 `UNKNOWN`，不挂起排队 | 连接测试是用户手动点的小操作，排队等待没有意义；立即返回也让「连点」可测 |
 | D515 | 2026-10-31 | T3 | DeepSeek 的测试连接复用 `DeepSeekClient`（20s/15s、maxAttempts=1），不新建 client | DeepSeek 请求体已冻基线；独立短超时实例避免了 300s 挂死 |
 | D516 | 2026-10-31 | T3 | T3 由 Lead 直接实施；结果分类 `ConnectionOutcome.Reason` 独立于 ui 层 `UserFacingReason` | llm 层不反向依赖 ui；T4 负责把 Reason 翻成人话 |
+| D517 | 2026-10-31 | T4 | `warningFor` 去掉「必须 sk- 开头」软提示，只保留「偏短」 | 五家 Key 格式不同；前缀断言会误伤，且本机实测 DeepSeek Key 也无从靠前缀判断有效性 |
+| D518 | 2026-10-31 | T4 | 设置页改为「顶部栏固定 + 正文滚动」(`weight(1f).verticalScroll().imePadding()`) | Plan 5 加「关于」卡后 1.3× 已顶到屏底，再叠供应商区必然被裁（UI 预审 P0） |
+| D519 | 2026-10-31 | T4 | 供应商 chip 的「已配置」小点本轮未做 | 五家均未配 Key，没有可呈现的已配置状态；等真实 Key 到位再加不迟 |
+| D520 | 2026-10-31 | T4 | 测试连接按钮在未保存 Key 时禁用；`NO_KEY` 分支只由单测覆盖 | UI 上不允许对空 Key 发请求；设备端未触发该分支（未配 Key） |
+| D521 | 2026-10-31 | T4 | 设备上五家 Key 均未配置：T7 卸载重装清掉了 debug 期写入的 DeepSeek Key（AndroidKeyStore 别名随包卸载删除） | 需用户重新在设置页粘贴 Key 才能做真连通；本轮真连通保持 PENDING |
 
 ## §0.10 顺序与闸门
 
@@ -239,3 +244,9 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 独立复跑：targeted 53s 绿；全量 68s，XML **58 类 475 例 0 失败**。
 - 契约：已保存 Key 才测；`maxAttempts=1`；20/15/10s；连点只发一次；失败分 AUTH / RATE_LIMITED / TIMEOUT / NETWORK / BAD_REQUEST / SERVER / BAD_CONTENT / NO_KEY。
 - 结论：通过。PENDING：五家真连通（无真实 Key）、UI 三态（T4）。
+
+### T4 设置页五家供应商（Lead，2026-10-31）
+- 交付：`SettingsViewModel.kt`（供应商切换 / 按家 Key / 测试连接三态 + nonce 防串台 / 结果人话）、`SettingsScreen.kt`（固定顶栏 + 滚动正文 / 五家 chips / 按家 Key 卡 / 模型清单随家 / 测试连接按钮）、`GenerationOptions.kt`（+provider）、`GenerationPrefs.kt`（+provider 与按家模型记忆，DeepSeek 旧键零迁移）、`DreamKeeperRoot.kt`/`MainActivity.kt` 透传 `connectionTester`；`SettingsViewModelTest` 10 例。
+- 独立复跑：targeted 55s 绿；全量 74s，XML **59 类 485 例 0 失败**。
+- 设备（release `fd6c6872f7efc7ea`）：五家 chips、切家后卡标题/占位符/模型清单联动、未配 Key 时「测试连接」置灰、force-stop 后选中家仍保留；三张截图裁顶后 nearWhite=0。
+- 结论：通过。PENDING：五家真连通（无真实 Key，D521）、chip 已配置小点（D519）。

@@ -30,6 +30,8 @@ enum class ThinkingLevel(val label: String, val effort: ReasoningEffort?) {
  * 开着思考整理一段口述只会更慢更贵，且闸门本来就要逐字保守。
  */
 data class GenerationOptions(
+    /** Plan 6：当前供应商；生成链按它选 baseUrl / 请求体风格。 */
+    val provider: ProviderId = ProviderId.DEEPSEEK,
     val model: String = DEFAULT_MODEL,
     /** 小说化默认「高」；改稿固定「低」（见 ReviseOrchestrator 的 REVISE_LEVEL）。 */
     val novelThinking: ThinkingLevel = ThinkingLevel.HIGH,
@@ -38,7 +40,7 @@ data class GenerationOptions(
         const val FLASH = "deepseek-flash"
         const val PRO = "deepseek-v4-pro"
 
-        /** 设置页展示顺序：默认档在前。 */
+        /** DeepSeek 的模型（旧常量保留：Plan 6 之前只有这一家）。 */
         val MODELS = listOf(FLASH, PRO)
 
         const val DEFAULT_MODEL = FLASH
