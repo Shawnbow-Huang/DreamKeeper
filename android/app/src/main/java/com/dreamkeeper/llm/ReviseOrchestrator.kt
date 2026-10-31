@@ -38,7 +38,12 @@ class ReviseOrchestrator(
      */
     private val options: () -> GenerationOptions = { GenerationOptions() },
     private val apiKey: () -> String = { "" },
+    /** Plan 6：按供应商取 client / Key；默认回退旧行为（DeepSeek）。 */
+    private val clientFor: (ProviderId) -> LlmClient = { llm },
+    private val apiKeyFor: ((ProviderId) -> String)? = null,
 ) {
+
+    private fun keyFor(provider: ProviderId): String = apiKeyFor?.invoke(provider) ?: apiKey()
 
     suspend fun generateFaithful(
         dreamId: String,
@@ -253,17 +258,19 @@ class ReviseOrchestrator(
     }
 
     private suspend fun call(text: String, temperature: Double): CallOutcome {
+        val cfg = options()
         val request = ChatRequest(
-            model = options().model,
+            model = cfg.model,
             messages = listOf(ChatMessage("user", text)),
             thinking = Thinking.DISABLED,
             temperature = temperature,
             jsonMode = true,
-            apiKey = apiKey(),
+            apiKey = keyFor(cfg.provider),
             kind = "REVISE",
+            provider = cfg.provider,
         )
         return try {
-            val response = llm.chat(request)
+            val response = clientFor(cfg.provider).chat(request)
             if (response.content.isBlank()) {
                 CallOutcome.Err(GenerationFailure.Protocol("响应为空"))
             } else {
@@ -404,6 +411,8 @@ val AppContainer.orchestrator: ReviseOrchestrator
                 generation = generationOrchestrator,
                 options = { generationPrefs.options() },
                 apiKey = { apiKeyStore.load().orEmpty() },
+                clientFor = { provider -> providerClients[provider] ?: llmClient },
+                apiKeyFor = { provider -> apiKeyStore.load(provider).orEmpty() },
             )
         }
     }

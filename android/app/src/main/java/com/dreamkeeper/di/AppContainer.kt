@@ -268,6 +268,8 @@ class AppContainer(
             priceCard = priceCard,
             options = { generationPrefs.options() },
             apiKey = { apiKeyStore.load().orEmpty() },
+            clientFor = { provider -> providerClients[provider] ?: llmClient },
+            apiKeyFor = { provider -> apiKeyStore.load(provider).orEmpty() },
             tagsFor = { dreamId ->
                 repository.observeTagsForDream(dreamId).first().map { it.name }
             },

@@ -58,7 +58,7 @@ except Exception:  # pragma: no cover - 兜底路径
 
 UTC = timezone.utc
 
-FORMULA_VERSIONS = {"cost-v1"}
+FORMULA_VERSIONS = {"cost-v1", "price-missing"}
 CURRENCY = "CNY"
 UNIT = "microYuanPerMillionTokens"
 PROVENANCE = "project-convention"
@@ -216,9 +216,20 @@ def _usage_problems(usage, hit, miss, out):
     return problems
 
 
+UNPRICED_FORMULA = "price-missing"
+
+
 def row_problems(row):
     """返回 (problems, unknown_formula)。每行独立检查，不短路。"""
     problems = []
+    if not row.get("failed") and row["formula_version"] == UNPRICED_FORMULA:
+        # Plan 6 D522：非 DeepSeek 供应商没有价卡，成功行也记 0 元。
+        # 这类行不许带快照、不许有非零费用，也不做 ①–⑤ 复算。
+        if row["card"] is not None:
+            problems.append("price-missing 行不应带 priceSnapshotJson")
+        if row["cost"] != 0:
+            problems.append("price-missing 行 costMicroYuan 应为 0，实际 %r" % (row["cost"],))
+        return problems, False
     if row.get("failed"):
         # D366/D316：失败行（llm_calls.error 非 NULL）豁免 ①～⑤，改断言
         # costMicroYuan==0 且 usageJson IS NULL；其余列允许为空（四 token 列本就 NULL）。
@@ -418,7 +429,8 @@ def load_db_copy(path):
         error_value = rec["error"] if "error" in keys else None
         failed = error_value is not None
         http_status = rec["httpStatus"] if "httpStatus" in keys else None
-        if snapshot is None and failed:
+        formula_value = need("formulaVersion")
+        if snapshot is None and (failed or formula_value == UNPRICED_FORMULA):
             # D366：失败行豁免 ①～⑤，不要求快照可复算；D316 虽照写快照，这里仍允许 NULL。
             card = None
         else:

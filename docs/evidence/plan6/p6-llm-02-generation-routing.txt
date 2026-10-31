@@ -1,0 +1,41 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-31T15:24:10Z
+REPLAY=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.llm.GenerationOrchestratorTest" --rerun-tasks --console=plain
+T14=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks --console=plain
+
+[为什么改]
+Plan 6 T5：生成链原本在每次 attempt 里现读 prefs 与 Key，且所有请求都发往 DeepSeek。
+- 生成中切供应商时，新 model/Key 会被记到旧请求的 llm_calls 行上（账实不符）。
+- 非 DeepSeek 供应商没有价卡，若照 DeepSeek 价卡计价，就是编造费用。
+因此：每次生成在开始时快照 provider/model/key；按 provider 派发到对应 LlmClient；
+非 DeepSeek 成功行标 `price-missing`（0 元、无快照），check-cost.py 白名单并短路复算。
+
+[改法]
+1. `llm/GenerationOrchestrator.kt`
+   - 构造新增 `clientFor: (ProviderId) -> LlmClient = { llm }`、`apiKeyFor: ((ProviderId) -> String)? = null`。
+   - `newRun(dreamId)`：开始生成时快照 `provider`/`model`；`Run(dreamId, provider, model)`。
+   - faithful / novel 请求：`model = run.model`、`apiKey = keyFor(run.provider)`、`provider = run.provider`。
+   - `chat()` → `clientFor(run.provider).chat(request)`。
+   - `attemptRow()`：`unpriced = run.provider != DEEPSEEK`；unpriced 行 `costMicroYuan=0`、`priceSnapshotJson=null`、`formulaVersion="price-missing"`。
+2. `llm/ReviseOrchestrator.kt`：同一套 `clientFor`/`apiKeyFor`，请求带 `provider`。
+3. `di/AppContainer.kt`：`generationOrchestrator` 接 `providerClients[provider]` 与 `apiKeyStore.load(provider)`；`AppContainer.orchestrator` 同步。
+4. `scripts/check-cost.py`：`FORMULA_VERSIONS` 加 `price-missing`；该 formula 行要求 `cost==0` 且无 `priceSnapshotJson`，跳过 ①–⑤ 复算。
+5. 测试（`GenerationOrchestratorTest` 新增 3 例）：
+   - `generation snapshots provider model and key at start`：QWEN + qwen3.8-max，断言只调 QWEN client、DeepSeek 0 次、请求 provider/model/key 正确。
+   - `non deepseek success row is marked price missing with zero cost`：QWEN 成功行 `formulaVersion=price-missing`、cost 0、snapshot null、model 保留。
+   - `deepseek success row still priced with formula v1`：DeepSeek 成功行 cost>0、snapshot 非空、`cost-v1`（回归护栏）。
+
+[绿跑]
+- `--tests com.dreamkeeper.llm.GenerationOrchestratorTest`：19 tests，0 failed，BUILD SUCCESSFUL in 54s。
+- 全量 `--rerun-tasks`：BUILD SUCCESSFUL in 1m 5s；XML classes=59 tests=488 failures=0 errors=0 skipped=0。
+- `python scripts/check-cost.py --self-test`：rows=6 mismatches=0；未知 formula 仍 exit 2（白名单只多一个 `price-missing`）。
+
+[读法]
+- 「按供应商派发」看 `generation snapshots provider model and key at start`：clientFor 收到的 provider 序列 + 两个 fake client 的调用次数。
+- 「成本诚实」看两条 price 用例：同一套成功流程下，DeepSeek 行有价卡快照与正费用，QWEN 行 0 元且无快照。
+- 「账实一致」看 `newRun` 快照：断言请求里的 model/key 来自开始时的 prefs，而不是 attempt 现读。
+
+[未覆盖 / PENDING]
+- 五家真实连通（无真实 Key；需用户逐家粘贴后点「测试连接」）。
+- 非 DeepSeek 的真实价卡（厂商计价未核实，本轮明确不编造）。
+- 生成中切供应商的 UI 提示：语义上已由快照隔离，但设备端未造这条竞态证据。

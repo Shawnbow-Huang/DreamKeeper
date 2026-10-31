@@ -77,6 +77,10 @@ class GenerationOrchestrator(
      */
     private val options: () -> GenerationOptions = { GenerationOptions() },
     private val apiKey: () -> String = { "" },
+    /** Plan 6：按供应商取 client；默认全部走注入的 [llm]（DeepSeek 旧行为不变）。 */
+    private val clientFor: (ProviderId) -> LlmClient = { llm },
+    /** Plan 6：按供应商取 Key；null 时回退 [apiKey]（旧测试与旧调用点零改动）。 */
+    private val apiKeyFor: ((ProviderId) -> String)? = null,
     /** 标签名列表（§0.5 的「标签 / 选填」槽）；空列表表示不传这一槽。 */
     private val tagsFor: suspend (String) -> List<String> = { emptyList() },
 ) : GenerationRunner {
@@ -105,7 +109,7 @@ class GenerationOrchestrator(
             val dream = store.dream(dreamId)
                 ?: return protocol(GenerationKind.FAITHFUL, "dream 不存在")
             if (!generatable(dream)) return protocol(GenerationKind.FAITHFUL, GATE_MESSAGE)
-            return faithfulChain(dream, Run(dreamId), onProgress)
+            return faithfulChain(dream, newRun(dreamId), onProgress)
         } finally {
             mutex.unlock()
         }
@@ -128,13 +132,20 @@ class GenerationOrchestrator(
             val dream = store.dream(dreamId)
                 ?: return protocol(GenerationKind.NOVEL, "dream 不存在")
             if (!generatable(dream)) return protocol(GenerationKind.NOVEL, GATE_MESSAGE)
-            return novel(dream, Run(dreamId), idea, onProgress)
+            return novel(dream, newRun(dreamId), idea, onProgress)
         } finally {
             mutex.unlock()
         }
     }
 
     // ------------------------------------------------------------ 忠实整理链
+
+    private fun keyFor(provider: ProviderId): String = apiKeyFor?.invoke(provider) ?: apiKey()
+
+    private fun newRun(dreamId: String): Run {
+        val cfg = options()
+        return Run(dreamId, cfg.provider, cfg.model)
+    }
 
     private suspend fun faithfulChain(
         dream: Dream,
@@ -222,13 +233,14 @@ class GenerationOrchestrator(
             run,
             GenerationKind.FAITHFUL,
             ChatRequest(
-                model = options().model,
+                model = run.model,
                 messages = listOf(ChatMessage("user", rendered.text)),
                 thinking = Thinking.DISABLED,
                 temperature = temperature,
                 jsonMode = false,
-                apiKey = apiKey(),
+                apiKey = keyFor(run.provider),
                 kind = "FAITHFUL",
+                provider = run.provider,
             ),
         )
         return FaithfulCall(rendered, response, gate(input, response.content, GateMode.FAITHFUL))
@@ -247,6 +259,7 @@ class GenerationOrchestrator(
                 promptId = call.rendered.promptId,
                 promptVersion = call.rendered.promptVersion,
                 promptHash = call.rendered.promptSha256,
+                model = run.model,
             ),
             changeLogJson = null,
             stage = stage.name,
@@ -301,14 +314,15 @@ class GenerationOrchestrator(
                 run,
                 GenerationKind.NOVEL,
                 ChatRequest(
-                    model = cfg.model,
+                    model = run.model,
                     messages = listOf(ChatMessage("user", rendered.text)),
                     thinking = level.thinking,
                     effort = level.effort,
                     temperature = if (level.effort == null) NOVEL_TEMPERATURE_NO_THINKING else null,
                     jsonMode = true,
-                    apiKey = apiKey(),
+                    apiKey = keyFor(run.provider),
                     kind = "NOVEL",
+                    provider = run.provider,
                 ),
             )
         } catch (e: LlmException) {
@@ -333,6 +347,7 @@ class GenerationOrchestrator(
                 promptId = rendered.promptId,
                 promptVersion = rendered.promptVersion,
                 promptHash = rendered.promptSha256,
+                model = run.model,
             ),
             changeLogJson = changeLog.json,
             // 小说化不动 generationStage（D320）：传 null 让窄 UPDATE 的 COALESCE 保留原档位。
@@ -416,12 +431,14 @@ class GenerationOrchestrator(
         requestId: String?,
     ): LlmCallEntity {
         val failed = errorKind != null
-        val priced = if (failed || usage == null) {
+        // Plan 6：价卡只覆盖 DeepSeek；其他家成功行也「诚实未计价」（D522）。
+        val unpriced = run.provider != ProviderId.DEEPSEEK
+        val priced = if (failed || usage == null || unpriced) {
             null
         } else {
             price(
                 card = priceCard,
-                model = options().model,
+                model = run.model,
                 hit = usage.promptCacheHitTokens,
                 miss = usage.promptCacheMissTokens,
                 out = usage.completionTokens,
@@ -434,15 +451,19 @@ class GenerationOrchestrator(
             id = id(),
             dreamId = run.dreamId,
             kind = kind.name,
-            model = options().model,
+            model = run.model,
             cacheHitTokens = if (failed) null else usage?.promptCacheHitTokens?.toInt(),
             cacheMissTokens = if (failed) null else usage?.promptCacheMissTokens?.toInt(),
             outputTokens = if (failed) null else usage?.completionTokens?.toInt(),
             reasoningTokens = if (failed) null else usage?.reasoningTokens?.toInt(),
             isPeak = priced?.isPeak ?: isPeak(Instant.ofEpochMilli(attempt.startedAtMs)),
-            priceSnapshotJson = priceCard.rawJson,
+            priceSnapshotJson = if (unpriced) null else priceCard.rawJson,
             costMicroYuan = microYuan,
-            formulaVersion = if (failed) "" else FORMULA_VERSION,
+            formulaVersion = when {
+                failed -> ""
+                unpriced -> UNPRICED_FORMULA
+                else -> FORMULA_VERSION
+            },
             httpStatus = attempt.httpStatus,
             attemptNo = attempt.attemptNo,
             requestId = requestId,
@@ -455,7 +476,7 @@ class GenerationOrchestrator(
 
     private suspend fun chat(run: Run, kind: GenerationKind, request: ChatRequest): ChatResponse =
         try {
-            val response = llm.chat(request)
+            val response = clientFor(run.provider).chat(request)
             recordSuccess(run, kind, response)
             response
         } catch (e: LlmException) {
@@ -534,6 +555,7 @@ class GenerationOrchestrator(
         promptId: String,
         promptVersion: String,
         promptHash: String,
+        model: String,
     ): NovelVersionEntity = NovelVersionEntity(
         id = id(),
         dreamId = dreamId,
@@ -545,7 +567,7 @@ class GenerationOrchestrator(
         // Plan 4 T5：版本形如 v2 / v2.1，主版本号进 Int 列（v2.1 -> 2）。
         promptVersion = promptVersion.removePrefix("v").substringBefore('.').toIntOrNull() ?: 0,
         promptHash = promptHash,
-        model = options().model,
+        model = model,
         reasoningEffort = null,
         createdAt = clock(),
     )
@@ -643,7 +665,12 @@ class GenerationOrchestrator(
 
     // ---------------------------------------------------------------- 内部类型
 
-    private class Run(val dreamId: String) {
+    private class Run(
+        val dreamId: String,
+        /** Plan 6：本次生成用的供应商与模型在开始时快照，避免中途切设置把新值记到旧请求上（D504）。 */
+        val provider: ProviderId,
+        val model: String,
+    ) {
         var attempts: Int = 0
         var costMicroYuan: Long = 0
     }
@@ -667,6 +694,9 @@ class GenerationOrchestrator(
 
         /** 计价公式版本（Task 10 的 `check-cost.py` 认这个串）。 */
         const val FORMULA_VERSION = "cost-v1"
+
+        /** 非 DeepSeek 供应商没有价卡：成功行也记 0 元，但公式版本写 `price-missing`（D522）。 */
+        const val UNPRICED_FORMULA = "price-missing"
 
         /** `novel_versions.origin`：生成（区别于 Task 9 的改稿 `REVISE`）。 */
         const val ORIGIN_GENERATE = "GENERATE"

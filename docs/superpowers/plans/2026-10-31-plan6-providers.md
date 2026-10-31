@@ -135,10 +135,14 @@
 | D519 | 2026-10-31 | T4 | 供应商 chip 的「已配置」小点本轮未做 | 五家均未配 Key，没有可呈现的已配置状态；等真实 Key 到位再加不迟 |
 | D520 | 2026-10-31 | T4 | 测试连接按钮在未保存 Key 时禁用；`NO_KEY` 分支只由单测覆盖 | UI 上不允许对空 Key 发请求；设备端未触发该分支（未配 Key） |
 | D521 | 2026-10-31 | T4 | 设备上五家 Key 均未配置：T7 卸载重装清掉了 debug 期写入的 DeepSeek Key（AndroidKeyStore 别名随包卸载删除） | 需用户重新在设置页粘贴 Key 才能做真连通；本轮真连通保持 PENDING |
+| D522 | 2026-10-31 | T5 | 每次生成在开始时快照 `provider/model/apiKey`（`newRun`），而不是每次 attempt 现读 prefs | 生成中切供应商会把新 model/key 记到旧请求上，`llm_calls` 的 model 与真实请求不符；快照后语义稳定 |
+| D523 | 2026-10-31 | T5 | 非 DeepSeek 成功行记 `formulaVersion="price-missing"`、`costMicroYuan=0`、`priceSnapshotJson=NULL`；`check-cost.py` 白名单并短路复算 | 五家价卡未知，静默按 DeepSeek 价卡计费是假账；宁可标「未计价」也不编数字 |
+| D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
+| D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
 ## §0.10 顺序与闸门
 
-G0 T0 契约冻结（Lead 签字）→ T1 Key 存储与迁移 → T2 Provider 传输层（DeepSeek 基线不回归）→ T3 测试连接 → T4 设置页 UI 联动 → T5 证据/终验。
+G0 T0 契约冻结（Lead 签字）→ T1 Key 存储与迁移 → T2 Provider 传输层（DeepSeek 基线不回归）→ T3 测试连接 → T4 设置页 UI 联动 → T5 生成链派发/成本诚实 → T6 证据/终验（FINAL-REVIEW / ACCEPTANCE 3g）。
 T3 与 T4 都改 `SettingsViewModel.kt`，必须串行；T2 与 T3 可并行读不同文件，但合入顺序 T1→T2→T3→T4。
 
 G0 判据：矩阵每项有来源与「需实测」标记；DeepSeek 基线已抓取。
@@ -244,6 +248,12 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 独立复跑：targeted 53s 绿；全量 68s，XML **58 类 475 例 0 失败**。
 - 契约：已保存 Key 才测；`maxAttempts=1`；20/15/10s；连点只发一次；失败分 AUTH / RATE_LIMITED / TIMEOUT / NETWORK / BAD_REQUEST / SERVER / BAD_CONTENT / NO_KEY。
 - 结论：通过。PENDING：五家真连通（无真实 Key）、UI 三态（T4）。
+
+### T5 生成链按供应商派发 + 成本诚实（Lead，2026-10-31）
+- 交付：`GenerationOrchestrator.kt`（`clientFor`/`apiKeyFor`/`keyFor`、`newRun` 快照 provider+model、faithful/novel 请求带 provider/model/对应 Key、`attemptRow` 按 provider 决定计价）、`ReviseOrchestrator.kt`（同一套派发）、`di/AppContainer.kt`（`providerClients`/`apiKeyStore.load(provider)` 接线）、`scripts/check-cost.py`（`price-missing` 白名单 + 短路复算）、`GenerationOrchestratorTest` 新增 3 例。
+- 独立复跑：`--tests com.dreamkeeper.llm.GenerationOrchestratorTest` 19 例绿（54s）；全量 `--rerun-tasks` BUILD SUCCESSFUL 65s，XML **59 类 488 例 0 失败**。
+- 契约：开始生成时快照 provider/model/key；请求派发到对应 `LlmClient`；DeepSeek 成功行照旧计价（`cost-v1` + 快照）；非 DeepSeek 成功行 `price-missing`/0 元/无快照；`check-cost.py --self-test` 6 例仍 0 mismatch。
+- 结论：通过。PENDING：五家真连通与真实价卡、生成中切家的 UI 提示（本轮语义上不允许跨 run 串值）。
 
 ### T4 设置页五家供应商（Lead，2026-10-31）
 - 交付：`SettingsViewModel.kt`（供应商切换 / 按家 Key / 测试连接三态 + nonce 防串台 / 结果人话）、`SettingsScreen.kt`（固定顶栏 + 滚动正文 / 五家 chips / 按家 Key 卡 / 模型清单随家 / 测试连接按钮）、`GenerationOptions.kt`（+provider）、`GenerationPrefs.kt`（+provider 与按家模型记忆，DeepSeek 旧键零迁移）、`DreamKeeperRoot.kt`/`MainActivity.kt` 透传 `connectionTester`；`SettingsViewModelTest` 10 例。

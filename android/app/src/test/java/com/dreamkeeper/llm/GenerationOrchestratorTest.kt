@@ -421,6 +421,8 @@ class GenerationOrchestratorTest {
         store: GenerationStore,
         onProgress: (GenerationKind, GenerationStage, Int) -> Unit = { _, _, _ -> },
         options: () -> GenerationOptions = { GenerationOptions() },
+        clientFor: ((ProviderId) -> LlmClient)? = null,
+        apiKeyFor: ((ProviderId) -> String)? = null,
     ): GenerationOrchestrator = GenerationOrchestrator(
         llm = llm,
         prompts = prompts,
@@ -432,6 +434,8 @@ class GenerationOrchestratorTest {
         onProgress = onProgress,
         options = options,
         apiKey = { "sk-test-key" },
+        clientFor = clientFor ?: { llm },
+        apiKeyFor = apiKeyFor,
     )
 
     /** 每行一个稳定 id，方便断言「哪条记账是哪次交换」。 */
@@ -483,8 +487,83 @@ class GenerationOrchestratorTest {
         assertTrue("被闸门拦住时一次 HTTP 都不许发", llm.requests.isEmpty())
     }
 
-    private fun dreamEntity(
-        id: String = DREAM_ID,
+    // ------------------------------------------------------------ Plan 6 T5：按供应商派发 + 成本诚实
+
+    @Test
+    fun `generation snapshots provider model and key at start`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity())
+        val deepseek = FakeLlm()
+        val qwen = FakeLlm()
+        qwen.enqueue(ok(RAW))
+        val providerCalls = mutableListOf<ProviderId>()
+        val orchestrator = newOrchestrator(
+            llm = deepseek,
+            store = RoomGenerationStore(db),
+            options = { GenerationOptions(provider = ProviderId.QWEN, model = "qwen3.8-max") },
+            clientFor = { provider ->
+                providerCalls += provider
+                if (provider == ProviderId.QWEN) qwen else deepseek
+            },
+            apiKeyFor = { provider -> if (provider == ProviderId.QWEN) "sk-qwen-key" else "sk-ds-key" },
+        )
+
+        val result = orchestrator.generateFaithful(DREAM_ID)
+        assertNull(result.failure)
+        assertEquals("只该问通义千问", listOf(ProviderId.QWEN), providerCalls)
+        assertTrue("DeepSeek client 一次都不该被调用", deepseek.requests.isEmpty())
+        val request = qwen.requests.single()
+        assertEquals(ProviderId.QWEN, request.provider)
+        assertEquals("qwen3.8-max", request.model)
+        assertEquals("sk-qwen-key", request.apiKey)
+    }
+
+    @Test
+    fun `non deepseek success row is marked price missing with zero cost`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity())
+        val qwen = FakeLlm()
+        qwen.enqueue(ok(RAW, usage = Usage(10, 20, 5, 0, 35)))
+        val orchestrator = newOrchestrator(
+            llm = qwen,
+            store = RoomGenerationStore(db),
+            options = { GenerationOptions(provider = ProviderId.QWEN, model = "qwen3.8-max") },
+        )
+
+        val result = orchestrator.generateFaithful(DREAM_ID)
+        assertNull(result.failure)
+        assertEquals(0L, result.costMicroYuan)
+
+        val row = db.llmCallDao().listByDream(DREAM_ID).single()
+        assertEquals("price-missing", row.formulaVersion)
+        assertEquals(0L, row.costMicroYuan)
+        assertNull("没有价卡就不许假装有快照", row.priceSnapshotJson)
+        assertEquals("qwen3.8-max", row.model)
+    }
+
+    @Test
+    fun `deepseek success row still priced with formula v1`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity())
+        val llm = FakeLlm()
+        llm.enqueue(ok(RAW, usage = Usage(10, 20, 5, 0, 35)))
+        val orchestrator = newOrchestrator(
+            llm = llm,
+            store = RoomGenerationStore(db),
+            options = { GenerationOptions(provider = ProviderId.DEEPSEEK, model = GenerationOptions.FLASH) },
+        )
+
+        val result = orchestrator.generateFaithful(DREAM_ID)
+        assertNull(result.failure)
+        assertTrue("DeepSeek 有用量就该算钱", result.costMicroYuan > 0)
+
+        val row = db.llmCallDao().listByDream(DREAM_ID).single()
+        assertEquals("cost-v1", row.formulaVersion)
+        assertTrue(row.costMicroYuan > 0)
+        assertNotNull(row.priceSnapshotJson)
+    }
+
+    private fun dreamEntity(        id: String = DREAM_ID,
         raw: String = RAW,
         faithful: String? = null,
         stage: String? = null,
