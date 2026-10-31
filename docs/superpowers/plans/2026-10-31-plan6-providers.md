@@ -164,6 +164,10 @@
 | D550 | 2026-11-01 | T8 | 新增 `Skin.SYSTEM`（跟随系统深浅），`paletteOf(skin, systemDark)` 解析 | 用户要「保留暗色 + 多套皮肤」；跟随系统是常见预期 |
 | D551 | 2026-11-01 | T8 | **不内嵌 CJK 字体**：继续用 `FontFamily.Serif`（系统衬线） | Windows 宋体不可分发；Noto Serif SC 全量约 +9MB，需子集化工具，留 Plan 7 |
 | D552 | 2026-11-01 | T8 | 空态文案「按那个橙色的钮」→「按那个大钮」 | 晨光纸下钮是深墨而非橙色，文案不能写死颜色 |
+| D553 | 2026-11-01 | 设置 IA | 设置页拆三级：设置 → 模型服务（列表）→ 单家详情；首页只留一行摘要 | 用户反馈五家供应商直接铺陈「不科学不美观」；参考 Cherry Studio / Chatbox 的「索引与配置分离」 | 
+| D554 | 2026-11-01 | 设置 IA | `SettingsViewModel` 拆为 `ProviderListViewModel` + `ProviderDetailViewModel`；详情加 `initialProvider` 与 `makeActive()` | 单 VM 同时承担列表与配置会让状态互相污染；拆开后「打开别家详情不改当前供应商」可被单测钉死 | 
+| D555 | 2026-11-01 | 设置 IA | 未配 Key 允许设为当前，但列表与详情都明确写「生成会失败」 | 用户路径是「先选家再找 Key」；静默禁用会产生「点了没反应」的死路 | 
+| D556 | 2026-11-01 | 设置 IA | 非 DeepSeek 的「未计价」提示只放详情页 | 列表要保持一屏可扫；计价口径属于配置信息 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -319,3 +323,12 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 判据：专家「会留下来的→纸 / 不会留下的→玻璃」；正文永不上玻璃；说梦钮保持实体。
 - PENDING：真机衬线可用性、1.3× 弹层换行、TalkBack 朗读顺序；字体内嵌留 Plan 7（D551）。
 - 结论：通过（模拟器级）。
+
+### 设置 IA 重构（Lead，2026-11-01）
+
+- **交付**：`ProviderListViewModel`/`ProviderDetailViewModel` 拆分；`ProviderListScreen`/`ProviderDetailScreen`/`SettingsChrome`；`SettingsScreen` 重写为索引页；`DreamRoute.Providers` + `DreamRoute.ProviderDetail(wire)`；spec `docs/superpowers/specs/2026-11-01-provider-settings-ia-design.md`。
+- **Lead 独立复跑**：全量 `:app:testDebugUnitTest --rerun-tasks` → **classes=62 tests=502 failures=0 errors=0 skipped=0**（基线 61/496，+6）。
+- **契约**：列表只读（rows/active/configured/modelLabel）；详情 `initialProvider` 钉死当前家、打开别家不写全局 provider；`makeActive()` 只写 `dk_generation_provider`；未配 Key 允许设为当前并提示；计价提示仅详情页。
+- **证据**：`docs/evidence/plan6/p6-ui-14-{settings-home,providers-list,provider-deepseek,provider-mimo}.png` + `p6-ui-14-ia.txt`，nearWhite 全 0.0000%。
+- **PENDING**：真机截图与切家后生成链实测（四家 Key 未配置 → 真连通仍 PENDING）。
+- **结论**：通过；设置页从「一屏铺五家」变成「索引 → 配置」两级。

@@ -60,8 +60,11 @@ import com.dreamkeeper.ui.nav.RecordEntry
 import com.dreamkeeper.ui.record.RecordScreen
 import com.dreamkeeper.ui.record.RecordViewModel
 import com.dreamkeeper.ui.search.SearchScreen
+import com.dreamkeeper.ui.settings.ProviderDetailScreen
+import com.dreamkeeper.ui.settings.ProviderDetailViewModel
+import com.dreamkeeper.ui.settings.ProviderListScreen
+import com.dreamkeeper.ui.settings.ProviderListViewModel
 import com.dreamkeeper.ui.settings.SettingsScreen
-import com.dreamkeeper.ui.settings.SettingsViewModel
 import com.dreamkeeper.ui.tags.TagsScreen
 import com.dreamkeeper.ui.tags.TagsViewModel
 import java.time.LocalDate
@@ -210,8 +213,50 @@ fun DreamKeeperRoot(
             }
             // 设置页同理不进底部栏：showBottomBar 只按 calendar / library 等值判定
             composable(DreamRoute.Settings.route) {
-                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore, generationPrefs, connectionTester, themeController = themeController) }
-                SettingsScreen(vm = vm, onBack = { nav.popBackStack() })
+                val vm: ProviderListViewModel = viewModel {
+                    ProviderListViewModel(apiKeyStore, generationPrefs, themeController)
+                }
+                SettingsScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onOpenProviders = { nav.navigate(DreamRoute.Providers.route) { launchSingleTop = true } },
+                )
+            }
+            // 二级：五家供应商列表。从详情返回时 refresh 一次，看到刚存的 Key / 刚切的家。
+            composable(DreamRoute.Providers.route) {
+                val vm: ProviderListViewModel = viewModel {
+                    ProviderListViewModel(apiKeyStore, generationPrefs, themeController)
+                }
+                ProviderListScreen(
+                    vm = vm,
+                    onBack = {
+                        vm.onReturnFromDetail()
+                        nav.popBackStack()
+                    },
+                    onOpenProvider = { provider ->
+                        nav.navigate(DreamRoute.ProviderDetail(provider.wire).route) { launchSingleTop = true }
+                    },
+                )
+            }
+            // 三级：单家详情。initialProvider 钉死这一家，详情里的切换/保存只影响它自己的 Key。
+            composable("settings/provider/{wire}") { backStackEntry ->
+                val wire = backStackEntry.arguments?.getString("wire").orEmpty()
+                val target = com.dreamkeeper.llm.ProviderId.fromWire(wire)
+                    ?: com.dreamkeeper.llm.ProviderId.DEEPSEEK
+                val vm: ProviderDetailViewModel = viewModel {
+                    ProviderDetailViewModel(
+                        apiKeyStore,
+                        generationPrefs,
+                        connectionTester,
+                        themeController = themeController,
+                        initialProvider = target,
+                    )
+                }
+                ProviderDetailScreen(
+                    vm = vm,
+                    activeProvider = generationPrefs.options().provider,
+                    onBack = { nav.popBackStack() },
+                )
             }
             composable("detail/{dreamId}") { backStackEntry ->
                 val dreamId = backStackEntry.arguments?.getString("dreamId").orEmpty()

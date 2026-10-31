@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
  * 4. 「测试连接」只测**已保存的 Key**；测试中的结果回来时若用户已切走（provider 或 nonce 不匹配），
  *    直接丢弃，避免串台（T3 契约）。
  */
-class SettingsViewModel(
+class ProviderDetailViewModel(
     private val apiKeyStore: ApiKeyStore,
     /** 生成档位（Plan 5 Task 2）：SharedPreferences 读写都是轻量同步操作，不必切 IO。 */
     private val generationPrefs: GenerationPrefs? = null,
@@ -42,6 +42,8 @@ class SettingsViewModel(
     /** 皮肤（Plan 7）：切一次重组整棵树；为 null 时设置页不显示「外观」入口。 */
     private val themeController: ThemeController? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** 从「模型服务 → 某一家」进来时钉死这一家；为空则沿用设置里保存的当前供应商。 */
+    private val initialProvider: ProviderId? = null,
 ) : ViewModel() {
 
     /** 一次「测试连接」的界面结果；[nonce] 用于丢弃切走后回来的旧结果。 */
@@ -108,10 +110,18 @@ class SettingsViewModel(
     init {
         _state.update { it.copy(skin = themeController?.skin?.value ?: Skin.LAMP) }
         val options = generationPrefs?.options()
-        if (options != null) {
-            val spec = ProviderRegistry.of(options.provider)
+        val picked = initialProvider ?: options?.provider
+        if (picked != null) {
+            val spec = ProviderRegistry.of(picked)
+            val remembered = options?.model?.takeIf { id -> spec.models.any { it.id == id } }
+            val model = if (options?.provider == picked && remembered != null) remembered else spec.defaultModel().id
             _state.update {
-                it.copy(provider = options.provider, models = spec.models, model = options.model, novelThinking = options.novelThinking)
+                it.copy(
+                    provider = picked,
+                    models = spec.models,
+                    model = model,
+                    novelThinking = options?.novelThinking ?: it.novelThinking,
+                )
             }
         }
         refresh()
@@ -152,6 +162,16 @@ class SettingsViewModel(
         val prefs = generationPrefs ?: return
         prefs.setModel(model)
         _state.update { it.copy(model = prefs.options().model) }
+    }
+
+    /**
+     * 把这一家设为当前供应商。
+     *
+     * 只写 `GenerationPrefs`：生成链在每次开始时读 options()，不需要重启或通知别处；
+     * 返回列表时列表页会重新 refresh()，所以这里不改任何跨页状态。
+     */
+    fun makeActive() {
+        generationPrefs?.setProvider(_state.value.provider)
     }
 
     /** 换小说化思考档位；忠实整理与改稿不受影响（§0.2 / D471）。 */

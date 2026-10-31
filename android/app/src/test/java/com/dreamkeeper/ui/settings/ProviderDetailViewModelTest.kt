@@ -39,7 +39,7 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class SettingsViewModelTest {
+class ProviderDetailViewModelTest {
 
     private val main = StandardTestDispatcher()
     private val io = UnconfinedTestDispatcher()
@@ -62,14 +62,14 @@ class SettingsViewModelTest {
     private fun vm(
         client: LlmClient? = null,
         onRequest: ((ProviderId) -> Unit)? = null,
-    ): SettingsViewModel {
+    ): ProviderDetailViewModel {
         val tester = client?.let {
             ConnectionTester(
                 clientFor = { provider -> onRequest?.invoke(provider); it },
                 keyOf = { provider -> store.load(provider) },
             )
         }
-        return SettingsViewModel(apiKeyStore = store, generationPrefs = prefs, connectionTester = tester, io = io)
+        return ProviderDetailViewModel(apiKeyStore = store, generationPrefs = prefs, connectionTester = tester, io = io)
     }
 
     @Test
@@ -211,7 +211,7 @@ class SettingsViewModelTest {
         assertTrue(vm.state.value.warning!!.contains("偏短"))
     }
 
-    private class FakeKeyStore : ApiKeyStore {
+    internal class FakeKeyStore : ApiKeyStore {
         val stored = mutableMapOf<ProviderId, String>()
         override fun load(provider: ProviderId): String? = stored[provider]
         override fun save(key: String, provider: ProviderId) {
@@ -248,5 +248,36 @@ class SettingsViewModelTest {
     ) : OkClient() {
         private val failure = LlmException(kind = kind, httpStatus = httpStatus, requestId = null, attempts = emptyList())
         override suspend fun chat(request: ChatRequest): ChatResponse = throw failure
+    }
+
+    @Test
+    fun `detail opens the requested provider regardless of saved current`() = runTest {
+        prefs.setProvider(ProviderId.GLM)
+        val vm = ProviderDetailViewModel(
+            apiKeyStore = store,
+            generationPrefs = prefs,
+            connectionTester = null,
+            io = io,
+            initialProvider = ProviderId.MIMO,
+        )
+        advanceUntilIdle()
+        assertEquals(ProviderId.MIMO, vm.state.value.provider)
+        assertEquals("mimo-v2.6-pro", vm.state.value.model)
+        // 打开别人家的详情不应偷偷改当前供应商
+        assertEquals(ProviderId.GLM, prefs.options().provider)
+    }
+
+    @Test
+    fun `make active writes the provider preference`() = runTest {
+        val vm = ProviderDetailViewModel(
+            apiKeyStore = store,
+            generationPrefs = prefs,
+            connectionTester = null,
+            io = io,
+            initialProvider = ProviderId.QWEN,
+        )
+        advanceUntilIdle()
+        vm.makeActive()
+        assertEquals(ProviderId.QWEN, prefs.options().provider)
     }
 }

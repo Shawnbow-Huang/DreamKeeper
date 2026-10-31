@@ -21,6 +21,14 @@ sealed interface DreamRoute {
 
     /** 设置页：只在日历顶栏有入口，**不是**底部栏的第三个 tab（见 DreamKeeperRoot 的 showBottomBar） */
     data object Settings : DreamRoute { override val route = "settings" }
+
+    /** 设置 → 模型服务：五家供应商列表（只读状态，点进单家）。 */
+    data object Providers : DreamRoute { override val route = "settings/providers" }
+
+    /** 设置 → 模型服务 → 单家详情（Key / 模型 / 思考 / 设为当前）。 */
+    data class ProviderDetail(val wire: String) : DreamRoute {
+        override val route = "settings/provider/$wire"
+    }
     data class Detail(val dreamId: String) : DreamRoute { override val route = "detail/$dreamId" }
     data class Record(val entry: RecordEntry) : DreamRoute { override val route = "record/${entry.name}" }
 

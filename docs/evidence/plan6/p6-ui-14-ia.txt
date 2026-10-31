@@ -1,0 +1,38 @@
+APK_SHA256=n/a (host-only JVM + emulator screenshots; debug build)
+DEVICE_TIME=host-only 2026-11-01T02:43:00Z / device Sat Oct 31 18:43 CST 2026
+REPLAY=python - <<'PY' ... x2 (sha256 + near-white) ; see 读法
+RED_BASELINE=（本任务无 red：改版不新增失败用例；旧 SettingViewModelTest 全绿改写为 ProviderDetailViewModelTest）
+
+# 为什么改
+用户 2026-11-01 02:36：「设置里多个供应商，直接铺陈在设置里似乎有些不科学和不美观……学习一下它点击进去的界面排布」。
+参考 Cherry Studio / Chatbox：索引与配置分离。用户逐项确认 D1–D5（见
+docs/superpowers/specs/2026-11-01-provider-settings-ia-design.md）。
+
+# 改法
+1. 设置首页只留一行「模型服务」摘要（当前供应商 · 模型 · 已/未配置 Key）+ 外观 + 关于。
+2. 新增「模型服务」列表页：五家行、使用中标记、配置状态点、行间发丝线；底部一句
+   「每家一个独立 Key，互不串用；当前只有一家参与生成。测试连接在单家页面」。
+3. 新增单家详情页：Key 卡（保存 / 测试连接 / 清除 + 结果行）、模型与思考卡、
+   非 DeepSeek 的「暂无价卡，按未计价（0 元）记账」、底部「设为当前供应商 / 使用中」，
+   未配 Key 时提示「可以先设为当前，但生成会失败」。
+4. VM 拆分：ProviderListViewModel（rows/刷新/皮肤）+ ProviderDetailViewModel
+   （initialProvider 钉死当前家；makeActive 只写 dk_generation_provider）。
+5. 路由：settings/providers 与 settings/provider/{wire}；列表 onBack 先 refresh。
+
+# 测试
+- ProviderListViewModelTest 4 例；ProviderDetailViewModelTest 新增 2 例
+  （打开别家不复写当前供应商、makeActive 写偏好）。
+- 全量：classes=62 tests=502 failures=0 errors=0 skipped=0（基线 61/496 + 6）。
+
+# 设备证据（debug 包，晨光纸皮肤，1080x2400）
+p6-ui-14-settings-home.png    145136 B sha256 a8ef07c80d57defa   nearWhite 0.0000%
+p6-ui-14-providers-list.png   129020 B sha256 aa6db730f9d7ce00   nearWhite 0.0000%
+p6-ui-14-provider-deepseek.png 167153 B sha256 95d810fda37de366 nearWhite 0.0000%
+p6-ui-14-provider-mimo.png    219592 B sha256 41d2ea4d6a689062   nearWhite 0.0000%
+
+# 读法
+- near-white 统计口径：PNG 裁掉顶部 100px 状态栏后，统计 r,g,b 均 >=245 的像素占比；
+  0.0000% 表示没有任何近白区块（晨光纸底 #F4EEE2 的 b=226，不计入）。
+- 列表页「使用中」只有一个（DeepSeek），其余显示「未配置」；DeepSeek 详情底部为「使用中」，
+  MiMo 详情底部为「设为当前供应商」并附未配 Key 提示。
+- 未覆盖：真机截图、切换供应商后的生成链实测（四家 Key 均未配置 → 真连通仍 PENDING）。
