@@ -78,3 +78,30 @@
 - 单测：`ProviderListViewModelTest` 4 例 + `ProviderDetailViewModelTest` 新增 2 例；全量不退化。
 - 设备：四屏截图（设置首页 / 列表 / DeepSeek 详情 / MiMo 未配详情），nearWhite=0；
 - 行为：切家后列表「使用中」跟随；返回列表能看到刚保存的 Key 状态；未配 Key 点「设为当前」有提示且不崩。
+
+## 9. 模型发现与双模型（2026-11-01 追加）
+
+用户追加需求：①Key 连通后要能自动看出「当前能用哪些模型」再选；②第一模式（忠实整理）也应有模型参数。两条都按「先检测、后选择」「忠实与小说化各一档」落地。
+
+### 9.1 决策
+
+| # | 决策 | 理由 |
+| --- | --- | --- |
+| D6 | 详情页放「检测可用模型」按钮，点一次 `GET {baseUrl}/models`（Bearer，10s，单次，无重试） | 各家兼容层大多实现该端点；放进详情页而不是列表，避免打开列表就打五家网络 |
+| D7 | 探测失败一律降级：内置清单继续可用，按钮下写原因（HTTP 码 / 无 Key / 解析失败） | 很多兼容端点返回 404 或空体；把「端点没实现」写成「鉴权失败」会误导用户排查 Key |
+| D8 | 检测结果只进候选（`dk_generation_models.<wire>`），当前选择不动 | 「检测」是问「有什么」；自动改选等于悄悄换模型和价格 |
+| D9 | 忠实链有独立模型（`dk_generation_faithful[.<wire>]`，默认跟随小说化），请求体与记账都用它 | 忠实只补标点/顺语序，配便宜模型合理；`llm_calls.model` 必须记实际请求模型，否则成本与版本线错位 |
+| D10 | 忠实链思考仍固定关闭，UI 只给说明 | 设计 §9 逐字保守：思考开启会改写句法，与「不动措辞」冲突 |
+
+### 9.2 数据与接口
+
+- 候选 = 内置 `ProviderSpec.models` ∪ `detectedModels(provider)`（去重、内置优先排序）；未知 id 直接以 id 作标签。
+- 持久化：`dk_generation_models.<wire>` 逗号分隔；`detectedModels()` 只读；`setDetectedModels()` 只写候选。
+- 探测：`interface ModelProbe { suspend fun list(provider, apiKey): ModelDiscovery.Result }`；`ModelDiscovery` 为默认实现（OkHttp 单例、`followRedirects=false`、10s 连接/读、`invokeOnCancellation` 时 `call.cancel()`）。
+- 记账：`Run.faithfulModel`；`attemptRow(model=request.model)`；`recordSuccess/recordFailure` 带 `model`；价卡 `price(provider, model)`。
+
+### 9.3 验收
+
+- 单测：`ModelDiscoveryTest` 5 例（两种形状、404 降级、空 Key 0 请求、坏 JSON）+ `GenerationPrefsTest` 2 例 + `GenerationOrchestratorTest` 1 例（faithful/novel 分别发不同模型且 `llm_calls` 两行模型不同）+ `ProviderDetailViewModelTest` 2 例（检测不改选择 / 失败保留内置）。
+- 设备：详情页「检测可用模型」与「忠实整理模型」可见；未配 Key 点击 → 本地提示、0 请求。
+- PENDING：真实 `/models` 连通需有效 Key。

@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.dreamkeeper.llm.GenerationOptions
 import com.dreamkeeper.llm.ThinkingLevel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -68,5 +69,28 @@ class GenerationPrefsTest {
 
         assertEquals(GenerationOptions.FLASH, options.model)
         assertEquals(ThinkingLevel.HIGH, options.novelThinking)
+    }
+
+    @Test
+    fun `忠实整理模型默认跟随小说化且可单独设置`() {
+        assertEquals(GenerationOptions.FLASH, prefs().options().faithfulModel)
+        prefs().setModel(GenerationOptions.PRO)
+        assertEquals(GenerationOptions.PRO, prefs().options().faithfulModel)
+
+        prefs().setFaithfulModel(GenerationOptions.FLASH)
+        assertEquals(GenerationOptions.PRO, prefs().options().model)
+        assertEquals(GenerationOptions.FLASH, prefs().options().faithfulModel)
+    }
+
+    @Test
+    fun `检测到的模型进入候选并跨实例保留`() {
+        val first = prefs()
+        first.setDetectedModels(com.dreamkeeper.llm.ProviderId.MIMO, listOf("mimo-v9-experimental"))
+        first.setProvider(com.dreamkeeper.llm.ProviderId.MIMO)
+
+        val second = prefs()
+        assertTrue(second.knownModels(com.dreamkeeper.llm.ProviderId.MIMO).contains("mimo-v9-experimental"))
+        second.setModel("mimo-v9-experimental")
+        assertEquals("mimo-v9-experimental", second.options().model)
     }
 }

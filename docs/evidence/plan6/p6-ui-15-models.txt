@@ -1,0 +1,37 @@
+APK_SHA256=8ec7b6e6f21a538d...eaf43b5d (9,824,942 B, versionCode 3 / 0.10.0)
+DEVICE_TIME=host-only 2026-11-01T03:05:00Z / device Sat Oct 31 19:05 CST 2026
+REPLAY=sha256sum 与近白比例脚本见 docs/evidence/plan6/README.md
+RED_BASELINE=（无独立 red：本任务为设置页能力增量，旧 502 例全绿；行为由新增 10 例守）
+
+# 为什么做
+用户 2026-11-01 02:52：「关于这个 api key 能连通并使用到什么模型，不能自动检测出来当前能用什么模型，
+然后在下拉框里选择吗？同时，除了小说化需要设置一些关于模型的参数，难道第一个模式就不需要了吗？」
+
+# 改法
+1. 模型自动检测：单家详情页右上「检测可用模型」→ GET {baseUrl}/models（Bearer）；
+   兼容 data[].id / model / name 与 models[] 两种形状；10s 超时、单次、无重试、不写库。
+   失败一律降级（很多兼容端点不实现 /models），把原因显示在按钮下方，不冒充鉴权错误。
+2. 候选持久化：检测结果写 `dk_generation_models.<wire>`（逗号分隔），与内置清单合并为候选；
+   检测**不改当前选择**——点它只是问「有什么」，选不选是下一步。
+3. 双模型：设置页同时给「小说化模型」与「忠实整理模型」；忠实默认跟随小说化，可单独选便宜的；
+   忠实链请求体用 faithfulModel，`llm_calls.model` 与价卡重算也用实际请求的模型。
+4. 忠实链思考仍固定关闭（设计 §9：逐字保守），UI 只写一句说明，不给假开关。
+
+# 测试
+- 新增 10 例：ModelDiscoveryTest 5（OpenAI 形状+Bearer、model/name/字符串数组、404 降级、
+  空 Key 0 请求、坏 JSON 降级）、GenerationPrefsTest 2（忠实默认跟随/可单设、检测候选跨实例）、
+  GenerationOrchestratorTest 1（faithful 用 faithfulModel 且 llm_calls 记实际模型）、
+  ProviderDetailViewModelTest 2（检测加候选不改选择、失败保留内置并给原因）。
+- 全量：classes=63 tests=512 failures=0 errors=0 skipped=0（基线 62/502，+10）。
+
+# 设备证据（debug 包，晨光纸皮肤，1080x2400）
+p6-ui-15-models.png        226878 B sha256 93fabdc3e2bfd430  nearWhite 0.0000%
+p6-ui-15-faithful.png      232321 B sha256 4b84bfdf85c5f3cb  nearWhite 0.0000%
+p6-ui-15-detect-nokey.png  234431 B sha256 7965ef8568cda8cf  nearWhite 0.0000%
+
+# 读法
+- 第一张：小说化模型（Flash / V4 Pro）+ 右上「检测可用模型」+ 忠实整理模型（同为 Flash / V4 Pro）。
+- 第二张：未配 Key 时点「检测可用模型」→ 按钮下方出现「还没有配置 Key」，**不发请求**（VM 先拦）。
+- 第三张：向下滚动后的同页，完整露出「忠实整理模型」+ 说明「整理只做补标点、顺语序，思考固定关闭」+ 小说化思考。
+- 未覆盖：真实 DeepSeek /models 的连通（需要有效 Key，当前模拟器未配置）→ PENDING；
+  四家非 DeepSeek 的真实模型列表同样 PENDING。

@@ -33,6 +33,13 @@ data class GenerationOptions(
     /** Plan 6：当前供应商；生成链按它选 baseUrl / 请求体风格。 */
     val provider: ProviderId = ProviderId.DEEPSEEK,
     val model: String = DEFAULT_MODEL,
+    /**
+     * 忠实整理用的模型（Plan 6 追加）：默认跟随小说化模型，用户可以单独选一个更便宜的。
+     *
+     * 忠实链的思考档位仍固定关闭（设计 §9）：整理要做的是「逐字保守」，
+     * 开思考只会更慢更贵，闸门也不接受重排。
+     */
+    val faithfulModel: String = model,
     /** 小说化默认「高」；改稿固定「低」（见 ReviseOrchestrator 的 REVISE_LEVEL）。 */
     val novelThinking: ThinkingLevel = ThinkingLevel.HIGH,
 ) {

@@ -144,7 +144,7 @@ class GenerationOrchestrator(
 
     private fun newRun(dreamId: String): Run {
         val cfg = options()
-        return Run(dreamId, cfg.provider, cfg.model)
+        return Run(dreamId, cfg.provider, cfg.model, cfg.faithfulModel)
     }
 
     private suspend fun faithfulChain(
@@ -233,7 +233,7 @@ class GenerationOrchestrator(
             run,
             GenerationKind.FAITHFUL,
             ChatRequest(
-                model = run.model,
+                model = run.faithfulModel,
                 messages = listOf(ChatMessage("user", rendered.text)),
                 thinking = Thinking.DISABLED,
                 temperature = temperature,
@@ -259,7 +259,7 @@ class GenerationOrchestrator(
                 promptId = call.rendered.promptId,
                 promptVersion = call.rendered.promptVersion,
                 promptHash = call.rendered.promptSha256,
-                model = run.model,
+                model = run.faithfulModel,
             ),
             changeLogJson = null,
             stage = stage.name,
@@ -379,7 +379,7 @@ class GenerationOrchestrator(
      * 失败行四个 token 列全 null、`usageJson=null`、`costMicroYuan=0`、`formulaVersion=""`，
      * 只留 `error=错误分类`——Task 10 的对账脚本要能跳过它们。
      */
-    private suspend fun recordSuccess(run: Run, kind: GenerationKind, response: ChatResponse) {
+    private suspend fun recordSuccess(run: Run, kind: GenerationKind, response: ChatResponse, model: String) {
         val usage = response.usage
         val attempts = response.attempts.ifEmpty {
             listOf(Attempt(1, response.httpStatus, response.latencyMs, null, response.requestId, clock()))
@@ -390,6 +390,7 @@ class GenerationOrchestrator(
             attemptRow(
                 run = run,
                 kind = kind,
+                model = model,
                 attempt = attempt,
                 usage = usage,
                 errorKind = attempt.errorKind,
@@ -400,7 +401,7 @@ class GenerationOrchestrator(
         store.recordAttempts(rows)
     }
 
-    private suspend fun recordFailure(run: Run, kind: GenerationKind, error: LlmException) {
+    private suspend fun recordFailure(run: Run, kind: GenerationKind, error: LlmException, model: String) {
         val attempts = error.attempts.ifEmpty {
             listOf(Attempt(1, error.httpStatus, 0L, error.kind, error.requestId, clock()))
         }
@@ -408,6 +409,7 @@ class GenerationOrchestrator(
             attemptRow(
                 run = run,
                 kind = kind,
+                model = model,
                 attempt = attempt,
                 usage = null,
                 errorKind = attempt.errorKind ?: error.kind,
@@ -425,6 +427,7 @@ class GenerationOrchestrator(
     private fun attemptRow(
         run: Run,
         kind: GenerationKind,
+        model: String,
         attempt: Attempt,
         usage: Usage?,
         errorKind: LlmException.Kind?,
@@ -438,7 +441,7 @@ class GenerationOrchestrator(
         } else {
             price(
                 card = priceCard,
-                model = run.model,
+                model = model,
                 hit = usage.promptCacheHitTokens,
                 miss = usage.promptCacheMissTokens,
                 out = usage.completionTokens,
@@ -451,7 +454,7 @@ class GenerationOrchestrator(
             id = id(),
             dreamId = run.dreamId,
             kind = kind.name,
-            model = run.model,
+            model = model,
             cacheHitTokens = if (failed) null else usage?.promptCacheHitTokens?.toInt(),
             cacheMissTokens = if (failed) null else usage?.promptCacheMissTokens?.toInt(),
             outputTokens = if (failed) null else usage?.completionTokens?.toInt(),
@@ -477,10 +480,10 @@ class GenerationOrchestrator(
     private suspend fun chat(run: Run, kind: GenerationKind, request: ChatRequest): ChatResponse =
         try {
             val response = clientFor(run.provider).chat(request)
-            recordSuccess(run, kind, response)
+            recordSuccess(run, kind, response, request.model)
             response
         } catch (e: LlmException) {
-            recordFailure(run, kind, e)
+            recordFailure(run, kind, e, request.model)
             throw e
         }
 
@@ -670,6 +673,8 @@ class GenerationOrchestrator(
         /** Plan 6：本次生成用的供应商与模型在开始时快照，避免中途切设置把新值记到旧请求上（D504）。 */
         val provider: ProviderId,
         val model: String,
+        /** 忠实整理单独选择的模型；为 null 时不使用，统一走 [model]。 */
+        val faithfulModel: String,
     ) {
         var attempts: Int = 0
         var costMicroYuan: Long = 0

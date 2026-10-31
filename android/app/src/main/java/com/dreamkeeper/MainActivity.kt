@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     generationPrefs = container.generationPrefs,
                     themeController = container.themeController,
                     connectionTester = container.connectionTester,
+            modelDiscovery = container.modelDiscovery,
                     // 标签页的重命名/删除走 DAO；合并仍在仓库层（要动关联表，必须事务）
                     tagDao = container.tagDao,
                     session = container.recordingSession,

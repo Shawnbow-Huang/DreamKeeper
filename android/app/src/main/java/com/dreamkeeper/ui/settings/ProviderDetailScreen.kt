@@ -83,9 +83,14 @@ fun ProviderDetailScreen(
             SectionLabel("模型与思考")
             GenerationCard(
                 models = state.models,
-                model = state.model,
+                novelModel = state.model,
+                faithfulModel = state.faithfulModel,
                 novelThinking = state.novelThinking,
-                onModel = vm::setModel,
+                discovering = state.discovering,
+                discoveryNote = state.discoveryNote,
+                onNovelModel = vm::setModel,
+                onFaithfulModel = vm::setFaithfulModel,
+                onDiscover = vm::discoverModels,
                 onThinking = vm::setNovelThinking,
             )
 
@@ -258,9 +263,14 @@ private fun KeyCard(state: ProviderDetailViewModel.UiState, vm: ProviderDetailVi
 @Composable
 private fun GenerationCard(
     models: List<ModelSpec>,
-    model: String,
+    novelModel: String,
+    faithfulModel: String,
     novelThinking: ThinkingLevel,
-    onModel: (String) -> Unit,
+    discovering: Boolean,
+    discoveryNote: String?,
+    onNovelModel: (String) -> Unit,
+    onFaithfulModel: (String) -> Unit,
+    onDiscover: () -> Unit,
     onThinking: (ThinkingLevel) -> Unit,
 ) {
     Column(
@@ -270,13 +280,58 @@ private fun GenerationCard(
             .border(1.dp, DreamColors.inkFaint.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
-        Text("小说化模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "小说化模型",
+                style = MaterialTheme.typography.bodyMedium,
+                color = DreamColors.paper,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (discovering) "检测中…" else "检测可用模型",
+                modifier = Modifier
+                    .heightIn(min = 40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(1.dp, DreamColors.line, RoundedCornerShape(20.dp))
+                    .clickable(enabled = !discovering) { onDiscover() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (discovering) DreamColors.inkFaint else DreamColors.inkDim,
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
         ChoiceRow(
             options = models.map { it.id },
-            selected = model,
+            selected = novelModel,
             label = { id -> models.firstOrNull { it.id == id }?.label ?: id },
-            onSelect = onModel,
+            onSelect = onNovelModel,
+        )
+        if (discoveryNote != null) {
+            Text(
+                text = discoveryNote,
+                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = DreamColors.inkFaint,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("忠实整理模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
+        Spacer(modifier = Modifier.height(8.dp))
+        ChoiceRow(
+            options = models.map { it.id },
+            selected = faithfulModel,
+            label = { id -> models.firstOrNull { it.id == id }?.label ?: id },
+            onSelect = onFaithfulModel,
+        )
+        Text(
+            text = "整理只做「补标点、顺语序」，思考固定关闭；可以单独选一个更便宜的模型。",
+            modifier = Modifier.padding(top = 6.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = DreamColors.inkFaint,
         )
 
         Spacer(modifier = Modifier.height(16.dp))

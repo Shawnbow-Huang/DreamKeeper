@@ -62,6 +62,7 @@ class ProviderDetailViewModelTest {
     private fun vm(
         client: LlmClient? = null,
         onRequest: ((ProviderId) -> Unit)? = null,
+        probe: com.dreamkeeper.llm.ModelProbe? = null,
     ): ProviderDetailViewModel {
         val tester = client?.let {
             ConnectionTester(
@@ -69,7 +70,13 @@ class ProviderDetailViewModelTest {
                 keyOf = { provider -> store.load(provider) },
             )
         }
-        return ProviderDetailViewModel(apiKeyStore = store, generationPrefs = prefs, connectionTester = tester, io = io)
+        return ProviderDetailViewModel(
+            apiKeyStore = store,
+            generationPrefs = prefs,
+            connectionTester = tester,
+            io = io,
+            discovery = probe,
+        )
     }
 
     @Test
@@ -279,5 +286,42 @@ class ProviderDetailViewModelTest {
         advanceUntilIdle()
         vm.makeActive()
         assertEquals(ProviderId.QWEN, prefs.options().provider)
+    }
+
+    @Test
+    fun `discover models adds candidates without changing the current pick`() = runTest {
+        prefs.setDetectedModels(ProviderId.DEEPSEEK, emptyList())
+        val probe = object : com.dreamkeeper.llm.ModelProbe {
+            override suspend fun list(provider: ProviderId, apiKey: String) =
+                com.dreamkeeper.llm.ModelDiscovery.Result(listOf("deepseek-next", "deepseek-flash"))
+        }
+        val vm = vm(probe = probe)
+        advanceUntilIdle()
+
+        vm.discoverModels()
+        advanceUntilIdle()
+
+        val state = vm.state.value
+        assertEquals("deepseek-flash", state.model)
+        assertTrue(state.models.any { it.id == "deepseek-next" })
+        assertEquals("检测到 2 个可用模型", state.discoveryNote)
+        assertEquals(listOf("deepseek-next", "deepseek-flash"), prefs.detectedModels(ProviderId.DEEPSEEK))
+    }
+
+    @Test
+    fun `failed discovery keeps the builtin list and explains why`() = runTest {
+        val probe = object : com.dreamkeeper.llm.ModelProbe {
+            override suspend fun list(provider: ProviderId, apiKey: String) =
+                com.dreamkeeper.llm.ModelDiscovery.Result(emptyList(), "DeepSeek 不支持模型列表（HTTP 404），已用内置清单")
+        }
+        val vm = vm(probe = probe)
+        advanceUntilIdle()
+
+        vm.discoverModels()
+        advanceUntilIdle()
+
+        val state = vm.state.value
+        assertEquals(2, state.models.size)
+        assertTrue(state.discoveryNote!!.contains("404"))
     }
 }

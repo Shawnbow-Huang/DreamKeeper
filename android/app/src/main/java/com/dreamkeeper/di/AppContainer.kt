@@ -21,6 +21,7 @@ import com.dreamkeeper.llm.AssetPriceCardSource
 import com.dreamkeeper.llm.AssetPromptSource
 import com.dreamkeeper.llm.ConnectionTester
 import com.dreamkeeper.llm.DeepSeekClient
+import com.dreamkeeper.llm.ModelDiscovery
 import com.dreamkeeper.llm.ProviderChatClient
 import com.dreamkeeper.llm.ProviderId
 import com.dreamkeeper.llm.ProviderRegistry
@@ -259,6 +260,9 @@ class AppContainer(
             keyOf = { provider -> apiKeyStore.load(provider) },
         )
     }
+
+    /** 「检测可用模型」探测器：短超时、单次、不写库（D557）。 */
+    val modelDiscovery: ModelDiscovery by lazy { ModelDiscovery() }
 
     val generationStore: GenerationStore by lazy { RoomGenerationStore(database) }
 

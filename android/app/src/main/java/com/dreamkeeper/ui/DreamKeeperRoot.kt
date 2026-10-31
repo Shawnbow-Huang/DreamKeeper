@@ -85,6 +85,8 @@ fun DreamKeeperRoot(
     generationPrefs: GenerationPrefs,
     themeController: ThemeController? = null,
     connectionTester: com.dreamkeeper.llm.ConnectionTester? = null,
+    /** 「检测可用模型」；为空时详情页按钮仍显示但点了没反应（仅测试装配会为空）。 */
+    modelDiscovery: com.dreamkeeper.llm.ModelDiscovery? = null,
     tagDao: TagDao,
     session: RecordingSession,
     audioStore: WavStore,
@@ -250,6 +252,7 @@ fun DreamKeeperRoot(
                         connectionTester,
                         themeController = themeController,
                         initialProvider = target,
+                        discovery = modelDiscovery,
                     )
                 }
                 ProviderDetailScreen(

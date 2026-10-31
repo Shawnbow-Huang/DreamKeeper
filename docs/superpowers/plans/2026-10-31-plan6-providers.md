@@ -168,6 +168,10 @@
 | D554 | 2026-11-01 | 设置 IA | `SettingsViewModel` 拆为 `ProviderListViewModel` + `ProviderDetailViewModel`；详情加 `initialProvider` 与 `makeActive()` | 单 VM 同时承担列表与配置会让状态互相污染；拆开后「打开别家详情不改当前供应商」可被单测钉死 | 
 | D555 | 2026-11-01 | 设置 IA | 未配 Key 允许设为当前，但列表与详情都明确写「生成会失败」 | 用户路径是「先选家再找 Key」；静默禁用会产生「点了没反应」的死路 | 
 | D556 | 2026-11-01 | 设置 IA | 非 DeepSeek 的「未计价」提示只放详情页 | 列表要保持一屏可扫；计价口径属于配置信息 |
+| D557 | 2026-11-01 | 模型发现 | 单家详情加「检测可用模型」：GET `{baseUrl}/models` + Bearer，10s 单次，失败一律降级并在按钮下写原因 | 用户要「自动检测当前能用什么模型」；但很多 OpenAI 兼容端点不实现 `/models`，探不到不能当成鉴权错误 |
+| D558 | 2026-11-01 | 模型发现 | 检测结果只做候选（写 `dk_generation_models.<wire>`），**不覆盖当前选择** | 「检测」回答的是「有什么」，选不选是下一步；自动改选会在用户不知情时换模型、换价格 |
+| D559 | 2026-11-01 | 双模型 | 拆 `GenerationOptions.faithfulModel`（默认跟随小说化）：忠实链请求、`llm_calls.model`、价卡重算都按实际请求的模型 | 用户问「第一模式就不需要参数吗」；忠实只补标点顺语序，配便宜模型是合理省钱路径；记账必须跟真实请求走，否则成本失真 |
+| D560 | 2026-11-01 | 双模型 | 忠实链思考仍固定关闭，UI 只给说明不给开关 | 设计 §9 的逐字保守约束；思考开着会改写句子结构，与「整理稿不动措辞」冲突 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -332,3 +336,12 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - **证据**：`docs/evidence/plan6/p6-ui-14-{settings-home,providers-list,provider-deepseek,provider-mimo}.png` + `p6-ui-14-ia.txt`，nearWhite 全 0.0000%。
 - **PENDING**：真机截图与切家后生成链实测（四家 Key 未配置 → 真连通仍 PENDING）。
 - **结论**：通过；设置页从「一屏铺五家」变成「索引 → 配置」两级。
+
+### 模型发现与双模型（Lead，2026-11-01）
+
+- 用户原话：「关于这个 api key 能连通并使用到什么模型，不能自动检测出来当前能用什么模型，然后在下拉框里选择吗？同时，除了小说化需要设置一些关于模型的参数，难道第一个模式就不需要了吗？」
+- **交付**：`llm/ModelDiscovery.kt`（`ModelProbe` 接口 + `ModelDiscovery` 实现，兼容 `data[].id/model/name` 与 `models[]`，空 Key 0 请求、非 2xx 降级、坏 JSON 降级、10s 取消）；`GenerationOptions.faithfulModel`；`GenerationPrefs` 新键 `dk_generation_faithful[.<wire>]` + `dk_generation_models.<wire>`（`knownModels`/`detectedModels`/`setDetectedModels`/`setFaithfulModel`）；`GenerationOrchestrator` 的 `Run.faithfulModel` 与 `llm_calls.model` 按实际请求模型；`ProviderDetailViewModel` 的 `modelsFor`/`discoverModels`/`discovering`/`discoveryNote`；详情页「检测可用模型」+「忠实整理模型」chips；`AppContainer.modelDiscovery` 接线。
+- **Lead 独立复跑**：全量 `:app:testDebugUnitTest --rerun-tasks` → **classes=63 tests=512 failures=0 errors=0 skipped=0**（基线 62/502，+10：ModelDiscoveryTest 5 / Prefs 2 / Orchestrator 1 / VM 2）。
+- **证据**：`docs/evidence/plan6/p6-ui-15-{models,faithful,detect-nokey}.png` + `p6-ui-15-models.txt`，nearWhite 全 0.0000%；未配 Key 点检测 → 本地提示「还没有配置 Key」，0 HTTP。
+- **PENDING**：真实 DeepSeek `/models` 与四家非 DeepSeek 的真实模型列表需有效 Key（模拟器未配置）；真机滚动/长列表未覆盖。
+- **结论**：通过；「自动检测 → 候选 → 手动选」闭环成立，忠实链获得独立模型档位且成本仍按实际模型记账。

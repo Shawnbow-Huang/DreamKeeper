@@ -775,4 +775,29 @@ class GenerationOrchestratorTest {
         /** `PromptRepository` 给【只做标点】自动追加的指令；用它区分「真带了标记」与「正文提到标记」。 */
         const val PUNCTUATION_DIRECTIVE = "本轮按保守档输出"
     }
+
+    @Test
+    fun `faithful chain uses its own model while novel uses the novel one`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity())
+        val llm = FakeLlm().apply {
+            enqueue(ok(CLEAN_T1))
+            enqueue(ok(novelJson(body = "改写后的正文。", quotes = emptyList())))
+        }
+        val orch = newOrchestrator(
+            llm = llm,
+            store = RoomGenerationStore(db),
+            options = { GenerationOptions(model = "deepseek-v4-pro", faithfulModel = "deepseek-flash") },
+        )
+
+        orch.generateFaithful(DREAM_ID)
+        assertEquals("deepseek-flash", llm.requests.single().model)
+
+        orch.generateNovel(DREAM_ID)
+        assertEquals("deepseek-v4-pro", llm.requests[1].model)
+
+        // 记账行也要写真实使用的模型（faithful 那行不能跟着小说化模型走）。
+        val calls = db.llmCallDao().listByDream(DREAM_ID)
+        assertEquals(listOf("deepseek-flash", "deepseek-v4-pro"), calls.map { it.model })
+    }
 }

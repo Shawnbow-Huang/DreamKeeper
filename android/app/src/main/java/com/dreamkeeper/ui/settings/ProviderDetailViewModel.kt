@@ -10,6 +10,7 @@ import com.dreamkeeper.data.settings.ThemeController
 import com.dreamkeeper.llm.ConnectionOutcome
 import com.dreamkeeper.llm.ConnectionTester
 import com.dreamkeeper.llm.GenerationOptions
+import com.dreamkeeper.llm.ModelProbe
 import com.dreamkeeper.llm.ModelSpec
 import com.dreamkeeper.llm.ProviderId
 import com.dreamkeeper.llm.ProviderRegistry
@@ -44,6 +45,8 @@ class ProviderDetailViewModel(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /** 从「模型服务 → 某一家」进来时钉死这一家；为空则沿用设置里保存的当前供应商。 */
     private val initialProvider: ProviderId? = null,
+    /** 「检测可用模型」；为空时按钮点了没反应（仅测试装配会为空）。 */
+    private val discovery: ModelProbe? = null,
 ) : ViewModel() {
 
     /** 一次「测试连接」的界面结果；[nonce] 用于丢弃切走后回来的旧结果。 */
@@ -96,8 +99,14 @@ class ProviderDetailViewModel(
         val testing: Boolean = false,
         /** 最近一次测试结果（只属于 [ConnectionUi.provider]） */
         val connection: ConnectionUi? = null,
-        /** 当前模型（各家自己的 id） */
+        /** 小说化模型（各家自己的 id） */
         val model: String = ProviderRegistry.of(ProviderId.DEEPSEEK).defaultModel().id,
+        /** 忠实整理模型；默认跟随小说化，可单独选（2026-11-01） */
+        val faithfulModel: String = ProviderRegistry.of(ProviderId.DEEPSEEK).defaultModel().id,
+        /** 「检测可用模型」进行中 */
+        val discovering: Boolean = false,
+        /** 上一次检测结果的人话（成功/降级都写这里） */
+        val discoveryNote: String? = null,
         /** 小说化思考档位（faithful 恒关，改稿仍走关闭 + 温度，见 D471） */
         val novelThinking: ThinkingLevel = GenerationOptions.DEFAULT.novelThinking,
     )
@@ -113,13 +122,18 @@ class ProviderDetailViewModel(
         val picked = initialProvider ?: options?.provider
         if (picked != null) {
             val spec = ProviderRegistry.of(picked)
-            val remembered = options?.model?.takeIf { id -> spec.models.any { it.id == id } }
-            val model = if (options?.provider == picked && remembered != null) remembered else spec.defaultModel().id
+            val models = modelsFor(picked)
+            val sameProvider = options?.provider == picked
+            val novel = options?.model?.takeIf { sameProvider && models.any { m -> m.id == it } }
+                ?: spec.defaultModel().id
+            val faithful = options?.faithfulModel?.takeIf { sameProvider && models.any { m -> m.id == it } }
+                ?: novel
             _state.update {
                 it.copy(
                     provider = picked,
-                    models = spec.models,
-                    model = model,
+                    models = models,
+                    model = novel,
+                    faithfulModel = faithful,
                     novelThinking = options?.novelThinking ?: it.novelThinking,
                 )
             }
@@ -127,18 +141,32 @@ class ProviderDetailViewModel(
         refresh()
     }
 
+    /** 内置清单 + 上次检测结果；未知 id 用 id 当标签（服务端说它有，就让它可选）。 */
+    private fun modelsFor(provider: ProviderId): List<ModelSpec> {
+        val builtin = ProviderRegistry.of(provider).models
+        val builtinIds = builtin.map { it.id }.toSet()
+        val extra = generationPrefs?.knownModels(provider).orEmpty()
+            .filter { it !in builtinIds }
+            .map { ModelSpec(id = it, label = it) }
+        return builtin + extra
+    }
+
     /** 换供应商：只换 Key 卡与模型清单，不动已保存的任何 Key。 */
     fun selectProvider(provider: ProviderId) {
         if (_state.value.provider == provider) return
         generationPrefs?.setProvider(provider)
         val spec = ProviderRegistry.of(provider)
-        val model = generationPrefs?.options()?.model?.takeIf { id -> spec.models.any { it.id == id } }
+        val models = modelsFor(provider)
+        val model = generationPrefs?.options()?.model?.takeIf { id -> models.any { it.id == id } }
             ?: spec.defaultModel().id
         _state.update {
             it.copy(
                 provider = provider,
-                models = spec.models,
+                models = models,
                 model = model,
+                faithfulModel = model,
+                discovering = false,
+                discoveryNote = null,
                 draft = "",
                 warning = null,
                 error = null,
@@ -160,8 +188,47 @@ class ProviderDetailViewModel(
 
     fun setModel(model: String) {
         val prefs = generationPrefs ?: return
-        prefs.setModel(model)
+        prefs.setNovelModel(model)
         _state.update { it.copy(model = prefs.options().model) }
+    }
+
+    fun setFaithfulModel(model: String) {
+        val prefs = generationPrefs ?: return
+        prefs.setFaithfulModel(model)
+        _state.update { it.copy(faithfulModel = prefs.options().faithfulModel) }
+    }
+
+    /**
+     * 请服务端报一次「这个 Key 能用哪些模型」（GET /models）。
+     *
+     * 失败不当鉴权错误：很多 OpenAI 兼容端点不实现 /models，降级用内置清单并把原因写在
+     * [UiState.discoveryNote] 里。成功只扩大候选，不改当前选择。
+     */
+    fun discoverModels() {
+        val discoverer = discovery ?: return
+        val provider = _state.value.provider
+        if (_state.value.discovering) return
+        viewModelScope.launch(io) {
+            _state.update { if (it.provider == provider) it.copy(discovering = true, discoveryNote = null) else it }
+            val key = apiKeyStore.load(provider)
+            val result = discoverer.list(provider, key.orEmpty())
+            if (result.ok) generationPrefs?.setDetectedModels(provider, result.models)
+            val models = modelsFor(provider)
+            val opts = generationPrefs?.options()?.takeIf { it.provider == provider }
+            _state.update {
+                if (it.provider != provider) it else it.copy(
+                    models = models,
+                    model = opts?.model ?: it.model,
+                    faithfulModel = opts?.faithfulModel ?: it.faithfulModel,
+                    discovering = false,
+                    discoveryNote = if (result.ok) {
+                        "检测到 ${result.models.size} 个可用模型"
+                    } else {
+                        result.error ?: "检测失败，继续用内置清单"
+                    },
+                )
+            }
+        }
     }
 
     /**
