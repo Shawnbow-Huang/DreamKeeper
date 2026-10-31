@@ -137,6 +137,9 @@
 | D521 | 2026-10-31 | T4 | 设备上五家 Key 均未配置：T7 卸载重装清掉了 debug 期写入的 DeepSeek Key（AndroidKeyStore 别名随包卸载删除） | 需用户重新在设置页粘贴 Key 才能做真连通；本轮真连通保持 PENDING |
 | D522 | 2026-10-31 | T5 | 每次生成在开始时快照 `provider/model/apiKey`（`newRun`），而不是每次 attempt 现读 prefs | 生成中切供应商会把新 model/key 记到旧请求上，`llm_calls` 的 model 与真实请求不符；快照后语义稳定 |
 | D523 | 2026-10-31 | T5 | 非 DeepSeek 成功行记 `formulaVersion="price-missing"`、`costMicroYuan=0`、`priceSnapshotJson=NULL`；`check-cost.py` 白名单并短路复算 | 五家价卡未知，静默按 DeepSeek 价卡计费是假账；宁可标「未计价」也不编数字 |
+| D526 | 2026-10-31 | T6 | 版本升到 `0.10.0 / versionCode 3` 并重出签名候选包（同签名覆盖 0.9.0） | 五家供应商是本轮用户可见能力，需要独立版本号便于真机区分；同签名可直接覆盖、保数据 |
+| D527 | 2026-10-31 | T6 | 新增 `docs/QA-REAL-DEVICE.md` 真机清单（12 节 / 60+ 勾选项），作为交付物入库 | 用户要自己跑真机；清单必须可照做、可回传、含证据命名与判定口径，而不是口头步骤 |
+| D528 | 2026-10-31 | T6 | 真机 APK 放 `dist/DreamKeeper-0.10.0.apk`，`dist/` 进 `.gitignore` 不入库 | 9.7MB 二进制不入仓；sha256 写在交付消息与 RELEASE.md，可校验 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 

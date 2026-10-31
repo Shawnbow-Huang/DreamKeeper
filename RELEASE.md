@@ -1,7 +1,8 @@
-# 梦匣 · 发布说明（0.9.0 候选版）
+# 梦匣 · 发布说明（0.10.0 多供应商候选版）
 
-> 本版是 **模拟器验收的候选版（0.9.0 / versionCode 2）**，不是公开的 v1。
-> 真机项（P1/P2/P9 等）仍按 `docs/evidence/plan5/FINAL-REVIEW.md` 的 PENDING 清单挂起。
+> 本版是 **模拟器验收的候选版（0.10.0 / versionCode 3）**，不是公开的 v1。
+> 相对 0.9.0：新增五家模型供应商、按家 Key、测试连接、按家请求适配与非 DeepSeek 的「未计价」口径。
+> 真机项按 [docs/QA-REAL-DEVICE.md](QA-REAL-DEVICE.md) 的清单执行；模拟器 PENDING 见 `docs/evidence/plan5/FINAL-REVIEW.md` 与 `docs/evidence/plan6/FINAL-REVIEW.md`。
 
 ## 构建
 

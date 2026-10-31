@@ -46,3 +46,4 @@ docs/evidence/plan2/.p2-*
 
 # DSH image generation scratch output (masters live in docs/art/plan5)
 dsh-image-gen/
+dist/

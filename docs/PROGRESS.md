@@ -121,6 +121,8 @@
 | T5 | 生成链按供应商派发 + 成本诚实 + 终验证据 | ✅ | 生成快照 provider/model/key；非 DeepSeek 记 `price-missing`；59 类 488 例 |
 | T6 | FINAL-REVIEW / ACCEPTANCE 3g / 看板收口 | ✅ | 离线契约通过；五家真实连通 PENDING（P1） |
 
+**发布：0.10.0 候选包**（versionCode 3，APK 9,728,730 B，sha256 `1f70a069…9153`，证书 `cf1a5dce…`）——真机步骤见 `docs/QA-REAL-DEVICE.md`。
+
 ## 三、你提的需求（已收下，落点如下）
 
 | # | 需求 | 落点 | 状态 |
