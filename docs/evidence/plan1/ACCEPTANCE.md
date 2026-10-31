@@ -195,3 +195,26 @@ design v1.5 的 §14 共 8 条；本节只写「本轮（Plan 2 / Task 9）结�
 | B13 API 26–28 导出门禁 | `p4-api26-01.txt` | ⚠️ PENDING（无镜像，P4） |
 | B14 三格式打开态 | `p4-api26-01.txt`（只 htmlviewer） | ⚠️ PENDING（环境，P5） |
 | B15 全量绿 + 证据头/Key/偏差纪律 | 全量 XML 49/418/0；`FINAL-REVIEW.md` §四 | ✅ PASS（D415–D460 全部登记） |
+
+## 3f UI 打磨 / 离线美术 / 档位 UI / 发布就绪证据表（Plan 5 / T8）
+
+> 分支 `plan5-polish`，基线 `2735d57`；终态全量 **52 类 / 443 例 / 0 失败**（0.9.0 / versionCode 2）。
+> 逐项细节见 `docs/evidence/plan5/FINAL-REVIEW.md`；PENDING 白名单见其 §五（P1–P11）。
+
+| 能力/断言 | 证据文件 | 结论 |
+|---|---|---|
+| B1 四张离线插画入库、体积/近白达标 | `p5-asset-00-master.txt`（合计 72,220 B、单张 ≤31,728 B、近白 0、meanY ≤0.018） | ✅ PASS |
+| B2 图标前景/自适应/monochrome/splash | `p5-icon-01..03`（桌面图标、splash 抽帧、aapt2 badging/resources） | ✅ PASS |
+| B3 空态组件接入库/日/小说/素材 | `p5-empty-00..03`（nearWhite 全 0；日视图不可达登记 D489） | ✅ PASS（日视图 PENDING，P10） |
+| B4 设置页模型 + 思考档位 | `p5-settings-00-tiers.txt`、`p5-settings-01/02`（变异必红、持久化） | ✅ PASS |
+| B5 请求体透传（novel/faithful） | `GenerationOrchestratorTest` 3 例（思考 high 不带 temperature、faithful 恒关） | ✅ PASS |
+| B6 可靠性 A1 追加尾巴不漏 | `p5-t5-reliability.txt`、`AudioScanTest` 2 例、变异 2 红 | ✅ PASS（真机长录 P5/P9） |
+| B7 可靠性 A2 重试转写可用 | 同上、`AppendEntryTest` 第 7 例、`markTranscriptionRetry` 放宽 | ✅ PASS |
+| B8 可靠性 A3 半截原文不进生成 | 同上、`GenerationOrchestratorTest` 覆盖闸门 0 次 HTTP | ✅ PASS |
+| B9 可靠性 A4 4h/128MB 守卫 | `RecordingLimitsTest` 4 例 | ✅ PASS（真机 4h P9） |
+| B10 触控 ≥48dp（1.3× 字号） | `p5-a11y-01-bounds.txt`（17 个 clickable ≥126px）、`p5-ui-05/06` | ✅ PASS（TalkBack P9） |
+| B11 release 0.9.0 签名包 | `p5-release-01-build.txt`（证书 `cf1a5dce…`、APK 9,695,958 B） | ✅ PASS |
+| B12 冷启动 ×3 + FATAL 0 + 无 Key 泄漏 | `p5-release-02-coldstart.txt`（440/436/431ms、`dk_debug_save_key`=0） | ✅ PASS |
+| B13 首启为空（release 无种子） | `p5-release-02` + `p5-empty-00`（0 天有梦） | ✅ PASS（真机全新安装 P2） |
+| B14 API 26–28 / 导出打开态 | 复用 Plan 4 `p4-api26-01.txt` | ⚠️ PENDING（P3/P4） |
+| B15 证据/偏差/密钥纪律 | 全量 XML 52/443/0；`git ls-files` 密钥文件 0；D461–D491 全部登记 | ✅ PASS |
