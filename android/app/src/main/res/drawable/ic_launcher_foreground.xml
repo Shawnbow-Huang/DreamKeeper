@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  梦匣图标前景：夜里的「余烬」（D468/D470）。
+  108dp 画布，主体落在中心 66dp 安全区（21..87）；透明底。
+  只用两个色：Ember #C8873F（余烬与手刻弧线）与 EmberDeep #8C3B34（余烬内芯）。
+  语义：醒来后还剩一点热的东西；不用月牙/梦网/眼睛，避开通用梦境符号。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 不闭合、略抖动的手刻弧线：从右下起笔，绕过上方，到左下收笔 -->
+    <path
+        android:pathData="M41,72 A21,21 0 1 1 67,72"
+        android:strokeColor="#C8873F"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+
+    <!-- 余烬内芯 -->
+    <path
+        android:pathData="M54,47 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
+        android:fillColor="#8C3B34" />
+
+    <!-- 余烬主体 -->
+    <path
+        android:pathData="M54,47 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0"
+        android:fillColor="#C8873F" />
+
+    <!-- 一点上扬的余烬火星，暗示「还在呼吸」 -->
+    <path
+        android:pathData="M62,32 m-1.3,0 a1.3,1.3 0 1,0 2.6,0 a1.3,1.3 0 1,0 -2.6,0"
+        android:fillColor="#C8873F" />
+</vector>

@@ -1,0 +1,42 @@
+HOST_TIME=2026-10-31T13:50:00Z
+DEVICE_TIME=n/a
+REPLAY=python .scratch/prep_art.py；sha256sum docs/art/plan5/*.png android/app/src/main/res/drawable-nodpi/*.webp
+
+# Plan 5 T1 美术资产（D468）：4 张空态插画 + 1 个矢量图标前景
+
+## 生成方式
+- 工具：DSH generate_image，seedream / doubao-seedream-5-0-pro，2K 方图请求（实际输出按模型构图，长边 2496）。
+- 母版：docs/art/plan5/*.png（长边 720，来自模型原始 JPEG 的 Pillow 归一化；原始字节仍在 dsh-image-gen/，未入库）。
+- 归一化：`.scratch/prep_art.py` —— 长边 720 → WebP q80 method=6；media 额外做 16:9 中心裁切 + 阴影 crush，避免浅色块。
+- 图标：手写 vector（res/drawable/ic_launcher_foreground.xml，108dp、主体 66dp 安全区、Ember 余烬 + 不闭合手刻弧线），不经过模型。
+
+## 提示词（逐张，节选；完整骨架与负向约束见 plan §0.2）
+- illus_library_empty: 哑光低对比深色插画…暗色木桌上散着几张空白厚纸卡片，边角微卷，纸面无字只有纸纹与压痕，最上面一张上方散开一小片灰雾；四色限定，主体偏右下，左上留空；禁止月亮/星星/梦网/眼睛/时钟/发光粒子/霓虹/纯白/人形/文字/水印。
+- illus_day_empty: 哑光低对比深色插画…一扇没有月亮的夜窗，玻璃蒙雾，窗台一只旧搪瓷杯，杯沿一线极淡琥珀反光；室内只有窗框轮廓与深暗；窗框偏左，右侧留空；同一套禁止清单。
+- illus_novel_empty: 哑光低对比深色插画…一本摊开的空白笔记本放在暗桌面，纸上只有几道将散未散的墨线，旧钢笔横在旁边，笔尖一点极淡琥珀反光；笔记本偏左，右侧留空；同一套禁止清单。
+- illus_media: 极简深色插画…近黑暗墙上挂一个空的旧木画框，框沿一道极细琥珀描边，框内是深灰夜雾；墙面纸纹与木刻颗粒；60% 留空暗墙；禁止文字/月亮/星星/人物/发光粒子/霓虹。
+
+## 逐张字节与 sha256
+- illus_library_empty: webp 21322 B, 480x720, webp_sha256=9aca1aaefc35391ec99dfe61213900f4716e9b4ef5e6ee431bec4e84628b289b, master_sha256=f6648dea650996982139316855bd6b9e7aaa1e6ec83c536face20ce21df4c1fb
+    meanY=0.0179 p99=0.1229 nearWhite>=245=0.0000% >=250=0.0000%
+- illus_day_empty: webp 31728 B, 480x720, webp_sha256=ea3f7db90acbd3efd2241168069ddcdd68d5b9aa8d9a24e8cf87ebc54b070dcc, master_sha256=b90d16979d78459cb20f955adc522e83b860faa31ba3493e93e1dcf5b4c9c573
+    meanY=0.0147 p99=0.0992 nearWhite>=245=0.0000% >=250=0.0000%
+- illus_novel_empty: webp 12168 B, 720x480, webp_sha256=be03957cc6a51325c1cdafca4063709c2bc7c20b856f907497d9b53936e027b5, master_sha256=370772ee2d1d9a1b7a63272e562863fe15abd570c3b2dc4bb615d5899f0d8530
+    meanY=0.0107 p99=0.0597 nearWhite>=245=0.0000% >=250=0.0000%
+- illus_media: webp 7002 B, 720x405, webp_sha256=f2bf2648b9bbeb62549630cf0f536beabca79fed919d23007d14443b12b21d69, master_sha256=c16d9d13625be5850bbcbedf6b8b73643cf42718c22cf034b91c55f117e64018
+    meanY=0.0025 p99=0.0538 nearWhite>=245=0.0000% >=250=0.0000%
+
+## 体积
+- 四张 WebP 合计 72220 B（预算 ≤400,000 B）；单张最大 31728 B（预算 ≤120,000 B）。
+- 图标前景为矢量 XML，约 1.4 KB，不占位图预算。
+
+## 门槛判定
+- 近白：四张全部 0.0000%（阈值 ≥245 占比 ≤0.1%、≥250 = 0）。
+- 亮度：meanY ≤0.018、P99 ≤0.124，均低于 0.06 / 0.35 阈值。
+- AI 味清单（人工）：无月亮/星星/梦网/眼睛/时钟；无文字/水印/伪文字；无人形；无 3D 高光/bloom/彩虹渐变；主体偏置、留白 ≥40%；100% 可见纸纹/木刻颗粒；单张只有一个超现实元素（灰雾/雾窗/散墨/框内雾弧）；四张颗粒尺度一致。判定 0 fail。
+- 已知偏离：模型输出的构图朝向与提示词要求的留白方位不完全一致（library 为竖构图、主体居中偏下），空态显示按 Fit 适配，不影响构图留白；记 T1 备注，不占偏差号。
+
+## 读法
+1. 复跑 prep_art.py 后对比上面的 sha256；不一致说明归一化参数或源图变了。
+2. 资产测试：`./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.assets.AssetCatalogTest"` 应 5/5。
+3. 设备侧只在 T7 release 空库新装后截空态图；本文件不含设备证据。

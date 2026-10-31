@@ -15,3 +15,8 @@ docs/evidence/plan3/*.db binary
 docs/evidence/plan4/*.txt text eol=lf
 docs/evidence/plan4/*.db binary
 docs/evidence/plan4/*.png binary
+
+docs/evidence/plan5/*.txt text eol=lf
+docs/evidence/plan5/*.png binary
+docs/evidence/plan5/*.webp binary
+docs/art/plan5/*.png binary
