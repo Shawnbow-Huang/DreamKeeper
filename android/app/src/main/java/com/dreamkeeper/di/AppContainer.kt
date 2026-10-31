@@ -14,6 +14,8 @@ import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.AndroidKeystoreCipher
 import com.dreamkeeper.data.security.ApiKeyStore
 import com.dreamkeeper.data.settings.GenerationPrefs
+import com.dreamkeeper.data.settings.ThemeController
+import com.dreamkeeper.data.settings.ThemePrefs
 import com.dreamkeeper.data.security.KeystoreApiKeyStore
 import com.dreamkeeper.llm.AssetPriceCardSource
 import com.dreamkeeper.llm.AssetPromptSource
@@ -218,6 +220,13 @@ class AppContainer(
      * 与排布偏好共用 `settings` 文件；编排器每次请求现取，所以设置页一保存就生效，
      * 不必重建容器。
      */
+    /** 皮肤（Plan 7）：与生成档位共用 settings 文件，但键独立。 */
+    val themePrefs: ThemePrefs by lazy {
+        ThemePrefs(appContext.getSharedPreferences(ThemePrefs.PREFS_NAME, Context.MODE_PRIVATE))
+    }
+
+    val themeController: ThemeController by lazy { ThemeController(themePrefs) }
+
     val generationPrefs: GenerationPrefs by lazy {
         GenerationPrefs(appContext.getSharedPreferences(GenerationPrefs.PREFS_NAME, Context.MODE_PRIVATE))
     }

@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.followup
 
+import com.dreamkeeper.ui.theme.DreamColors
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -56,13 +57,7 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.service.RecordingStarter
 import com.dreamkeeper.ui.theme.DreamMotion
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.EmberDeep
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.NightRaised
 import com.dreamkeeper.ui.theme.NightVoid
-import com.dreamkeeper.ui.theme.Paper
 import kotlinx.coroutines.delay
 
 /**
@@ -162,7 +157,7 @@ fun FollowUpScreen(
             ) {
                 Text(
                     text = "追问",
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                     fontSize = 12.sp,
                     letterSpacing = 6.sp,
                 )
@@ -182,13 +177,13 @@ fun FollowUpScreen(
                 ) {
                     Text(
                         text = "${state.remainingSeconds}",
-                        color = Ember,
+                        color = DreamColors.ember,
                         fontSize = 54.sp,
                         fontWeight = FontWeight.Light,
                     )
                     Text(
                         text = " 秒",
-                        color = Ember,
+                        color = DreamColors.ember,
                         fontSize = 16.sp,
                         modifier = Modifier.padding(bottom = 10.dp),
                     )
@@ -206,11 +201,11 @@ fun FollowUpScreen(
                     } else {
                         "补录的话接在刚才那段录音后面；中间的空档不补静音。"
                     },
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                     fontSize = 13.sp,
                 )
                 hint?.let { message ->
-                    Text(text = message, color = Ember, fontSize = 13.sp)
+                    Text(text = message, color = DreamColors.ember, fontSize = 13.sp)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -229,8 +224,8 @@ fun FollowUpScreen(
                         .semantics { contentDescription = "就这样，保存并收起" },
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = EmberDeep,
-                        contentColor = Paper,
+                        containerColor = DreamColors.emberDeep,
+                        contentColor = DreamColors.paper,
                     ),
                 ) {
                     Text(text = "就这样", fontSize = 17.sp, fontWeight = FontWeight.Medium)
@@ -271,7 +266,7 @@ private fun TranscriptField(
             fontSize = 20.sp,
             lineHeight = 30.sp,
         ),
-        cursorBrush = SolidColor(Ember),
+        cursorBrush = SolidColor(DreamColors.ember),
         decorationBox = { innerTextField ->
             // 这里**不能**用 fillMaxSize：decorationBox 的约束是整列剩余高度，
             // fillMaxSize 会把输入框撑到占满整屏，把麦克风与主钮顶出屏幕。
@@ -279,7 +274,7 @@ private fun TranscriptField(
                 if (transcript.isEmpty()) {
                     Text(
                         text = "刚转出来的话会显示在这里…",
-                        color = InkFaint,
+                        color = DreamColors.inkFaint,
                         fontSize = 20.sp,
                     )
                 }
@@ -322,8 +317,8 @@ private fun MicArea(
             .fillMaxWidth()
             .heightIn(min = 88.dp) // §0-13：在 48dp 下限之上
             .clip(shape)
-            .background(if (recording) EmberDeep.copy(alpha = 0.45f) else NightRaised)
-            .border(1.dp, InkDim, shape) // §0-11：边界用 InkDim，禁用 Line
+            .background(if (recording) DreamColors.emberDeep.copy(alpha = 0.45f) else DreamColors.nightRaised)
+            .border(1.dp, DreamColors.inkDim, shape) // §0-11：边界用 DreamColors.inkDim，禁用 DreamColors.line
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -336,7 +331,7 @@ private fun MicArea(
     ) {
         Text(
             text = if (recording) "松手结束补录" else "按住补录",
-            color = Paper,
+            color = DreamColors.paper,
             fontSize = 17.sp,
             fontWeight = FontWeight.Medium,
         )

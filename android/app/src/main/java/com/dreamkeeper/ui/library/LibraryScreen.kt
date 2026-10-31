@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.library
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,15 +44,6 @@ import com.dreamkeeper.ui.day.DayViewModel
 import com.dreamkeeper.R
 import com.dreamkeeper.ui.common.EmptyState
 import androidx.compose.ui.res.painterResource
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.EmberDeep
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.Paper
-import com.dreamkeeper.ui.theme.PaperLit
-import com.dreamkeeper.ui.theme.PaperSurface
 
 /** 分段控件总宽：两段各 76dp。见 [LayoutSwitch] 为什么不用「无界宽度 + weight」 */
 private val SwitchWidth = 152.dp
@@ -76,7 +68,7 @@ fun LibraryScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().background(Night)) {
+    Column(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         LibraryHeader(layout = state.layout, onLayout = vm::setLayout, onOpenTags = onOpenTags)
 
         if (!state.loaded) {
@@ -110,7 +102,7 @@ private fun LibraryHeader(
             text = "全部梦",
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleLarge,
-            color = Paper,
+            color = DreamColors.paper,
         )
         // 文字按钮而不是图标：这一版没有图标资源，摆一个来路不明的放大镜/齿轮更像故障
         Box(
@@ -122,14 +114,14 @@ private fun LibraryHeader(
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "标签", style = MaterialTheme.typography.bodyMedium, color = InkDim)
+            Text(text = "标签", style = MaterialTheme.typography.bodyMedium, color = DreamColors.inkDim)
         }
         LayoutSwitch(current = layout, onLayout = onLayout)
     }
 }
 
 /**
- * 自绘分段控件：两段等宽、整高 48dp、1dp `Line` 描边 + 999dp 圆角。
+ * 自绘分段控件：两段等宽、整高 48dp、1dp `DreamColors.line` 描边 + 999dp 圆角。
  *
  * 不用 M3 `SegmentedButton`：它默认 40dp 高，49dp 的触控下限要再补 `heightIn`；
  * 而它的选中态是自绘的 `checked` 语义，样式也没法只改底色。
@@ -148,7 +140,7 @@ private fun LayoutSwitch(current: LibraryLayout, onLayout: (LibraryLayout) -> Un
             // 描边里会露出 4dp 的透明带（fillMaxHeight 在无界高度下等于 wrap）
             .height(IntrinsicSize.Min)
             .clip(RoundedCornerShape(999.dp))
-            .border(1.dp, Line, RoundedCornerShape(999.dp)),
+            .border(1.dp, DreamColors.line, RoundedCornerShape(999.dp)),
     ) {
         SwitchSegment("时间轴", LibraryLayout.TIMELINE, current, onLayout)
         SwitchSegment("卡片", LibraryLayout.CARDS, current, onLayout)
@@ -168,7 +160,7 @@ private fun RowScope.SwitchSegment(
             .weight(1f)
             .fillMaxHeight()
             // 未选中就是**没有背景**，不是透明色叠一层：叠加会盖掉圆角外侧的描边
-            .then(if (selected) Modifier.background(PaperLit) else Modifier)
+            .then(if (selected) Modifier.background(DreamColors.paperLit) else Modifier)
             .clickable { onLayout(value) }
             .semantics {
                 contentDescription = "切换到$label"
@@ -179,16 +171,16 @@ private fun RowScope.SwitchSegment(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) Paper else InkFaint,
+            color = if (selected) DreamColors.paper else DreamColors.inkFaint,
             maxLines = 1,
         )
     }
 }
 
 /**
- * 时间轴：左侧 1.5dp `Ember` 竖线 + 每条的 `Ember` 圆点。
+ * 时间轴：左侧 1.5dp `DreamColors.ember` 竖线 + 每条的 `DreamColors.ember` 圆点。
  *
- * 竖线用 `Ember` 而不是 `Line #232A36`：后者在 Night 上只有 1.34:1，截图里等于没有线，
+ * 竖线用 `DreamColors.ember` 而不是 `DreamColors.line #232A36`：后者在 DreamColors.night 上只有 1.34:1，截图里等于没有线，
  * 「竖线与圆点对齐」就没有可判对象（D60）。
  */
 @Composable
@@ -210,14 +202,14 @@ private fun TimelineEntry(item: LibraryItem, onClick: () -> Unit) {
     val heading = cardText(dream.title, previewText(item.finalNovelText, dream)).heading
 
     // 2026-11-01 视觉改版：时间轴从"一根琥珀竖线 + 灰字"改成"一叠纸"。
-    // 每条梦是一张暖纸卡（PaperSurface），日期是注脚、正文是宋体 21sp；
+    // 每条梦是一张暖纸卡（DreamColors.paperSurface），日期是注脚、正文是宋体 21sp；
     // 竖线圆点全部去掉——存在感由纸面与字重承担，不再靠强调色刷屏。
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(PaperSurface)
+            .background(DreamColors.paperSurface)
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp),
     ) {
@@ -225,13 +217,13 @@ private fun TimelineEntry(item: LibraryItem, onClick: () -> Unit) {
             Text(
                 text = DayViewModel.titleOf(dream.date),
                 style = MaterialTheme.typography.labelSmall,
-                color = InkFaint,
+                color = DreamColors.inkFaint,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 text = heading,
                 style = MaterialTheme.typography.titleLarge,
-                color = Paper,
+                color = DreamColors.paper,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -258,7 +250,7 @@ private fun CardStream(entries: List<LibraryItem>, onOpen: (String) -> Unit) {
                     text = DayViewModel.titleOf(item.dream.date),
                     modifier = Modifier.padding(bottom = 6.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                 )
                 DreamCard(
                     dream = item.dream,

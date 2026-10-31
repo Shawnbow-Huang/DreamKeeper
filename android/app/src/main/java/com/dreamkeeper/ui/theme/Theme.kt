@@ -1,35 +1,40 @@
 package com.dreamkeeper.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
-private val DreamColorScheme = darkColorScheme(
-    primary = Ember,
-    onPrimary = OnLamp,
-    primaryContainer = EmberDeep,
-    onPrimaryContainer = Paper,
-    secondary = Ash,
-    onSecondary = Night,
-    background = Night,
-    onBackground = Paper,
-    surface = NightRaised,
-    onSurface = Paper,
-    surfaceVariant = PaperSurface,
-    onSurfaceVariant = InkDim,
-    // 边界要看得见（输入框、可点容器）；装饰线走 outlineVariant
-    outline = InkDim,
-    outlineVariant = Line,
-    error = ErrorText,
-    errorContainer = ErrorContainer,
-    onErrorContainer = Paper,
-    // 关键：M3 默认 surfaceTint = primary，任何 elevation 都会被琥珀染色；
-    // 近黑底上这点染色会变成"脏棕"，必须关掉。
-    surfaceTint = Color.Transparent,
-)
-
+/**
+ * 应用皮肤。
+ *
+ * [skin] 由 `ThemeController` 驱动（SharedPreferences 持久化，设置页可切）；
+ * 默认灯下纸，保持 0.10.0 的观感。
+ *
+ * 状态栏/导航栏图标要跟着皮肤的黑白走：浅色皮肤用深色图标，否则状态栏的白色时间会看不见。
+ */
 @Composable
-fun DreamKeeperTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = DreamColorScheme, typography = DreamTypography, content = content)
+fun DreamKeeperTheme(skin: Skin = Skin.LAMP, content: @Composable () -> Unit) {
+    val palette = paletteOf(skin)
+    // 非 @Composable 位置（Canvas draw、默认参数）也读这个快照。
+    SkinRuntime.current = palette
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !palette.isDark
+                isAppearanceLightNavigationBars = !palette.isDark
+            }
+        }
+    }
+    CompositionLocalProvider(LocalDream provides palette) {
+        MaterialTheme(
+            colorScheme = palette.colorScheme(),
+            typography = DreamTypography,
+            content = content,
+        )
+    }
 }

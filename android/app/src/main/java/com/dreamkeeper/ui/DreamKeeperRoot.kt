@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import com.dreamkeeper.data.DreamRepository
 import com.dreamkeeper.data.db.TagDao
 import com.dreamkeeper.data.security.ApiKeyStore
 import com.dreamkeeper.data.settings.GenerationPrefs
+import com.dreamkeeper.data.settings.ThemeController
 import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.service.RecordingStarter
@@ -62,11 +64,6 @@ import com.dreamkeeper.ui.settings.SettingsScreen
 import com.dreamkeeper.ui.settings.SettingsViewModel
 import com.dreamkeeper.ui.tags.TagsScreen
 import com.dreamkeeper.ui.tags.TagsViewModel
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
 import java.time.LocalDate
 
 /**
@@ -83,6 +80,7 @@ fun DreamKeeperRoot(
     apiKeyStore: ApiKeyStore,
     /** 生成档位（Plan 5 Task 2）：只给设置页读写；容器里的编排器自己现取。 */
     generationPrefs: GenerationPrefs,
+    themeController: ThemeController? = null,
     connectionTester: com.dreamkeeper.llm.ConnectionTester? = null,
     tagDao: TagDao,
     session: RecordingSession,
@@ -129,7 +127,7 @@ fun DreamKeeperRoot(
     }
 
     Scaffold(
-        containerColor = Night,
+        containerColor = DreamColors.night,
         bottomBar = {
             if (showBottomBar) {
                 DreamBottomBar(
@@ -147,9 +145,9 @@ fun DreamKeeperRoot(
                 // 与详情页同一套：M3 默认 inverseSurface 在夜间是发白的板子（D70）
                 Snackbar(
                     snackbarData = data,
-                    containerColor = NightRaised,
-                    contentColor = Paper,
-                    actionColor = Ember,
+                    containerColor = DreamColors.nightRaised,
+                    contentColor = DreamColors.paper,
+                    actionColor = DreamColors.ember,
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
@@ -212,7 +210,7 @@ fun DreamKeeperRoot(
             }
             // 设置页同理不进底部栏：showBottomBar 只按 calendar / library 等值判定
             composable(DreamRoute.Settings.route) {
-                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore, generationPrefs, connectionTester) }
+                val vm: SettingsViewModel = viewModel { SettingsViewModel(apiKeyStore, generationPrefs, connectionTester, themeController = themeController) }
                 SettingsScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable("detail/{dreamId}") { backStackEntry ->
@@ -286,7 +284,7 @@ fun DreamKeeperRoot(
                     starter = starter,
                     audioStore = audioStore,
                     onDismiss = {
-                        // 收起落 Night 底页（日历），不退桌面。record 那条已经被
+                        // 收起落 DreamColors.night 底页（日历），不退桌面。record 那条已经被
                         // popUpTo(inclusive) 清掉了，所以这里正常能 pop 到日历。
                         val popped = nav.popBackStack()
                         if (!popped) {
@@ -308,7 +306,7 @@ fun DreamKeeperRoot(
  * `NavigationBarItem` 在选中时会在 icon 槽位上方画一颗 32×32 的指示药丸。Plan 1 的底部栏
  * 只有文字没有图标，按 brief 写 `icon = {}` 之后那颗药丸就是一块**没有内容的灰色胶囊**
  * （Task 6 截图里「日历」上方那一块）。M3 没有关掉它的开关，所以这里用一个 `Row` +
- * 两个等宽可点区域重画：选中 = `Paper` 文字 + 下方 2dp `Ember` 短横线，未选中 = `InkDim`。
+ * 两个等宽可点区域重画：选中 = `DreamColors.paper` 文字 + 下方 2dp `DreamColors.ember` 短横线，未选中 = `DreamColors.inkDim`。
  *
  * 两条腿要一起看：`navigationBarsPadding()` 让底栏自身垫开手势导航条，
  * 于是 Scaffold 把它们一起算进 `innerPadding`，子页不用再避让第二次。
@@ -321,7 +319,7 @@ private fun DreamBottomBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Night)
+            .background(DreamColors.night)
             .navigationBarsPadding(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -338,7 +336,7 @@ private fun DreamBottomBar(
     }
 }
 
-/** 等宽的一个 tab：整块可点，48dp 触控下限，选中时文字 `Paper` + 下方 20×2dp `Ember` 指示线 */
+/** 等宽的一个 tab：整块可点，48dp 触控下限，选中时文字 `DreamColors.paper` + 下方 20×2dp `DreamColors.ember` 指示线 */
 @Composable
 private fun RowScope.BottomBarTab(
     label: String,
@@ -361,16 +359,16 @@ private fun RowScope.BottomBarTab(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) Paper else InkDim,
+            color = if (selected) DreamColors.paper else DreamColors.inkDim,
         )
-        // 指示线始终占位：未选中时画成 Night（与底栏同色，看不见），
+        // 指示线始终占位：未选中时画成 DreamColors.night（与底栏同色，看不见），
         // 这样切换选中不会让文字上下跳 6dp。不引透明色，配色只取 Color.kt 里的常量。
         Box(
             modifier = Modifier
                 .padding(top = 4.dp)
                 .width(20.dp)
                 .height(2.dp)
-                .background(if (selected) Ember else Night),
+                .background(if (selected) DreamColors.ember else DreamColors.night),
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.detail
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,13 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.ErrorText
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
 
 /**
  * 六个快捷改稿按钮（D335）——文案逐字固定，测试与截图都按这个清单对。
@@ -68,7 +62,7 @@ fun ReviseSheet(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Night)
+            .background(DreamColors.night)
             .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
     ) {
         LazyRow(
@@ -86,11 +80,11 @@ fun ReviseSheet(
                     Row(
                         modifier = Modifier
                             .height(36.dp)
-                            .background(NightRaised, RoundedCornerShape(18.dp))
+                            .background(DreamColors.nightRaised, RoundedCornerShape(18.dp))
                             .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(text = pick, color = InkDim, fontSize = 12.sp, maxLines = 1)
+                        Text(text = pick, color = DreamColors.inkDim, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }
@@ -99,7 +93,7 @@ fun ReviseSheet(
         if (sending) {
             Text(
                 text = "正在改…",
-                color = InkDim,
+                color = DreamColors.inkDim,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
@@ -108,7 +102,7 @@ fun ReviseSheet(
         if (error != null) {
             Text(
                 text = "没改成：$error · 旧版还在",
-                color = ErrorText,
+                color = DreamColors.errorText,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
@@ -121,17 +115,17 @@ fun ReviseSheet(
                 modifier = Modifier.weight(1f),
                 enabled = !sending,
                 placeholder = {
-                    Text(text = placeholder, color = InkDim, fontSize = 14.sp)
+                    Text(text = placeholder, color = DreamColors.inkDim, fontSize = 14.sp)
                 },
                 textStyle = MaterialTheme.typography.bodyMedium,
                 maxLines = 3,
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Ember,
-                    unfocusedBorderColor = Line,
-                    focusedTextColor = Paper,
-                    unfocusedTextColor = Paper,
-                    cursorColor = Ember,
+                    focusedBorderColor = DreamColors.ember,
+                    unfocusedBorderColor = DreamColors.line,
+                    focusedTextColor = DreamColors.paper,
+                    unfocusedTextColor = DreamColors.paper,
+                    cursorColor = DreamColors.ember,
                 ),
             )
             TextButton(
@@ -139,7 +133,7 @@ fun ReviseSheet(
                 enabled = !sending && value.isNotBlank(),
                 modifier = Modifier.padding(start = 4.dp),
             ) {
-                Text(text = "发送", color = if (sending || value.isBlank()) InkDim else Ember)
+                Text(text = "发送", color = if (sending || value.isBlank()) DreamColors.inkDim else DreamColors.ember)
             }
         }
     }

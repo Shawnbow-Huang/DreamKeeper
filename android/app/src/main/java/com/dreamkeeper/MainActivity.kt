@@ -12,6 +12,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,8 +81,10 @@ class MainActivity : ComponentActivity() {
 
         // Activity 只做一件事：把根界面接进主题
         setContent {
-            DreamKeeperTheme {
-                val container = (application as DreamKeeperApp).container
+            val container = (application as DreamKeeperApp).container
+            // 皮肤是 Activity 级状态：切一次重组整棵树，业务对象不重建。
+            val skin by container.themeController.skin.collectAsState()
+            DreamKeeperTheme(skin = skin) {
                 // Activity 是可见的 Context：startForegroundService 才带前台豁免；
                 // 同一个实例跨旋转复用，避免每次重组都新建一个 starter。
                 val starter = remember { AndroidRecordingStarter(this) }
@@ -91,6 +95,7 @@ class MainActivity : ComponentActivity() {
                     // Key 的加密存储同理：设置页只认容器里的这一份
                     apiKeyStore = container.apiKeyStore,
                     generationPrefs = container.generationPrefs,
+                    themeController = container.themeController,
                     connectionTester = container.connectionTester,
                     // 标签页的重命名/删除走 DAO；合并仍在仓库层（要动关联表，必须事务）
                     tagDao = container.tagDao,

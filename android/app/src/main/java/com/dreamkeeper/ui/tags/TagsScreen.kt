@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.tags
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -52,13 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.domain.Tag
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.ErrorText
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
 import kotlinx.coroutines.launch
 
 /** 胶囊圆角：999dp 即「全圆」，与搜索框、分段控件用的是同一种形状语言 */
@@ -74,7 +68,7 @@ private val CapsuleHeight = 36.dp
  * 1. **分组顺序由 [TAG_GROUPS] 定**，数据源 `TagDao.observeAll` 是 `ORDER BY kind, name`
  *    （字符串序从「动作」开头），所以界面必须自己按常量重排，不能直接照单渲染。
  * 2. 胶囊的**点区**是 48dp，视觉只有 36dp —— 直接给 36dp 高的可点区域，长按会点不中。
- * 3. 所有弹出层的底色都写死 `NightRaised`：M3 的菜单/对话框默认用 `surfaceContainerHigh`，
+ * 3. 所有弹出层的底色都写死 `DreamColors.nightRaised`：M3 的菜单/对话框默认用 `surfaceContainerHigh`，
  *    深色主题下是一块偏紫的灰板，既跳戏又过不了近白闸门（D70）。
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -90,7 +84,7 @@ fun TagsScreen(vm: TagsViewModel, onBack: () -> Unit) {
     var deleteTag by remember { mutableStateOf<Tag?>(null) }
     var mergeTag by remember { mutableStateOf<Tag?>(null) }
 
-    Box(modifier = Modifier.fillMaxSize().background(Night)) {
+    Box(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         Column(modifier = Modifier.fillMaxSize()) {
             TagsTopBar(onBack = onBack)
 
@@ -127,9 +121,9 @@ fun TagsScreen(vm: TagsViewModel, onBack: () -> Unit) {
         ) { data ->
             Snackbar(
                 snackbarData = data,
-                containerColor = NightRaised,
-                contentColor = Paper,
-                actionColor = Ember,
+                containerColor = DreamColors.nightRaised,
+                contentColor = DreamColors.paper,
+                actionColor = DreamColors.ember,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -154,7 +148,7 @@ fun TagsScreen(vm: TagsViewModel, onBack: () -> Unit) {
             title = "删除「${tag.name}」",
             message = "删除标签不会删掉梦，只去掉标注。",
             confirmLabel = "删除",
-            confirmColor = ErrorText,
+            confirmColor = DreamColors.errorText,
             onDismiss = { deleteTag = null },
             onConfirm = {
                 deleteTag = null
@@ -181,7 +175,7 @@ fun TagsScreen(vm: TagsViewModel, onBack: () -> Unit) {
             title = "已有同名标签，要合并吗？",
             message = "「${conflict.from.name}」会消失，它标注的梦都改挂到「${conflict.into.name}」上。",
             confirmLabel = "合并",
-            confirmColor = Ember,
+            confirmColor = DreamColors.ember,
             onDismiss = vm::dismissConflict,
             onConfirm = vm::confirmConflict,
         )
@@ -203,13 +197,13 @@ private fun TagsTopBar(onBack: () -> Unit) {
                 .semantics { contentDescription = "返回" },
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "‹", style = MaterialTheme.typography.titleLarge, color = Paper)
+            Text(text = "‹", style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
         }
         Text(
             text = "标签",
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleMedium,
-            color = Paper,
+            color = DreamColors.paper,
             textAlign = TextAlign.Center,
         )
         Box(modifier = Modifier.size(48.dp))
@@ -234,12 +228,12 @@ private fun GroupBlock(
             modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = group.title, style = MaterialTheme.typography.titleMedium, color = InkDim)
+            Text(text = group.title, style = MaterialTheme.typography.titleMedium, color = DreamColors.inkDim)
             Text(
                 text = group.tags.size.toString(),
                 modifier = Modifier.padding(start = 8.dp),
                 style = MaterialTheme.typography.bodySmall,
-                color = InkFaint,
+                color = DreamColors.inkFaint,
             )
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -262,9 +256,9 @@ private fun GroupBlock(
 /**
  * 一颗胶囊 + 它的长按菜单。
  *
- * 点区（外层 48dp、透明）与视觉（内层 36dp、描边 `InkDim`）**是两层**：
+ * 点区（外层 48dp、透明）与视觉（内层 36dp、描边 `DreamColors.inkDim`）**是两层**：
  * 只有一层的话，要么点区不够 48dp，要么胶囊胖成一颗球。
- * 描边不用 `Line`：`Line` 在 Night 上只有 1.34:1，等于没画。
+ * 描边不用 `DreamColors.line`：`DreamColors.line` 在 DreamColors.night 上只有 1.34:1，等于没画。
  */
 @Composable
 private fun TagCapsule(
@@ -293,15 +287,15 @@ private fun TagCapsule(
                 .padding(vertical = 6.dp)
                 .height(CapsuleHeight)
                 .clip(CapsuleShape)
-                .background(NightRaised)
-                .border(1.dp, InkDim, CapsuleShape)
+                .background(DreamColors.nightRaised)
+                .border(1.dp, DreamColors.inkDim, CapsuleShape)
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = tag.name,
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                color = Paper,
+                color = DreamColors.paper,
                 maxLines = 1,
             )
         }
@@ -309,12 +303,12 @@ private fun TagCapsule(
         DropdownMenu(
             expanded = menuOpen,
             onDismissRequest = onDismissMenu,
-            containerColor = NightRaised,
+            containerColor = DreamColors.nightRaised,
             shape = RoundedCornerShape(12.dp),
         ) {
-            MenuItem("重命名", Paper, onRename)
-            MenuItem("合并到…", Paper, onMerge)
-            MenuItem("删除", ErrorText, onDelete)
+            MenuItem("重命名", DreamColors.paper, onRename)
+            MenuItem("合并到…", DreamColors.paper, onMerge)
+            MenuItem("删除", DreamColors.errorText, onDelete)
         }
     }
 }
@@ -335,12 +329,12 @@ private fun EmptyTags(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = "还没有标签", style = MaterialTheme.typography.bodyLarge, color = InkDim)
+        Text(text = "还没有标签", style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkDim)
         Text(
             text = "打上标签后，会按人物、地点、物品…分组显示在这里",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
-            color = InkFaint,
+            color = DreamColors.inkFaint,
             textAlign = TextAlign.Center,
         )
     }
@@ -352,9 +346,9 @@ private fun RenameDialog(tag: Tag, onDismiss: () -> Unit, onConfirm: (String) ->
     var text by remember(tag.id) { mutableStateOf(tag.name) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = NightRaised,
-        titleContentColor = Paper,
-        textContentColor = InkDim,
+        containerColor = DreamColors.nightRaised,
+        titleContentColor = DreamColors.paper,
+        textContentColor = DreamColors.inkDim,
         title = { Text("重命名标签", style = MaterialTheme.typography.titleMedium) },
         text = {
             PillField(
@@ -364,15 +358,15 @@ private fun RenameDialog(tag: Tag, onDismiss: () -> Unit, onConfirm: (String) ->
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text) }) { Text("确定", color = Ember) }
+            TextButton(onClick = { onConfirm(text) }) { Text("确定", color = DreamColors.ember) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = InkDim) }
+            TextButton(onClick = onDismiss) { Text("取消", color = DreamColors.inkDim) }
         },
     )
 }
 
-/** 二次确认弹窗（删除 / 撞名合并共用）。底色同样写死 `NightRaised`（D70） */
+/** 二次确认弹窗（删除 / 撞名合并共用）。底色同样写死 `DreamColors.nightRaised`（D70） */
 @Composable
 private fun ConfirmDialog(
     title: String,
@@ -384,16 +378,16 @@ private fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = NightRaised,
-        titleContentColor = Paper,
-        textContentColor = InkDim,
+        containerColor = DreamColors.nightRaised,
+        titleContentColor = DreamColors.paper,
+        textContentColor = DreamColors.inkDim,
         title = { Text(title, style = MaterialTheme.typography.titleMedium) },
         text = { Text(message, style = MaterialTheme.typography.bodyMedium) },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(confirmLabel, color = confirmColor) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = InkDim) }
+            TextButton(onClick = onDismiss) { Text("取消", color = DreamColors.inkDim) }
         },
     )
 }
@@ -420,8 +414,8 @@ private fun MergeSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = NightRaised,
-        contentColor = Paper,
+        containerColor = DreamColors.nightRaised,
+        contentColor = DreamColors.paper,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -429,7 +423,7 @@ private fun MergeSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(InkDim),
+                    .background(DreamColors.inkDim),
             )
         },
     ) {
@@ -443,13 +437,13 @@ private fun MergeSheet(
             Text(
                 text = "合并「${source.name}」到…",
                 style = MaterialTheme.typography.titleMedium,
-                color = Paper,
+                color = DreamColors.paper,
             )
             Text(
                 text = "合并后「${source.name}」会消失，它标注的梦都改挂到目标标签上。",
                 modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodySmall,
-                color = InkDim,
+                color = DreamColors.inkDim,
             )
             PillField(
                 value = query,
@@ -461,7 +455,7 @@ private fun MergeSheet(
                     text = "没有可合并的标签",
                     modifier = Modifier.padding(top = 24.dp),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                 )
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = 320.dp).padding(top = 8.dp)) {
@@ -474,12 +468,12 @@ private fun MergeSheet(
                                 .semantics { contentDescription = tag.name },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(text = tag.name, style = MaterialTheme.typography.bodyLarge, color = Paper)
+                            Text(text = tag.name, style = MaterialTheme.typography.bodyLarge, color = DreamColors.paper)
                             Text(
                                 text = kindTitle(tag.kind),
                                 modifier = Modifier.padding(start = 8.dp),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = InkFaint,
+                                color = DreamColors.inkFaint,
                             )
                         }
                     }
@@ -489,15 +483,15 @@ private fun MergeSheet(
     }
 }
 
-/** 输入框：一个圆角胶囊，光标用 `Ember`（与搜索页同一种写法） */
+/** 输入框：一个圆角胶囊，光标用 `DreamColors.ember`（与搜索页同一种写法） */
 @Composable
 private fun PillField(value: String, onValueChange: (String) -> Unit, placeholder: String) {
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Paper),
-        cursorBrush = SolidColor(Ember),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = DreamColors.paper),
+        cursorBrush = SolidColor(DreamColors.ember),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { innerTextField ->
             Box(
@@ -505,13 +499,13 @@ private fun PillField(value: String, onValueChange: (String) -> Unit, placeholde
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .clip(CapsuleShape)
-                    .background(Night)
-                    .border(1.dp, InkDim, CapsuleShape)
+                    .background(DreamColors.night)
+                    .border(1.dp, DreamColors.inkDim, CapsuleShape)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 if (value.isEmpty()) {
-                    Text(text = placeholder, style = MaterialTheme.typography.bodyLarge, color = InkFaint)
+                    Text(text = placeholder, style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkFaint)
                 }
                 innerTextField()
             }

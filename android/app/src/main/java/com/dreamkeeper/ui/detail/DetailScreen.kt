@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.detail
 
+import com.dreamkeeper.ui.theme.DreamColors
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -91,16 +92,6 @@ import com.dreamkeeper.ui.common.EmptyState
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.EmberDeep
-import com.dreamkeeper.ui.theme.ErrorText
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
-import com.dreamkeeper.ui.theme.PaperSurface
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -206,7 +197,7 @@ fun DetailScreen(
     val scope = rememberCoroutineScope()
 
     CompositionLocalProvider(LocalAudioPlayback provides vm.playback) {
-        Box(modifier = Modifier.fillMaxSize().background(Night)) {
+        Box(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         Column(modifier = Modifier.fillMaxSize()) {
             DetailTopBar(
                 date = state.dream?.date?.let { DayViewModel.titleOf(it) }.orEmpty(),
@@ -297,9 +288,9 @@ fun DetailScreen(
             // 夜里晃眼，也过不了近白像素闸门。这里显式压回夜间色。
             Snackbar(
                 snackbarData = data,
-                containerColor = NightRaised,
-                contentColor = Paper,
-                actionColor = Ember,
+                containerColor = DreamColors.nightRaised,
+                contentColor = DreamColors.paper,
+                actionColor = DreamColors.ember,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -342,14 +333,14 @@ private fun DetailTopBar(
                 .semantics { contentDescription = "返回" },
             contentAlignment = Alignment.Center,
         ) {
-            Text("‹", style = MaterialTheme.typography.titleLarge, color = Paper)
+            Text("‹", style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
         }
         Text(
             text = date,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleLarge,
-            color = Paper,
+            color = DreamColors.paper,
             maxLines = 1,
         )
         Box {
@@ -360,12 +351,12 @@ private fun DetailTopBar(
                     .semantics { contentDescription = "更多" },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("⋮", style = MaterialTheme.typography.titleLarge, color = Paper)
+                Text("⋮", style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 // Task 10 导出入口 1：顶栏「更多」里；入口 2 在小说化 tab 顶部。
                 DropdownMenuItem(
-                    text = { Text("导出", style = MaterialTheme.typography.bodyMedium, color = Paper) },
+                    text = { Text("导出", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper) },
                     onClick = {
                         menuOpen = false
                         onExport()
@@ -373,14 +364,14 @@ private fun DetailTopBar(
                 )
                 // Plan 1 只给入口不给实现：点了必须给一句人话，不能什么也不发生
                 DropdownMenuItem(
-                    text = { Text("编辑", style = MaterialTheme.typography.bodyMedium, color = Paper) },
+                    text = { Text("编辑", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper) },
                     onClick = {
                         menuOpen = false
                         onAction("编辑还没做，之后会有")
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("删除", style = MaterialTheme.typography.bodyMedium, color = ErrorText) },
+                    text = { Text("删除", style = MaterialTheme.typography.bodyMedium, color = DreamColors.errorText) },
                     onClick = {
                         menuOpen = false
                         onAction("删除还没做，之后会有")
@@ -394,8 +385,8 @@ private fun DetailTopBar(
 /**
  * tab 行：四等分、整格可点、`selected` 语义（读屏能念出「已选中」）。
  *
- * 选中 = `Paper` 文字 + 下方 2dp `Ember` 短横线，未选中 `InkDim`——和底部栏同一套语言。
- * 未选中时指示线画成 `Night`（与背景同色，看不见）而不是省略，tab 文字才不会上下跳 6dp。
+ * 选中 = `DreamColors.paper` 文字 + 下方 2dp `DreamColors.ember` 短横线，未选中 `DreamColors.inkDim`——和底部栏同一套语言。
+ * 未选中时指示线画成 `DreamColors.night`（与背景同色，看不见）而不是省略，tab 文字才不会上下跳 6dp。
  */
 @Composable
 private fun DetailTabs(selected: Int, onSelect: (Int) -> Unit) {
@@ -417,7 +408,7 @@ private fun DetailTabs(selected: Int, onSelect: (Int) -> Unit) {
                 Text(
                     text = tab.label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isSelected) Paper else InkDim,
+                    color = if (isSelected) DreamColors.paper else DreamColors.inkDim,
                     maxLines = 1,
                 )
                 Box(
@@ -425,7 +416,7 @@ private fun DetailTabs(selected: Int, onSelect: (Int) -> Unit) {
                         .padding(top = 6.dp)
                         .width(20.dp)
                         .height(2.dp)
-                        .background(if (isSelected) Ember else Night),
+                        .background(if (isSelected) DreamColors.ember else DreamColors.night),
                 )
             }
         }
@@ -476,14 +467,14 @@ private fun TranscriptTab(
                 },
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (polishing) Ember else InkDim,
+                color = if (polishing) DreamColors.ember else DreamColors.inkDim,
             )
             if (faithful != null && raw.isNotBlank()) {
                 TextButton(onClick = { showRaw = !showRaw }) {
                     Text(
                         text = if (showRaw) "看整理稿" else "看原始转写",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Paper,
+                        color = DreamColors.paper,
                     )
                 }
             }
@@ -498,13 +489,13 @@ private fun TranscriptTab(
                     text = "还有 ${(uncoveredMs / 1000).coerceAtLeast(0)} 秒没转成文字",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
-                    color = InkDim,
+                    color = DreamColors.inkDim,
                 )
                 TextButton(onClick = onRetryTranscription) {
-                    Text("重试转写", style = MaterialTheme.typography.labelSmall, color = Ember)
+                    Text("重试转写", style = MaterialTheme.typography.labelSmall, color = DreamColors.ember)
                 }
                 TextButton(onClick = onSkipTranscription) {
-                    Text("这段不用转写", style = MaterialTheme.typography.labelSmall, color = InkDim)
+                    Text("这段不用转写", style = MaterialTheme.typography.labelSmall, color = DreamColors.inkDim)
                 }
             }
         }
@@ -521,7 +512,7 @@ private fun TranscriptTab(
                     Text(
                         text = if (status == TranscriptStatus.PENDING) "正在转写…" else "没有转写成功",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Paper,
+                        color = DreamColors.paper,
                     )
                     Text(
                         text = if (status == TranscriptStatus.PENDING) {
@@ -530,26 +521,26 @@ private fun TranscriptTab(
                             "可能是本机没有中文离线包，或识别服务不可用。先把听到的话补进来也行。"
                         },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = InkDim,
+                        color = DreamColors.inkDim,
                         textAlign = TextAlign.Center,
                     )
                     if (status == TranscriptStatus.FAILED) {
                         TextButton(onClick = { dialogOpen = true }) {
-                            Text("手动补字", color = Ember)
+                            Text("手动补字", color = DreamColors.ember)
                         }
                     }
                 }
             }
         } else {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                BodyScroll(text = text, color = Paper)
+                BodyScroll(text = text, color = DreamColors.paper)
             }
             when (status) {
                 TranscriptStatus.PENDING -> Text(
                     text = "正在转写…",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                 )
 
                 TranscriptStatus.FAILED -> Row(
@@ -560,10 +551,10 @@ private fun TranscriptTab(
                         text = "没能自动转写这段录音",
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
-                        color = InkDim,
+                        color = DreamColors.inkDim,
                     )
                     TextButton(onClick = { dialogOpen = true }) {
-                        Text("手动补字", color = Ember)
+                        Text("手动补字", color = DreamColors.ember)
                     }
                 }
 
@@ -576,11 +567,11 @@ private fun TranscriptTab(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onAppend) {
-                Text("补一段", color = Ember)
+                Text("补一段", color = DreamColors.ember)
             }
             if (faithful != null) {
                 TextButton(onClick = onRepolish, enabled = !polishing && uncoveredMs == 0L) {
-                    Text("重新理顺", color = if (polishing || uncoveredMs > 0L) InkDim else Paper)
+                    Text("重新理顺", color = if (polishing || uncoveredMs > 0L) DreamColors.inkDim else DreamColors.paper)
                 }
             }
         }
@@ -611,16 +602,16 @@ private fun ManualTranscriptDialog(
     var draft by rememberSaveable(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = NightRaised,
-        titleContentColor = Paper,
-        textContentColor = Paper,
+        containerColor = DreamColors.nightRaised,
+        titleContentColor = DreamColors.paper,
+        textContentColor = DreamColors.paper,
         title = { Text("手动补字") },
         text = {
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("把记得的那几句写下来…", color = InkFaint) },
+                placeholder = { Text("把记得的那几句写下来…", color = DreamColors.inkFaint) },
                 minLines = 6,
                 maxLines = 12,
             )
@@ -630,11 +621,11 @@ private fun ManualTranscriptDialog(
                 onClick = { onSave(draft) },
                 enabled = draft.isNotBlank(),
             ) {
-                Text("保存", color = Ember)
+                Text("保存", color = DreamColors.ember)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = InkDim) }
+            TextButton(onClick = onDismiss) { Text("取消", color = DreamColors.inkDim) }
         },
     )
 }
@@ -739,7 +730,7 @@ private fun NovelTab(
                     text = "补写 $count 处 · 查看",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Ember,
+                    color = DreamColors.ember,
                 )
             } else {
                 Spacer(modifier = Modifier.weight(1f))
@@ -748,7 +739,7 @@ private fun NovelTab(
                 Text(
                     text = "导出",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Paper,
+                    color = DreamColors.paper,
                 )
             }
         }
@@ -758,7 +749,7 @@ private fun NovelTab(
                 text = cost,
                 modifier = Modifier.padding(start = 16.dp, top = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = InkFaint,
+                color = DreamColors.inkFaint,
             )
         }
         VersionStrip(
@@ -790,7 +781,7 @@ private fun NovelTab(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(PaperSurface, RoundedCornerShape(18.dp))
+                        .background(DreamColors.paperSurface, RoundedCornerShape(18.dp))
                         .padding(horizontal = 18.dp, vertical = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -798,7 +789,7 @@ private fun NovelTab(
                         Text(
                             text = paragraph,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Paper,
+                            color = DreamColors.paper,
                         )
                     }
                 }
@@ -848,7 +839,7 @@ private fun NovelIdeaDialog(
                 Text(
                     "想怎么改？可以不写，直接生成。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = InkDim,
+                    color = DreamColors.inkDim,
                 )
                 OutlinedTextField(
                     value = idea,
@@ -865,15 +856,15 @@ private fun NovelIdeaDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(idea) }) {
-                Text("生成", color = Ember)
+                Text("生成", color = DreamColors.ember)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消", color = InkDim)
+                Text("取消", color = DreamColors.inkDim)
             }
         },
-        containerColor = NightRaised,
+        containerColor = DreamColors.nightRaised,
     )
 }
 
@@ -902,10 +893,10 @@ private fun GenerationActions(
                     modifier = Modifier.height(40.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = EmberDeep,
-                        contentColor = Paper,
-                        disabledContainerColor = Line,
-                        disabledContentColor = InkFaint,
+                        containerColor = DreamColors.emberDeep,
+                        contentColor = DreamColors.paper,
+                        disabledContainerColor = DreamColors.line,
+                        disabledContentColor = DreamColors.inkFaint,
                     ),
                 ) {
                     Text("原样整理", style = MaterialTheme.typography.labelLarge)
@@ -918,8 +909,8 @@ private fun GenerationActions(
                     modifier = Modifier.height(40.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Ember,
-                        disabledContentColor = InkFaint,
+                        contentColor = DreamColors.ember,
+                        disabledContentColor = DreamColors.inkFaint,
                     ),
                 ) {
                     Text("小说化", style = MaterialTheme.typography.labelLarge)
@@ -937,7 +928,7 @@ private fun GenerationActions(
                 },
                 modifier = Modifier.padding(top = 8.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = Ember,
+                color = DreamColors.ember,
             )
 
             is GenerationPhase.Failed -> Row(
@@ -948,10 +939,10 @@ private fun GenerationActions(
                     text = "没生成成：${phase.reason}",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
-                    color = ErrorText,
+                    color = DreamColors.errorText,
                 )
                 TextButton(onClick = onRetry, modifier = Modifier.height(40.dp)) {
-                    Text("重试", color = Ember, style = MaterialTheme.typography.labelLarge)
+                    Text("重试", color = DreamColors.ember, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -964,14 +955,14 @@ private fun AskBubble(text: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(NightRaised, RoundedCornerShape(12.dp))
+            .background(DreamColors.nightRaised, RoundedCornerShape(12.dp))
             .padding(12.dp),
     ) {
-        Text(text = "助手", style = MaterialTheme.typography.labelSmall, color = Ember)
+        Text(text = "助手", style = MaterialTheme.typography.labelSmall, color = DreamColors.ember)
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = Paper,
+            color = DreamColors.paper,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
@@ -982,7 +973,7 @@ private fun AskBubble(text: String) {
 private fun TagsTab(tags: List<Tag>) {
     if (tags.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无标签", style = MaterialTheme.typography.bodyLarge, color = InkDim)
+            Text("暂无标签", style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkDim)
         }
         return
     }
@@ -997,11 +988,11 @@ private fun TagsTab(tags: List<Tag>) {
                 text = tag.name,
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(NightRaised)
-                    .border(1.dp, Line, RoundedCornerShape(50))
+                    .background(DreamColors.nightRaised)
+                    .border(1.dp, DreamColors.line, RoundedCornerShape(50))
                     .padding(horizontal = 12.dp, vertical = 5.dp),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Paper,
+                color = DreamColors.paper,
             )
         }
     }
@@ -1010,14 +1001,14 @@ private fun TagsTab(tags: List<Tag>) {
 @Composable
 private fun MediaTab() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // NightRaised 与 Night 只有约 1.07:1：不给 1dp InkDim 边就等于没画（brief 0.8）
+        // DreamColors.nightRaised 与 DreamColors.night 只有约 1.07:1：不给 1dp DreamColors.inkDim 边就等于没画（brief 0.8）
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(NightRaised)
-                .border(1.dp, InkDim, RoundedCornerShape(12.dp)),
+                .background(DreamColors.nightRaised)
+                .border(1.dp, DreamColors.inkDim, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Image(
@@ -1033,12 +1024,12 @@ private fun MediaTab() {
                 Text(
                     "以后可以在这里把梦做成视频",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = InkDim,
+                    color = DreamColors.inkDim,
                 )
                 Text(
                     "先留个位置",
                     style = MaterialTheme.typography.labelSmall,
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                 )
             }
         }
@@ -1052,7 +1043,7 @@ private fun MissingDream(onBack: () -> Unit, modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("找不到这条梦", style = MaterialTheme.typography.bodyLarge, color = InkDim)
+            Text("找不到这条梦", style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkDim)
             // 顶栏的「‹」也能返回；这里再给一个明确的文字入口，不让用户猜
             Text(
                 text = "返回",
@@ -1060,7 +1051,7 @@ private fun MissingDream(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     .clickable { onBack() }
                     .padding(12.dp),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Ember,
+                color = DreamColors.ember,
             )
         }
     }
@@ -1092,7 +1083,7 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Uni
         playback == null -> "播放器不可用"
         else -> barLabel(current, totalMs)
     }
-    val labelColor = if (current is PlaybackState.Error) ErrorText else InkFaint
+    val labelColor = if (current is PlaybackState.Error) DreamColors.errorText else DreamColors.inkFaint
     val isPlaying = current is PlaybackState.Playing
 
     // 音频焦点：只在播放期间持有；来电/别的应用抢走焦点就暂停，而不是继续念。
@@ -1137,8 +1128,8 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Uni
             .fillMaxWidth()
             .alpha(if (enabled) 1f else 0.45f)
             .clip(RoundedCornerShape(8.dp))
-            .background(NightRaised)
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .background(DreamColors.nightRaised)
+            .border(1.dp, DreamColors.line, RoundedCornerShape(8.dp))
             .clickable(enabled = enabled) {
                 when {
                     playback == null -> onAction("播放器不可用")
@@ -1155,8 +1146,8 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Uni
         Canvas(modifier = Modifier.size(width = 12.dp, height = 16.dp)) {
             if (isPlaying) {
                 val barWidth = size.width * 0.34f
-                drawRect(Paper, topLeft = Offset(0f, 0f), size = Size(barWidth, size.height))
-                drawRect(Paper, topLeft = Offset(size.width - barWidth, 0f), size = Size(barWidth, size.height))
+                drawRect(DreamColors.paper, topLeft = Offset(0f, 0f), size = Size(barWidth, size.height))
+                drawRect(DreamColors.paper, topLeft = Offset(size.width - barWidth, 0f), size = Size(barWidth, size.height))
             } else {
                 val triangle = Path().apply {
                     moveTo(0f, 0f)
@@ -1164,7 +1155,7 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Uni
                     lineTo(0f, size.height)
                     close()
                 }
-                drawPath(triangle, Paper)
+                drawPath(triangle, DreamColors.paper)
             }
         }
         Canvas(modifier = Modifier.weight(1f).height(24.dp)) {
@@ -1176,7 +1167,7 @@ fun PlaybackBar(audioPath: String?, durationMs: Long?, onAction: (String) -> Uni
                 val barHeight = size.height * heightFactor
                 val x = i * gap
                 drawRect(
-                    color = if (x <= playedX) Ember else InkDim,
+                    color = if (x <= playedX) DreamColors.ember else DreamColors.inkDim,
                     topLeft = Offset(x - barWidth / 2f, (size.height - barHeight) / 2f),
                     size = Size(barWidth, barHeight),
                 )

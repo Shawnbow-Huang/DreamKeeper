@@ -147,6 +147,14 @@
 | D533 | 2026-11-01 | T7 | 首页加 200sp 月份水印（Paper alpha 0.055、出血右缘），删日历琥珀点 | 首页最大连续空白 356.6dp；水印把空白变成「纸上的月份」，不新增信息 |
 | D534 | 2026-11-01 | T7 | 「说梦」从砖红填充 + 描边改实心琥珀 + 深墨字 + 径向光晕；`shadow` 改 `Brush.radialGradient` | 砖红 2.57:1 靠描边救；Compose 圆形 shadow 在近黑底会露矩形边 |
 | D535 | 2026-11-01 | T7 | 列表/详情/设置改为纸面（PaperSurface）承载，描边卡片退场 | 层级应从「面的差异」来，而不是 1dp 线；列表 4 行灰字有 39% 真空 |
+| D536 | 2026-11-01 | T8 | 新增三套皮肤（灯下纸/晨光纸/冷夜），设置页可切、持久化，而不是只做浅色一套 | 用户要「明亮一点」并「保留暗色、做好几套配色」；单套浅色无法同时满足白天/夜里/屏幕感三种场景 |
+| D537 | 2026-11-01 | T8 | 晨光纸的强调色从 #E2A24E 压深到 #B06524 | 浅底上亮琥珀对比不足；不是把暗色反相，而是按 WCAG 重新选 |
+| D538 | 2026-11-01 | T8 | 颜色 token 从编译期常量迁到 `DreamColors` 语义访问器（484 处调用点） | 皮肤要运行期切换；若改成 MaterialTheme.colorScheme 会丢语义、且 484 处全要重写 |
+| D539 | 2026-11-01 | T8 | 少数非 @Composable 读取（Canvas draw lambda、默认参数）走 `SkinRuntime` 快照 | 这些位置不能调 @Composable getter；快照由 Theme 写入，重组后重绘 |
+| D540 | 2026-11-01 | T8 | 状态栏/导航栏图标随皮肤深浅切换 | 浅色皮肤下白色状态栏图标不可见（实测晨光纸） |
+| D541 | 2026-11-01 | T8 | 皮肤键独立 `dk_theme_skin`，与生成档位共文件但互不影响 | 换皮肤不应牵动模型/思考档位 |
+| D542 | 2026-11-01 | T8 | 新增 `SkinTest`/`ThemeControllerTest` 7 例，把可读性写成 WCAG 断言 | 「好看」不可测，但「不可读」可测：正文 ≥7、次要 ≥4.5、强调 ≥3 |
+| D543 | 2026-11-01 | T8 | 浅色皮肤的插画仍是暗色版，未重绘 | 四张插画按皮肤出浅色版属于美术产能，本轮先交付可切换的配色骨架 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -283,3 +291,12 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 设备：debug 包（种子数据）四屏截图 `p6-ui-04..07`（nearWhite 全 0）；release 重打 9,728,730 B sha 前16 `0401f34122a384f5`，卸载重装冷启 478/447/493 ms、FATAL 0、`dk_debug_save_key` 0；对照图 `p6-ui-08..10`。
 - 证据：`docs/evidence/plan6/p6-ui-04-aesthetic.txt`。
 - 结论：通过（观感改由用户确认）。PENDING：宋体内嵌/国产 ROM 观感、空态插画按新纸色重绘、浅色主题未做。
+
+
+### 多套皮肤（Lead，2026-11-01）
+- 交付：`ui/theme/Skin.kt`（Skin/DreamPalette/三套 palette/DreamColors/SkinRuntime）、`Theme.kt`（按皮肤生成 ColorScheme + 系统栏图标深浅）、`data/settings/ThemePrefs.kt` + `ThemeController`、`SettingsScreen` 外观卡、`AppContainer`/`MainActivity`/`DreamKeeperRoot` 接线、15 个 UI 文件的 484 处 token 迁移。
+- 独立复跑：`:app:testDebugUnitTest --rerun-tasks` 1m14s，XML **61 类 495 例 0 失败**（新增 7 例）。
+- 设备：debug 包切三套皮肤各拍首页/设置（`p6-skin-01/02-*`，nearWhite 全 0）；切冷夜后 force-stop 冷启，选中项仍在（`p6-skin-03-persist` 与设置图同 sha）。
+- release 重打：9,745,114 B sha 前16 `c0c64d6869cc7868`。
+- 证据：`docs/evidence/plan6/p6-skin-04-skins.txt`。
+- 结论：通过。PENDING：浅色插画重绘（D543）、宋体内嵌、跟随系统主题。

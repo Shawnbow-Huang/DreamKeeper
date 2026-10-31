@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.common
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,8 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.dp
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
 
 /**
  * 统一空态：插画（可选）+ 主文案 + 副文案（D468）。
@@ -45,10 +44,10 @@ fun EmptyState(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
             }
-            Text(text = title, style = MaterialTheme.typography.bodyLarge, color = InkDim)
+            Text(text = title, style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkDim)
             if (hint != null) {
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(text = hint, style = MaterialTheme.typography.labelSmall, color = InkFaint)
+                Text(text = hint, style = MaterialTheme.typography.labelSmall, color = DreamColors.inkFaint)
             }
         }
     }

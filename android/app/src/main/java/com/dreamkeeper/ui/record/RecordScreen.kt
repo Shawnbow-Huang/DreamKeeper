@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.record
 
+import com.dreamkeeper.ui.theme.DreamColors
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -69,14 +70,6 @@ import com.dreamkeeper.service.RecordingSession
 import com.dreamkeeper.service.RecordingStarter
 import com.dreamkeeper.ui.nav.RecordEntry
 import com.dreamkeeper.ui.theme.DreamMotion
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.EmberDeep
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
 import java.util.Locale
 
 private const val TAG = "RecordScreen"
@@ -183,10 +176,10 @@ fun RecordScreen(
     // 返回键：RECORDING / FINISHING 都等于「放弃这段」；FINISHING 时 service 会删文件。
     BackHandler(enabled = recording || saving) { vm.onCancel() }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Night)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(DreamColors.night)) {
         val circleTop = maxHeight * 0.65f - CIRCLE_SIZE / 2
 
-        // 计时：圆上方 32dp，Paper 40sp 等宽
+        // 计时：圆上方 32dp，DreamColors.paper 40sp 等宽
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -196,7 +189,7 @@ fun RecordScreen(
         ) {
             Text(
                 text = formatElapsed(state.elapsedMs),
-                color = Paper,
+                color = DreamColors.paper,
                 fontSize = 40.sp,
                 fontFamily = FontFamily.Monospace,
             )
@@ -214,7 +207,7 @@ fun RecordScreen(
             if (recording || pressed) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawCircle(
-                        color = Ember.copy(alpha = 0.55f),
+                        color = DreamColors.ember.copy(alpha = 0.55f),
                         radius = ringRadius.dp.toPx(),
                         style = Stroke(width = 2.dp.toPx()),
                     )
@@ -272,9 +265,9 @@ fun RecordScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Canvas(Modifier.fillMaxSize()) {
-                    drawCircle(color = if (saving) NightRaised else EmberDeep)
+                    drawCircle(color = if (saving) DreamColors.nightRaised else DreamColors.emberDeep)
                     drawCircle(
-                        color = if (saving) InkFaint else Ember,
+                        color = if (saving) DreamColors.inkFaint else DreamColors.ember,
                         style = Stroke(width = if (pressed) 3.dp.toPx() else 1.5.dp.toPx()),
                     )
                 }
@@ -284,7 +277,7 @@ fun RecordScreen(
                         saving -> "正在保存"
                         else -> "按住 说梦"
                     },
-                    color = if (saving) InkFaint else Paper,
+                    color = if (saving) DreamColors.inkFaint else DreamColors.paper,
                     fontSize = 18.sp,
                 )
             }
@@ -295,45 +288,45 @@ fun RecordScreen(
         when {
             starting -> Text(
                 text = "正在启动麦克风…",
-                color = InkDim,
+                color = DreamColors.inkDim,
                 fontSize = 16.sp,
                 modifier = Modifier.align(Alignment.TopCenter).offset(y = statusY),
             )
             saving -> Text(
                 text = "正在保存…",
-                color = Paper,
+                color = DreamColors.paper,
                 fontSize = 16.sp,
                 modifier = Modifier.align(Alignment.TopCenter).offset(y = statusY),
             )
             state.permissionState != PermissionState.GRANTED && !permissionBlocked -> Text(
                 text = "需要麦克风权限才能录梦",
-                color = InkDim,
+                color = DreamColors.inkDim,
                 fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.TopCenter).offset(y = statusY),
             )
         }
 
-        // 中断横幅：顶部一行 Paper + 两个动作
+        // 中断横幅：顶部一行 DreamColors.paper + 两个动作
         if (interrupted) {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .background(NightRaised)
+                    .background(DreamColors.nightRaised)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "录音被系统打断（${formatElapsed(interruptedAtMs)}）",
-                    color = Paper,
+                    color = DreamColors.paper,
                     fontSize = 14.sp,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = {
                     interrupted = false
                     vm.continueAfterInterrupt()
-                }) { Text("继续录", color = Ember) }
-                TextButton(onClick = { interrupted = false }) { Text("就这样", color = Paper) }
+                }) { Text("继续录", color = DreamColors.ember) }
+                TextButton(onClick = { interrupted = false }) { Text("就这样", color = DreamColors.paper) }
             }
         }
 
@@ -349,7 +342,7 @@ fun RecordScreen(
             if (!notificationsEnabled) {
                 Text(
                     text = "通知栏不会显示，录音照常",
-                    color = InkDim,
+                    color = DreamColors.inkDim,
                     fontSize = 12.sp,
                 )
             }
@@ -358,12 +351,12 @@ fun RecordScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(NightRaised, RoundedCornerShape(12.dp))
-                        .border(1.dp, Line, RoundedCornerShape(12.dp))
+                        .background(DreamColors.nightRaised, RoundedCornerShape(12.dp))
+                        .border(1.dp, DreamColors.line, RoundedCornerShape(12.dp))
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("需要麦克风权限才能录梦", color = Paper, fontSize = 15.sp)
+                    Text("需要麦克风权限才能录梦", color = DreamColors.paper, fontSize = 15.sp)
                     Button(
                         onClick = {
                             if (state.permissionState == PermissionState.ASKABLE) {
@@ -373,8 +366,8 @@ fun RecordScreen(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = EmberDeep,
-                            contentColor = Paper,
+                            containerColor = DreamColors.emberDeep,
+                            contentColor = DreamColors.paper,
                         ),
                     ) {
                         Text(
@@ -388,19 +381,19 @@ fun RecordScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(NightRaised, RoundedCornerShape(12.dp))
-                        .border(1.dp, Ember, RoundedCornerShape(12.dp))
+                        .background(DreamColors.nightRaised, RoundedCornerShape(12.dp))
+                        .border(1.dp, DreamColors.ember, RoundedCornerShape(12.dp))
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
                         text = if (enospc) "空间不足" else "录音没有保存成功",
-                        color = Paper,
+                        color = DreamColors.paper,
                         fontSize = 16.sp,
                     )
                     Text(
                         text = error,
-                        color = InkDim,
+                        color = DreamColors.inkDim,
                         fontSize = 13.sp,
                         maxLines = 2,
                     )
@@ -415,15 +408,15 @@ fun RecordScreen(
                             },
                             enabled = !enospc,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = EmberDeep,
-                                contentColor = Paper,
+                                containerColor = DreamColors.emberDeep,
+                                contentColor = DreamColors.paper,
                             ),
                         ) { Text("再试一次") }
                         TextButton(onClick = {
                             vm.consumeSavedDream()
                             onBackHome()
                         }) {
-                            Text("返回首页（这段录音留着）", color = Paper, fontSize = 13.sp)
+                            Text("返回首页（这段录音留着）", color = DreamColors.paper, fontSize = 13.sp)
                         }
                     }
                 }
@@ -433,9 +426,9 @@ fun RecordScreen(
                 OutlinedButton(
                     onClick = { vm.onCancel() },
                     modifier = Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp),
-                    border = BorderStroke(1.dp, Line),
+                    border = BorderStroke(1.dp, DreamColors.line),
                 ) {
-                    Text("取消录音", color = InkDim)
+                    Text("取消录音", color = DreamColors.inkDim)
                 }
             }
         }

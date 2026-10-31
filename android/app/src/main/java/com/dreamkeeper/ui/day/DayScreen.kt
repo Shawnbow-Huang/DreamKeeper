@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.day
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,10 +30,6 @@ import com.dreamkeeper.ui.common.DreamCard
 import com.dreamkeeper.R
 import com.dreamkeeper.ui.common.EmptyState
 import androidx.compose.ui.res.painterResource
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.Paper
 
 /**
  * 当日列表（设计 §11 第二层，D35）：日历点有梦的格子进这里，**不是**直接进详情。
@@ -48,7 +45,7 @@ fun DayScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().background(Night)) {
+    Column(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -60,14 +57,14 @@ fun DayScreen(
                     .semantics { contentDescription = "返回日历" },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("‹", style = MaterialTheme.typography.titleLarge, color = Paper)
+                Text("‹", style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
             }
             Text(
                 text = state.title,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.titleLarge,
-                color = Paper,
+                color = DreamColors.paper,
             )
             // 与左箭头等宽的占位，让标题真的居中
             Spacer(modifier = Modifier.size(48.dp))

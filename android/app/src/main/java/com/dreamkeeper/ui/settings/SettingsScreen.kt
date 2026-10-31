@@ -1,6 +1,9 @@
 package com.dreamkeeper.ui.settings
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
+import com.dreamkeeper.ui.theme.paletteOf
+import com.dreamkeeper.ui.theme.Skin
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,16 +49,6 @@ import com.dreamkeeper.BuildConfig
 import com.dreamkeeper.llm.ModelSpec
 import com.dreamkeeper.llm.ProviderId
 import com.dreamkeeper.llm.ThinkingLevel
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.EmberDeep
-import com.dreamkeeper.ui.theme.ErrorText
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
-import com.dreamkeeper.ui.theme.PaperSurface
 
 /**
  * 设置页（Plan 3 Task 2，Plan 6 Task 4 扩到五家供应商）。
@@ -68,7 +63,7 @@ import com.dreamkeeper.ui.theme.PaperSurface
 fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().background(Night)) {
+    Column(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         SettingsTopBar(onBack = onBack)
 
         Column(
@@ -93,7 +88,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 text = "Key 只保存在本机安全存储里，不会写进日志或备份。",
                 modifier = Modifier.padding(start = 4.dp, top = 8.dp, end = 4.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = InkFaint,
+                color = DreamColors.inkFaint,
             )
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -109,23 +104,29 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(28.dp))
 
+            // Plan 7：外观。立即生效、只写 SharedPreferences，不动业务状态。
+            SectionLabel("外观")
+            SkinCard(selected = state.skin, onSelect = vm::setSkin)
+
+            Spacer(modifier = Modifier.height(28.dp))
+
             SectionLabel("关于")
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(NightRaised, RoundedCornerShape(14.dp))
+                    .background(DreamColors.nightRaised, RoundedCornerShape(14.dp))
                     .padding(16.dp),
             ) {
                 Text(
                     text = "梦匣 ${BuildConfig.VERSION_NAME} · 本地运行 · 无账号",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Paper,
+                    color = DreamColors.paper,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "所有记录只在本机；除你配置的模型服务外，不上传任何内容。",
                     style = MaterialTheme.typography.labelSmall,
-                    color = InkFaint,
+                    color = DreamColors.inkFaint,
                 )
             }
 
@@ -148,13 +149,13 @@ private fun SettingsTopBar(onBack: () -> Unit) {
                 .semantics { contentDescription = "返回" },
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "‹", style = MaterialTheme.typography.titleLarge, color = Paper)
+            Text(text = "‹", style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
         }
         Text(
             text = "设置",
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleLarge,
-            color = Paper,
+            color = DreamColors.paper,
         )
     }
 }
@@ -165,11 +166,11 @@ private fun SectionLabel(text: String) {
         text = text,
         modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
         style = MaterialTheme.typography.labelSmall,
-        color = InkDim,
+        color = DreamColors.inkDim,
     )
 }
 
-/** 五家供应商：48dp 胶囊，选中 Ember 边；点过 Key 的家带一个 Ember 小点。 */
+/** 五家供应商：48dp 胶囊，选中 DreamColors.ember 边；点过 Key 的家带一个 DreamColors.ember 小点。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProviderRow(
@@ -186,8 +187,8 @@ private fun ProviderRow(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Night)
-                    .border(1.dp, if (active) Ember else Line, RoundedCornerShape(20.dp))
+                    .background(DreamColors.night)
+                    .border(1.dp, if (active) DreamColors.ember else DreamColors.line, RoundedCornerShape(20.dp))
                     .clickable { onSelect(provider) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -195,7 +196,7 @@ private fun ProviderRow(
                 Text(
                     text = provider.displayName,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (active) Paper else InkDim,
+                    color = if (active) DreamColors.paper else DreamColors.inkDim,
                     maxLines = 1,
                 )
             }
@@ -214,21 +215,21 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
         else -> "还没配置"
     }
     val statusColor = when {
-        state.connection?.ok == true -> Paper
-        state.keyConfigured || state.draft.isNotEmpty() -> Ember
-        else -> InkDim
+        state.connection?.ok == true -> DreamColors.paper
+        state.keyConfigured || state.draft.isNotEmpty() -> DreamColors.ember
+        else -> DreamColors.inkDim
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(NightRaised)
-            .background(PaperSurface, RoundedCornerShape(14.dp))
+            .background(DreamColors.nightRaised)
+            .background(DreamColors.paperSurface, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${provider.displayName} API Key", style = MaterialTheme.typography.bodyMedium, color = Paper)
+            Text("${provider.displayName} API Key", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
             Spacer(modifier = Modifier.weight(1f))
             Text(text = statusText, style = MaterialTheme.typography.labelSmall, color = statusColor)
         }
@@ -238,7 +239,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 text = state.maskedKey,
                 modifier = Modifier.padding(top = 4.dp),
                 style = MaterialTheme.typography.bodyMedium,
-                color = InkDim,
+                color = DreamColors.inkDim,
             )
         }
 
@@ -250,7 +251,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 .padding(top = 12.dp)
                 .heightIn(min = 48.dp),
             placeholder = {
-                Text("粘贴 ${provider.displayName} 的 API Key", style = MaterialTheme.typography.labelSmall, color = InkFaint)
+                Text("粘贴 ${provider.displayName} 的 API Key", style = MaterialTheme.typography.labelSmall, color = DreamColors.inkFaint)
             },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -263,7 +264,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 text = it,
                 modifier = Modifier.padding(top = 8.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = Ember,
+                color = DreamColors.ember,
             )
         }
         state.error?.let {
@@ -271,7 +272,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 text = it,
                 modifier = Modifier.padding(top = 8.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = ErrorText,
+                color = DreamColors.errorText,
             )
         }
 
@@ -285,10 +286,10 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 modifier = Modifier.height(48.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = EmberDeep,
-                    contentColor = Paper,
-                    disabledContainerColor = Line,
-                    disabledContentColor = InkFaint,
+                    containerColor = DreamColors.emberDeep,
+                    contentColor = DreamColors.paper,
+                    disabledContainerColor = DreamColors.line,
+                    disabledContentColor = DreamColors.inkFaint,
                 ),
             ) {
                 Text("保存", style = MaterialTheme.typography.labelLarge)
@@ -298,7 +299,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 enabled = !state.busy && !state.testing && state.keyConfigured,
                 modifier = Modifier.padding(start = 8.dp).height(48.dp),
                 shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Paper, disabledContentColor = InkFaint),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = DreamColors.paper, disabledContentColor = DreamColors.inkFaint),
             ) {
                 Text(if (state.testing) "测试中…" else "测试连接", style = MaterialTheme.typography.labelLarge)
             }
@@ -308,8 +309,8 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 enabled = !state.busy && state.keyConfigured,
                 modifier = Modifier.height(48.dp),
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = InkDim,
-                    disabledContentColor = InkFaint,
+                    contentColor = DreamColors.inkDim,
+                    disabledContentColor = DreamColors.inkFaint,
                 ),
             ) {
                 Text("清除", style = MaterialTheme.typography.labelLarge)
@@ -326,7 +327,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
                 text = text,
                 modifier = Modifier.padding(top = 10.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (conn.ok) InkDim else ErrorText,
+                color = if (conn.ok) DreamColors.inkDim else DreamColors.errorText,
             )
         }
     }
@@ -350,11 +351,11 @@ private fun GenerationCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(NightRaised)
-            .background(PaperSurface, RoundedCornerShape(14.dp))
+            .background(DreamColors.nightRaised)
+            .background(DreamColors.paperSurface, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
-        Text("小说化模型", style = MaterialTheme.typography.bodyMedium, color = Paper)
+        Text("小说化模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
         Spacer(modifier = Modifier.height(8.dp))
         ChoiceRow(
             options = models.map { it.id },
@@ -364,7 +365,7 @@ private fun GenerationCard(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-        Text("小说化思考", style = MaterialTheme.typography.bodyMedium, color = Paper)
+        Text("小说化思考", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
         Spacer(modifier = Modifier.height(8.dp))
         ChoiceRow(
             options = ThinkingLevel.entries,
@@ -377,12 +378,71 @@ private fun GenerationCard(
             text = "思考开着时，服务端会忽略 temperature；忠实整理固定关闭思考。",
             modifier = Modifier.padding(top = 12.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = InkFaint,
+            color = DreamColors.inkFaint,
         )
     }
 }
 
-/** 单行胶囊选择器：选中 Ember 边 + Paper 字，未选 Line 边 + InkDim 字。大字号下自动换行，不把文案挤断。 */
+/**
+ * 外观卡：三套皮肤，每套给三枚色点（桌 / 纸 / 灯）让用户在点之前先看见。
+ *
+ * 不摆「浅色/深色」开关：皮肤是「场景」不是亮度二值，三套并列更接近选纸。
+ */
+@Composable
+private fun SkinCard(selected: Skin, onSelect: (Skin) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DreamColors.paperSurface, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Skin.entries.forEach { skin ->
+            val palette = paletteOf(skin)
+            val active = skin == selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (active) DreamColors.paperLit else Color.Transparent)
+                    .clickable { onSelect(skin) }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    modifier = Modifier.width(54.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    listOf(palette.night, palette.paperSurface, palette.ember).forEach { c ->
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(c),
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = skin.label,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (active) DreamColors.paper else DreamColors.inkDim,
+                    )
+                    Text(
+                        text = skin.blurb,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DreamColors.inkFaint,
+                    )
+                }
+                if (active) {
+                    Text("✓", style = MaterialTheme.typography.titleMedium, color = DreamColors.ember)
+                }
+            }
+        }
+    }
+}
+
+/** 单行胶囊选择器：选中 DreamColors.ember 边 + DreamColors.paper 字，未选 DreamColors.line 边 + DreamColors.inkDim 字。大字号下自动换行，不把文案挤断。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> ChoiceRow(
@@ -402,12 +462,12 @@ private fun <T> ChoiceRow(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Night)
-                    .border(1.dp, if (active) Ember else Line, RoundedCornerShape(20.dp))
+                    .background(DreamColors.night)
+                    .border(1.dp, if (active) DreamColors.ember else DreamColors.line, RoundedCornerShape(20.dp))
                     .clickable { onSelect(item) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 style = MaterialTheme.typography.labelLarge,
-                color = if (active) Paper else InkDim,
+                color = if (active) DreamColors.paper else DreamColors.inkDim,
                 maxLines = 1,
             )
         }

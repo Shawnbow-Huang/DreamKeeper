@@ -1,0 +1,79 @@
+APK_SHA256=c0c64d6869cc7868（0.10.0 重打，debug 同源代码另测）
+DEVICE_TIME=2026-11-01T01:18:29+08:00
+HOST_TIME=2026-11-01T01:21:00+08:00
+REPLAY=./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks; ./gradlew --no-daemon :app:assembleRelease
+
+# 多套皮肤（用户反馈「颜色太暗，想要明亮一点，同时保留暗色」）
+
+## 为什么改
+
+0.10.0 只有一套「灯下纸」暖暗配色。用户明确：太暗，想要明亮风格，且保留暗色。
+结论不是二选一，而是**三套皮肤可选**：场景不同（夜里写/白天写/屏幕感），亮度不是唯一变量。
+
+## 设计
+
+| 皮肤 | 定位 | 桌（背景） | 纸（面） | 墨/强调 |
+| --- | --- | --- | --- | --- |
+| 灯下纸 `lamp` | 暖暗 · 夜里写（默认，0.10.0 观感） | `#0A0B0E` | `#231C15` | 象牙 `#E7DCC4` / 琥珀 `#E2A24E` |
+| 晨光纸 `morning` | 明亮 · 白天写 | `#F4EEE2` | `#FBF5E7` | 暖黑 `#2C2419` / 压深琥珀 `#B06524` |
+| 冷夜 `indigo` | 冷暗 · 屏幕感（Plan 5 之前的方向） | `#0E1117` | `#171C24` | 冷象牙 `#E6EAF2` / 琥珀 `#C8873F` |
+
+实现要点：
+
+- `ui/theme/Skin.kt`：`Skin` 枚举（id/label/blurb）、`DreamPalette`（语义 token 的完整取值）、
+  三套 palette、`DreamColors` 语义访问器、`SkinRuntime` 快照。
+- `ui/theme/Theme.kt`：按皮肤生成 `ColorScheme`（`surfaceTint = Transparent` 沿用），
+  并用 `WindowInsetsController` 把状态栏/导航栏图标切成深/浅（否则浅色皮肤的白色时间看不见）。
+- 颜色不再是编译期常量：484 处 `Night/Paper/Ember…` 调用点统一迁到 `DreamColors.xxx`；
+  少数在 Canvas draw lambda、默认参数里的读取走 `SkinRuntime`（非 @Composable 安全）。
+- `data/settings/ThemePrefs.kt` + `ThemeController`：独立键 `dk_theme_skin`（与生成档位共用
+  settings 文件但互不影响）；启动读、切换写、整棵树重组，业务对象不重建。
+- 设置页「外观」卡：三套皮肤各给三枚色点（桌/纸/灯），点一下立即生效；当前项打勾并加纸面高亮。
+- 切皮肤不改任何业务状态：数据库、Key、档位、草稿都不动。
+
+## 可读性门槛（不是主观判断，写成测试）
+
+`SkinTest` 对每套皮肤断言 WCAG 比值：
+
+- 正文 `paper / night` ≥ 7.0（AAA 正文）
+- 次要文字 `inkDim / night` ≥ 4.5
+- 强调色 `ember / night` ≥ 3.0（非文本图形/大字）
+
+晨光纸的琥珀从 `#E2A24E` 压深到 `#B06524`，就是为了在浅底上守住第 3 条；不是简单反色。
+
+## 证据（截图，裁顶 100px 后 nearWhite 全 0）
+
+| 文件 | sha256 前16 | 字节 | nearWhite |
+| --- | --- | --- | --- |
+| p6-skin-01-lamp-home.png | d34801447ae5f92b | 152031 | 0.0000% |
+| p6-skin-01-morning-home.png | b90fae7b4d74a48f | 160430 | 0.0000% |
+| p6-skin-01-indigo-home.png | 5da377bdc1137f02 | 151455 | 0.0000% |
+| p6-skin-02-lamp-settings.png | 57f202afb15bc778 | 193968 | 0.0000% |
+| p6-skin-02-morning-settings.png | eac843c8ce7df1b3 | 194795 | 0.0000% |
+| p6-skin-02-indigo-settings.png | 10f2637f210b3077 | 193343 | 0.0000% |
+| p6-skin-03-persist.png | 10f2637f210b3077 | 193343 | 0.0000% |
+
+`p6-skin-03-persist.png` 与 indigo-settings 同 sha：`force-stop` 后冷启再进设置，
+选中的仍是冷夜——皮肤持久化成立（同一帧，非重拍）。
+
+## 测试与构建
+
+- 全量 `:app:testDebugUnitTest --rerun-tasks`：**61 类 / 495 例 / 0 失败**（1m14s）。
+  新增 `SkinTest` 5 例（三套皮肤的三条对比门槛、皮肤确实不同、未知 id 回默认）
+  + `ThemeControllerTest` 2 例（默认灯下纸、切换持久化、坏 id 回默认）。
+- release 重打：`dist/DreamKeeper-0.10.0.apk` 9,745,114 B，sha256 前16 `c0c64d6869cc7868`，
+  versionCode 3 / 0.10.0。
+
+## 读法
+
+1. 对比 `p6-skin-01-*` 三张首页：同一页同一数据，只有配色/明度不同。
+2. `p6-skin-02-morning-settings` 看「外观」卡与状态栏：浅底上状态栏图标已转深色。
+3. `p6-skin-03-persist` 证明选择跨进程重启保留。
+
+## 未覆盖 / 取舍
+
+- 浅色皮肤的**插画**仍是暗色调（Plan 5 画的夜窗/卡片），在晨光纸下会像"贴上去的暗块"；
+  还没按浅色重绘（列为下一步：四张插画按皮肤出浅色版）。
+- 宋体仍依赖系统 fallback（未打包字体）。
+- 未做「跟随系统深色模式」自动切换：用户明确要自己能选，先给显式三选一。
+- TalkBack 未覆盖（D487 沿用）。

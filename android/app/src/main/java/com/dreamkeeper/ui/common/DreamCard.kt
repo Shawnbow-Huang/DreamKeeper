@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.common
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,10 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.domain.Tag
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
 
 /**
  * 梦卡片：标题 / 正文首句 / 标签三行。Task 7 的列表与时间轴直接复用，不许再写一份。
@@ -47,7 +44,7 @@ fun DreamCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(NightRaised)
+            .background(DreamColors.nightRaised)
             .clickable { onClick() }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -56,7 +53,7 @@ fun DreamCard(
             Text(
                 text = heading,
                 style = MaterialTheme.typography.titleLarge,
-                color = Paper,
+                color = DreamColors.paper,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -65,7 +62,7 @@ fun DreamCard(
             Text(
                 text = body,
                 style = MaterialTheme.typography.bodyMedium,
-                color = InkDim,
+                color = DreamColors.inkDim,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -81,11 +78,11 @@ fun DreamCard(
                     Text(
                         text = tag.name,
                         style = MaterialTheme.typography.labelSmall,
-                        color = InkDim,
+                        color = DreamColors.inkDim,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(NightRaised)
-                            .border(1.dp, Line, RoundedCornerShape(50))
+                            .background(DreamColors.nightRaised)
+                            .border(1.dp, DreamColors.line, RoundedCornerShape(50))
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }

@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.calendar
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -41,15 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.ui.theme.DreamMotion
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.OnLamp
-import com.dreamkeeper.ui.theme.EmberDeep
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.InkFaint
-import com.dreamkeeper.ui.theme.Line
-import com.dreamkeeper.ui.theme.Night
-import com.dreamkeeper.ui.theme.NightRaised
-import com.dreamkeeper.ui.theme.Paper
 import java.time.LocalDate
 
 /**
@@ -73,13 +65,13 @@ fun CalendarScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val today = LocalDate.now()
 
-    Box(modifier = Modifier.fillMaxSize().background(Night)) {
+    Box(modifier = Modifier.fillMaxSize().background(DreamColors.night)) {
         // 月份水印：把原来 39% 屏高的连续真空，变成"一张纸上印着的月份"。
         // 5% 不透明度、140sp 宋体、贴右边缘出血——可读但不抢戏。
         Text(
             text = state.month.monthValue.toString().padStart(2, '0'),
             style = MaterialTheme.typography.displaySmall.copy(fontSize = 200.sp, lineHeight = 200.sp),
-            color = Paper.copy(alpha = 0.055f),
+            color = DreamColors.paper.copy(alpha = 0.055f),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 96.dp, end = 8.dp),
@@ -143,8 +135,8 @@ fun CalendarScreen(
                 .size(132.dp)
                 .background(
                     Brush.radialGradient(
-                        0.0f to Ember.copy(alpha = 0.30f),
-                        0.55f to Ember.copy(alpha = 0.10f),
+                        0.0f to DreamColors.ember.copy(alpha = 0.30f),
+                        0.55f to DreamColors.ember.copy(alpha = 0.10f),
                         1.0f to Color.Transparent,
                     ),
                 ),
@@ -153,13 +145,13 @@ fun CalendarScreen(
         Box(
             modifier = Modifier
                 .size(76.dp)
-                .background(Ember, CircleShape)
+                .background(DreamColors.ember, CircleShape)
                 .clickable { onRecord() },
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 "说梦",
-                color = OnLamp,
+                color = DreamColors.onLamp,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -192,11 +184,11 @@ private fun MonthHeader(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(title, style = MaterialTheme.typography.titleLarge, color = Paper)
+            Text(title, style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
             Text(
                 "共 $daysWithDreams 天有梦",
                 style = MaterialTheme.typography.labelSmall,
-                color = InkDim,
+                color = DreamColors.inkDim,
             )
         }
         ArrowButton("›", "下个月", onNext)
@@ -220,7 +212,7 @@ private fun SettingsEntry(onClick: () -> Unit) {
             .semantics { contentDescription = "设置" },
         contentAlignment = Alignment.Center,
     ) {
-        Text("设置", style = MaterialTheme.typography.labelMedium, color = Paper)
+        Text("设置", style = MaterialTheme.typography.labelMedium, color = DreamColors.paper)
     }
 }
 
@@ -239,8 +231,8 @@ private fun SearchEntry(onSearch: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(NightRaised)
-            .border(1.dp, Line, RoundedCornerShape(999.dp))
+            .background(DreamColors.nightRaised)
+            .border(1.dp, DreamColors.line, RoundedCornerShape(999.dp))
             .clickable { onSearch() }
             .semantics { contentDescription = "搜索" }
             .padding(horizontal = 16.dp),
@@ -249,7 +241,7 @@ private fun SearchEntry(onSearch: () -> Unit) {
         Text(
             text = "搜索梦里的词",
             style = MaterialTheme.typography.bodyMedium,
-            color = InkFaint,
+            color = DreamColors.inkFaint,
             maxLines = 1,
         )
     }
@@ -264,7 +256,7 @@ private fun ArrowButton(glyph: String, description: String, onClick: () -> Unit)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Text(glyph, style = MaterialTheme.typography.titleLarge, color = Paper)
+        Text(glyph, style = MaterialTheme.typography.titleLarge, color = DreamColors.paper)
     }
 }
 
@@ -277,7 +269,7 @@ private fun WeekdayHeader() {
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelSmall,
-                color = InkFaint,
+                color = DreamColors.inkFaint,
             )
         }
     }
@@ -305,8 +297,8 @@ private fun DayCell(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                // 今天用 Ember 描边，不用 Line：Line 在 Night 上只有 1.34:1，等于看不见
-                .then(if (isToday) Modifier.border(1.5.dp, Ember, CircleShape) else Modifier),
+                // 今天用 DreamColors.ember 描边，不用 DreamColors.line：DreamColors.line 在 DreamColors.night 上只有 1.34:1，等于看不见
+                .then(if (isToday) Modifier.border(1.5.dp, DreamColors.ember, CircleShape) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -316,7 +308,7 @@ private fun DayCell(
                     text = "${date.dayOfMonth}",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = if (hasDreams) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (hasDreams) Paper else InkFaint,
+                    color = if (hasDreams) DreamColors.paper else DreamColors.inkFaint,
                 )
             }
         }

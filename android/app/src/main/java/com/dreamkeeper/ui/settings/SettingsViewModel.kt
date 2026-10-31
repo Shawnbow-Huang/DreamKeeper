@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.dreamkeeper.data.security.ApiKeyStore
 import com.dreamkeeper.data.security.maskApiKey
 import com.dreamkeeper.data.settings.GenerationPrefs
+import com.dreamkeeper.ui.theme.Skin
+import com.dreamkeeper.data.settings.ThemeController
 import com.dreamkeeper.llm.ConnectionOutcome
 import com.dreamkeeper.llm.ConnectionTester
 import com.dreamkeeper.llm.GenerationOptions
@@ -37,6 +39,8 @@ class SettingsViewModel(
     private val generationPrefs: GenerationPrefs? = null,
     /** 测试连接（Plan 6 T3）；为 null 时按钮只提示「不可用」，不抛异常。 */
     private val connectionTester: ConnectionTester? = null,
+    /** 皮肤（Plan 7）：切一次重组整棵树；为 null 时设置页不显示「外观」入口。 */
+    private val themeController: ThemeController? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -70,6 +74,8 @@ class SettingsViewModel(
     data class UiState(
         /** 当前供应商 */
         val provider: ProviderId = ProviderId.DEEPSEEK,
+        /** 当前皮肤（Plan 7） */
+        val skin: Skin = Skin.LAMP,
         /** 当前供应商的模型清单（设置页只摆这一家） */
         val models: List<ModelSpec> = ProviderRegistry.of(ProviderId.DEEPSEEK).models,
         /** 本机是否存着这家能解开的 Key */
@@ -100,6 +106,7 @@ class SettingsViewModel(
     private var pendingNonce: Long = 0L
 
     init {
+        _state.update { it.copy(skin = themeController?.skin?.value ?: Skin.LAMP) }
         val options = generationPrefs?.options()
         if (options != null) {
             val spec = ProviderRegistry.of(options.provider)
@@ -135,6 +142,12 @@ class SettingsViewModel(
     }
 
     /** 换模型：白名单外的值由 [GenerationPrefs.setModel] 忽略，状态也不动。 */
+    /** 换皮肤：立刻写 SharedPreferences 并重组界面（不等 IO）。 */
+    fun setSkin(skin: Skin) {
+        themeController?.set(skin)
+        _state.update { it.copy(skin = skin) }
+    }
+
     fun setModel(model: String) {
         val prefs = generationPrefs ?: return
         prefs.setModel(model)

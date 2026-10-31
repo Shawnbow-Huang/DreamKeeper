@@ -1,5 +1,6 @@
 package com.dreamkeeper.ui.detail
 
+import com.dreamkeeper.ui.theme.DreamColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,10 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dreamkeeper.data.db.NovelMessageEntity
 import com.dreamkeeper.data.db.NovelVersionEntity
-import com.dreamkeeper.ui.theme.Ember
-import com.dreamkeeper.ui.theme.InkDim
-import com.dreamkeeper.ui.theme.Paper
-import com.dreamkeeper.ui.theme.NightRaised
 import java.util.Locale
 import org.json.JSONArray
 
@@ -115,7 +112,7 @@ fun VersionStrip(
             } else {
                 "当前 v$active"
             },
-            color = if (selectedVersion != null) Ember else InkDim,
+            color = if (selectedVersion != null) DreamColors.ember else DreamColors.inkDim,
             fontSize = 12.sp,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
@@ -124,7 +121,7 @@ fun VersionStrip(
 
 @Composable
 private fun VersionChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val background = if (selected) Ember.copy(alpha = 0.18f) else NightRaised
+    val background = if (selected) DreamColors.ember.copy(alpha = 0.18f) else DreamColors.nightRaised
     // 可视仍是 36dp 胶囊，点击区扩到 48dp（Plan 5 T6 / A11y：触控目标 ≥48dp）。
     Box(
         modifier = Modifier
@@ -141,7 +138,7 @@ private fun VersionChip(label: String, selected: Boolean, onClick: () -> Unit) {
         ) {
             Text(
                 text = label,
-                color = if (selected) Paper else InkDim,
+                color = if (selected) DreamColors.paper else DreamColors.inkDim,
                 fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
