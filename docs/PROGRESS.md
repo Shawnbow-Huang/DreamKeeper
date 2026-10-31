@@ -1,4 +1,4 @@
-> 最后更新：2026-10-31 22:05（**Plan 5 进行中 3/9**：T0 契约、T1 四张空态插画+图标前景（72,220 B、近白 0）、T2 模型与思考档位（设置页 chips + 持久化 + 请求体透传）已验收，全量 **51 类 431 例**绿；D461–D474 已登记；T3–T8 待做。Plan 4 已收尾 8/8（49 类 418 例、FINAL-REVIEW、ACCEPTANCE `## 3e`））
+> 最后更新：2026-10-31 22:05（**Plan 5 进行中 3/9**：T0 契约、T1 四张空态插画+图标前景（72,220 B、近白 0）、T2 模型与思考档位（设置页 chips + 持久化 + 请求体透传）、T3 图标系统与启动屏（adaptive/monochrome/splash）已验收，全量 **51 类 431 例**绿；D461–D477 已登记；T4–T8 待做。Plan 4 已收尾 8/8（49 类 418 例、FINAL-REVIEW、ACCEPTANCE `## 3e`））
 
 ## 一、当前在做
 
@@ -90,14 +90,14 @@
 
 **Plan 4 的目标**：用户随时能用语音在原样稿尾部补描述，系统只转写新增尾段、拼回正文、整段重新理顺并留下可回退的新版本；小说化只能由用户点「小说化」并写下想法后生成，绝不自动触发；顺带收口 Plan 3 的可见性/路由/成本栏缺口并做到可发布。
 
-## 二·八、Plan 5（UI 打磨 · 离线美术资产 · 档位 UI · 发布就绪）进行中 3/9
+## 二·八、Plan 5（UI 打磨 · 离线美术资产 · 档位 UI · 发布就绪）进行中 4/9
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | T0 契约冻结 | ✅ 完成 | `9f3f742`：计划 §0.1–§0.9 定稿（T0–T8）、证据 README、`.gitattributes` plan5 规则、D461–D470（离线生图口径 / 真机 PENDING / 档位 UI / 0.9.0 / 4h+128MB / 云 STT 推迟 / 回收站推迟 / 5 件资产 / A1–A3 列 P0 / 任务重排） |
 | T1 四张插画 + 图标前景 | ✅ 完成 | `f9d5236`：`illus_library_empty/day/novel/media.webp`（合计 72,220 B、单张最大 31,728 B、近白 0、meanY ≤0.018）+ `ic_launcher_foreground.xml`（余烬 + 不闭合弧）+ 背景色；母版入库 `docs/art/plan5/`；`AssetCatalogTest` 5/5；证据 `p5-asset-00-master.txt` |
 | T2 模型与思考档位 | ✅ 完成 | 本提交：`GenerationOptions`（flash/v4-pro × 关/低/高/最高）+ `GenerationPrefs`（SharedPreferences 清洗回默认）+ 设置页「生成」卡 + 编排器透传（faithful 恒关、novel 默认高/温度 0.9 仅在关思考时）；变异默认档位改 OFF 必红；全量 **51 类 431 例**；设备截图默认态 + 冷启后 V4 Pro/低 仍持久；证据 `p5-settings-00..02`；D471–D474 |
-| T3 图标系统与启动屏 | ⬜ 未开始 | 派 Builder |
+| T3 图标系统与启动屏 | ✅ 完成 | 本提交：`mipmap-anydpi-v26` 自适应图标 + `mipmap-anydpi-v33` monochrome + Manifest `icon/roundIcon` + splash 改 `@mipmap/ic_launcher` 并补图标底色；`aapt2 dump badging` 全 density 指向 v33 图标；设备桌面图标正常、冷启 splash 深色 nearWhite 0；证据 `p5-icon-01..03`；D475–D477 |
 | T4 空态组件与四处接入 | ⬜ 未开始 | 依赖 T1 插画 + T3 资源目录 |
 | T5 可靠性 A1–A4（语音尾巴/重试/闸门/长录音） | ⬜ 未开始 | P0 实现缺陷，不许 PENDING |
 | T6 UI 打磨与 A11y | ⬜ 未开始 | chips ≥48dp、关于行、1.3× 字号 |

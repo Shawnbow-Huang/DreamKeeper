@@ -143,6 +143,9 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 | D472 | 2026-10-31 | T2 | T2 由 Lead 直接实施、以变异代红；全量基线实为 423（T1 +5），+5 prefs +3 编排器 = 431，不是计划写的 430 | 单任务内 Lead 写实现再补测，先红等价物=变异（默认档位 HIGH→OFF 必红）；计数按 XML 实测对账 |
 | D473 | 2026-10-31 | T2 | 设置页「思考开着时忽略 temperature」只保留在「生成」卡内；删掉列表尾重复的「说明」段 | 首版两处重复（卡内 + 独立说明段），截图复核实物后去重 |
 | D474 | 2026-10-31 | T2 | 档位持久化用 debug 包 + force-stop/冷启在模拟器取证；截图取证后把档位改回默认 Flash/高 | 证明 UI 与 SharedPreferences；默认档位作为后续生成链验收的已知起点 |
+| D475 | 2026-10-31 | T3 | 桌面图标截图不做 nearWhite 门槛，理由写进 sidecar | 截图含系统壁纸（浅色），白像素来自壁纸不是 App；门槛只对 App 自身画面有意义 |
+| D476 | 2026-10-31 | T3 | splash 证据取冷启 ~0.3s 的过渡帧；静止 splash 帧改用 T8 release 冷启复现命令补 | 本机无 ffmpeg，screenrecord 抽帧不可用；过渡帧已能证明「深色无白闪 + 新图标」 |
+| D477 | 2026-10-31 | T3 | 额外加 `windowSplashScreenIconBackgroundColor=#0B0E13`（计划未写） | 首版 splash 图标浮在透明底上、透出壁纸；补背景色后图标落在 Night 圆底上 |
 
 ---
 
@@ -213,7 +216,7 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 
 **Steps**：建 adaptive icon（背景 `@color/ic_launcher_background`、前景 Task 1 的 vector、`<monochrome>` 同前景）；Manifest 改 `android:icon="@mipmap/ic_launcher"` + `android:roundIcon`；splash 的 `windowSplashScreenAnimatedIcon` 指向同一 mipmap；`ic_launcher_dark.xml` 保留但不再被 Manifest 引用（注释说明兜底）。
 **Evidence**：`p5-icon-01-icon.png`（桌面图标 48dp/108dp 同屏）、`p5-icon-02-splash.png`（冷启首帧）、`p5-icon-03-badging.txt`（`aapt2 dump badging` 含 mipmap/anydpi-v26/roundIcon）。
-**Expected**：模拟器 API 37 上图标不受遮罩裁切、splash 无白闪；全量不退化（51 类/430 例）。
+**Expected**：模拟器 API 37 上图标不受遮罩裁切、splash 无白闪；全量不退化（51 类/431 例，D472 对账）。
 
 ---
 
@@ -281,6 +284,15 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 
 **Steps**：全量复跑（期望 52 类/440 例）；FINAL-REVIEW 六节（基线→终态、提交清单、任务表、需求对照、PENDING 白名单、风险结论）；`ACCEPTANCE.md` 追加 `## 3f`；看板 Plan 5 8/8（修 Plan 4 §二·七 标题与需求表 #6）；`p5-device-01-checklist.md`；D471 起收尾偏差。
 **Expected**：证据目录自洽、sha 齐全、结论「候选版通过（真机 PENDING）」。
+
+
+### Task 3 验收（Lead，2026-10-31）
+- 交付（本提交）：`res/mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml`；`res/mipmap-anydpi-v33/` 同名两枚（含 `<monochrome>`）；Manifest 改 `android:icon="@mipmap/ic_launcher"` + `android:roundIcon="@mipmap/ic_launcher_round"`；`values-v31/themes.xml` 的 splash 图标改 `@mipmap/ic_launcher` 并补 `windowSplashScreenIconBackgroundColor=#0B0E13`；`ic_launcher_dark.xml` 保留作兜底、不再被 launcher 引用。
+- 复核：`aapt2 dump badging` → `application-icon-160/240/320/65534/65535` 全部指向 `res/mipmap-anydpi-v33/ic_launcher.xml`；`aapt2 dump resources` 含 `mipmap/ic_launcher`、`mipmap/ic_launcher_round`、`drawable/ic_launcher_foreground`（XML 矢量）、`color/ic_launcher_background`。
+- 设备（APK `0384e526…c00fd`，13,929,546 B，install Success）：桌面图标显示正常（圆形遮罩、无裁切，`p5-icon-01-icon.png`）；冷启 splash 深色无白闪（`p5-icon-02-splash.png`，nearWhite 0）。
+- 证据 `p5-icon-01-icon.{png,txt}`、`p5-icon-02-splash.{png,txt}`、`p5-icon-03-badging.txt`。
+- PENDING：themed/monochrome 在系统主题图标下的外观（模拟器无主题图标开关，P3 保持 PENDING）；静止 splash 帧（D476）。
+- 结论：通过。
 
 ## §10 验收记录
 

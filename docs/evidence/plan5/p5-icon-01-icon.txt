@@ -1,0 +1,17 @@
+APK_SHA256=0384e52602b91aaa (debug T3 构建)
+DEVICE_TIME=Sat Oct 31 14:08:00 GMT 2026（本机 CST 22:08；设备时区 GMT，模拟器 1080x2400 @420dpi）
+REPLAY=adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk ; adb shell input keyevent 3 ; adb exec-out screencap -p > p5-icon-01-icon.png
+
+PNG_SHA256=374ceaeeec16b8af
+PNG_BYTES=1393563
+NEAR_WHITE_245=3.5221%（TopOffset=100）——本图不适用 nearWhite 门槛：桌面截图含系统壁纸（浅色墙面），白像素来自壁纸而非 App。
+MEAN_Y=0.2709（同上，被壁纸拉高）
+P99_LUMA=1.0000
+
+[画面事实]
+Pixel Launcher 主屏，右下角 dock 右侧是「梦匣」自适应图标：圆形遮罩内为 Night 底 + Ember 闭环弧 + 余烬圆点。
+没有系统裁切异常：弧线与火星点都在安全区内，未被圆形遮罩切掉。
+
+[读法]
+图标形状/前景来自 mipmap-anydpi-v33/ic_launcher.xml（monochrome 同前景）与 drawable/ic_launcher_foreground.xml；本图只证明「装得上、显示对」，证明资源接线的是 p5-icon-03-badging.txt 的 aapt2 输出。
+nearWhite 门槛对系统桌面不适用（D475）。

@@ -1,0 +1,18 @@
+APK_SHA256=0384e52602b91aaa (debug T3 构建)
+DEVICE_TIME=Sat Oct 31 14:08:00 GMT 2026（本机 CST 22:08；设备时区 GMT，模拟器 1080x2400 @420dpi）
+REPLAY=adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk ; adb shell input keyevent 3 ; adb exec-out screencap -p > p5-icon-02-splash.png
+
+PNG_SHA256=d5ef942794fa4c1e
+PNG_BYTES=1050960
+NEAR_WHITE_245=0.0000%（TopOffset=100，排除状态栏）
+NEAR_WHITE_250=0.0000%
+MEAN_Y=0.1802
+P99_LUMA=0.9022
+
+[画面事实]
+force-stop 后冷启约 0.3s 的帧：Android 12+ SplashScreen 正在淡入，窗口深色（#0B0E13），中央是放大后的 Ember 弧 + 余烬圆点（来自 @mipmap/ic_launcher 的前景），没有白底闪屏、没有文字 logo。
+帧里透出桌面壁纸是 splash 退出动画（窗口 alpha 从 0 到 1）的过渡帧；同一冷启连拍 3 帧 nearWhite 分别为 17/10/10（缩小到 108x240 计），均无整屏白闪。
+
+[读法]
+证明「splash 无白闪 + 使用新图标」；图标背景色由 windowSplashScreenIconBackgroundColor=#0B0E13 指定。
+静止 splash 帧需 screenrecord 抽帧（本机 ffmpeg 未安装，留 T8 release 复现命令）。

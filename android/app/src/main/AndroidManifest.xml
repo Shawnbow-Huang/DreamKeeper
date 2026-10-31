@@ -11,10 +11,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
+    <!-- 图标：自适应图标（v26）+ 主题图标（v33 monochrome）；ic_launcher_dark 保留给旧 splash 兜底，不再被 launcher 引用 -->
     <application
         android:name=".DreamKeeperApp"
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher_dark"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.DreamKeeper">

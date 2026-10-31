@@ -1,0 +1,48 @@
+APK_SHA256=0384e52602b91aaa (debug T3 构建；完整 sha256=0384e52602b91aaa4c6947aaca96feec0ebde7cfeaf3ee356c600123490c00fd)
+DEVICE_TIME=Sat Oct 31 14:08:00 GMT 2026（本机 CST 22:08；设备时区 GMT）
+REPLAY=aapt2 dump badging android/app/build/outputs/apk/debug/app-debug.apk | grep application-icon ; aapt2 dump resources ... | grep ic_launcher ; adb shell input keyevent 3 ; adb exec-out screencap -p
+
+[aapt2 dump badging 节选]
+application-icon-160:'res/mipmap-anydpi-v33/ic_launcher.xml'
+application-icon-240:'res/mipmap-anydpi-v33/ic_launcher.xml'
+application-icon-320:'res/mipmap-anydpi-v33/ic_launcher.xml'
+application-icon-65534:'res/mipmap-anydpi-v33/ic_launcher.xml'
+application-icon-65535:'res/mipmap-anydpi-v33/ic_launcher.xml'
+application: label='梦匣' icon='res/mipmap-anydpi-v33/ic_launcher.xml'
+launchable-activity: name='com.dreamkeeper.MainActivity'  label='' icon=''
+
+[aapt2 dump resources 节选]
+    resource 0x7f020004 color/ic_launcher_background
+      () #ff0b0e13
+    resource 0x7f020005 color/notification_action_color_filter
+--
+    resource 0x7f040007 drawable/ic_launcher_foreground
+      () (file) res/drawable/ic_launcher_foreground.xml type=XML
+    resource 0x7f040008 drawable/ic_notification
+--
+    resource 0x7f080000 mipmap/ic_launcher
+      (anydpi) (file) res/mipmap-anydpi-v26/ic_launcher.xml type=XML
+      (anydpi-v33) (file) res/mipmap-anydpi-v33/ic_launcher.xml type=XML
+    resource 0x7f080001 mipmap/ic_launcher_round
+      (anydpi) (file) res/mipmap-anydpi-v26/ic_launcher_round.xml type=XML
+      (anydpi-v33) (file) res/mipmap-anydpi-v33/ic_launcher_round.xml type=XML
+--
+        0x0101062d=@mipmap/ic_launcher
+        0x01010630=#ff0b0e13
+    resource 0x7f0a000a style/Widget.Compat.NotificationActionContainer
+
+[Manifest 节选]
+14:    <!-- 图标：自适应图标（v26）+ 主题图标（v33 monochrome）；ic_launcher_dark 保留给旧 splash 兜底，不再被 launcher 引用 -->
+18:        android:icon="@mipmap/ic_launcher"
+19:        android:roundIcon="@mipmap/ic_launcher_round"
+
+[themes-v31 节选]
+6:        <item name="android:windowSplashScreenBackground">#0B0E13</item>
+7:        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+8:        <item name="android:windowSplashScreenIconBackgroundColor">#0B0E13</item>
+
+[读法]
+1. badging 显示 application-icon-* 指向 res/mipmap-anydpi-v33/ic_launcher.xml，说明 API 37 用的是带 monochrome 的 v33 自适应图标；API 26–32 会命中 mipmap-anydpi-v26 的同名资源。
+2. resources 表里 mipmap/ic_launcher 与 ic_launcher_round 都在，drawable/ic_launcher_foreground 是矢量 XML（不是位图），color/ic_launcher_background=#0B0E13。
+3. Manifest 的 android:icon/roundIcon 已切到 mipmap；ic_launcher_dark 仍保留但仅作历史兜底（不再被 launcher 引用）。
+4. splash 图标 = @mipmap/ic_launcher + windowSplashScreenIconBackgroundColor=#0B0E13（避免图标浮在透明底上）。
