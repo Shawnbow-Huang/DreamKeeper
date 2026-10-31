@@ -100,6 +100,7 @@ import com.dreamkeeper.ui.theme.Line
 import com.dreamkeeper.ui.theme.Night
 import com.dreamkeeper.ui.theme.NightRaised
 import com.dreamkeeper.ui.theme.Paper
+import com.dreamkeeper.ui.theme.PaperSurface
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -785,12 +786,21 @@ private fun NovelTab(
                     modifier = Modifier.height(320.dp),
                 )
             } else {
-                body.split(Regex("\n+")).map { it.trim() }.filter { it.isNotEmpty() }.forEach { paragraph ->
-                    Text(
-                        text = paragraph,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Paper,
-                    )
+                // 正文铺在一张暖纸上：结构（冷桌）与内容（纸）分开，正文不再浮在近黑底上。
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(PaperSurface, RoundedCornerShape(18.dp))
+                        .padding(horizontal = 18.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    body.split(Regex("\n+")).map { it.trim() }.filter { it.isNotEmpty() }.forEach { paragraph ->
+                        Text(
+                            text = paragraph,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Paper,
+                        )
+                    }
                 }
             }
             askMessages.forEach { message ->

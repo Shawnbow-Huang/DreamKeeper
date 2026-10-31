@@ -140,6 +140,13 @@
 | D526 | 2026-10-31 | T6 | 版本升到 `0.10.0 / versionCode 3` 并重出签名候选包（同签名覆盖 0.9.0） | 五家供应商是本轮用户可见能力，需要独立版本号便于真机区分；同签名可直接覆盖、保数据 |
 | D527 | 2026-10-31 | T6 | 新增 `docs/QA-REAL-DEVICE.md` 真机清单（12 节 / 60+ 勾选项），作为交付物入库 | 用户要自己跑真机；清单必须可照做、可回传、含证据命名与判定口径，而不是口头步骤 |
 | D528 | 2026-10-31 | T6 | 真机 APK 放 `dist/DreamKeeper-0.10.0.apk`，`dist/` 进 `.gitignore` 不入库 | 9.7MB 二进制不入仓；sha256 写在交付消息与 RELEASE.md，可校验 |
+| D529 | 2026-11-01 | T7 | 视觉方向改为「灯下纸」：冷暖分工（结构冷、内容暖）、强调色提亮到 L* 71 | 用户 2026-10-31 反馈「美学没变化」；审计：Ember 与 InkDim 的 L* 61.6/61.5、对比 1.006×，冷色像素 98.3% |
+| D530 | 2026-11-01 | T7 | 色板全量换值（Night/Paper/Ink/Ember + PaperSurface/PaperLit/Ash/OnLamp/ErrorContainer），旧 token 名保留 | 减少 60 余处调用点改动；`EmberDeep` 不再兼任 errorContainer |
+| D531 | 2026-11-01 | T7 | `surfaceTint=Transparent`，elevation 不再被琥珀染色 | M3 默认会把 primary 混进带 elevation 的表面，深色下偏紫/偏橙 |
+| D532 | 2026-11-01 | T7 | 宋体承载内容（displaySmall/headlineSmall/titleLarge/bodyLarge），无衬线承载操作 | 「暗室纸页」的纸感来自字；但宋体在小字号与国产 ROM fallback 上不可控，故门槛 ≥20sp |
+| D533 | 2026-11-01 | T7 | 首页加 200sp 月份水印（Paper alpha 0.055、出血右缘），删日历琥珀点 | 首页最大连续空白 356.6dp；水印把空白变成「纸上的月份」，不新增信息 |
+| D534 | 2026-11-01 | T7 | 「说梦」从砖红填充 + 描边改实心琥珀 + 深墨字 + 径向光晕；`shadow` 改 `Brush.radialGradient` | 砖红 2.57:1 靠描边救；Compose 圆形 shadow 在近黑底会露矩形边 |
+| D535 | 2026-11-01 | T7 | 列表/详情/设置改为纸面（PaperSurface）承载，描边卡片退场 | 层级应从「面的差异」来，而不是 1dp 线；列表 4 行灰字有 39% 真空 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -268,3 +275,11 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 独立复跑：targeted 55s 绿；全量 74s，XML **59 类 485 例 0 失败**。
 - 设备（release `fd6c6872f7efc7ea`）：五家 chips、切家后卡标题/占位符/模型清单联动、未配 Key 时「测试连接」置灰、force-stop 后选中家仍保留；三张截图裁顶后 nearWhite=0。
 - 结论：通过。PENDING：五家真连通（无真实 Key，D521）、chip 已配置小点（D519）。
+
+
+### 外观改版（Lead，2026-11-01）
+- 交付：`ui/theme/{Color,Theme,Type}.kt` 重写；`ui/calendar/CalendarScreen.kt`（宋体日期、删点、琥珀光球、月份水印）；`ui/library/LibraryScreen.kt`（纸卡片、PaperLit 分段控件）；`ui/detail/DetailScreen.kt`（正文纸面容器）；`ui/settings/SettingsScreen.kt`（面差替代描边）；`ui/common/EmptyState.kt`（168dp / headlineSmall）。
+- 独立复跑：`:app:testDebugUnitTest --rerun-tasks` 1m21s，XML **59 类 488 例 0 失败**。
+- 设备：debug 包（种子数据）四屏截图 `p6-ui-04..07`（nearWhite 全 0）；release 重打 9,728,730 B sha 前16 `0401f34122a384f5`，卸载重装冷启 478/447/493 ms、FATAL 0、`dk_debug_save_key` 0；对照图 `p6-ui-08..10`。
+- 证据：`docs/evidence/plan6/p6-ui-04-aesthetic.txt`。
+- 结论：通过（观感改由用户确认）。PENDING：宋体内嵌/国产 ROM 观感、空态插画按新纸色重绘、浅色主题未做。

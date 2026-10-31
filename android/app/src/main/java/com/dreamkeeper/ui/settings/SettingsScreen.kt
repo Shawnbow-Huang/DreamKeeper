@@ -53,6 +53,7 @@ import com.dreamkeeper.ui.theme.Line
 import com.dreamkeeper.ui.theme.Night
 import com.dreamkeeper.ui.theme.NightRaised
 import com.dreamkeeper.ui.theme.Paper
+import com.dreamkeeper.ui.theme.PaperSurface
 
 /**
  * 设置页（Plan 3 Task 2，Plan 6 Task 4 扩到五家供应商）。
@@ -223,7 +224,7 @@ private fun KeyCard(state: SettingsViewModel.UiState, vm: SettingsViewModel) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(NightRaised)
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .background(PaperSurface, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -350,7 +351,7 @@ private fun GenerationCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(NightRaised)
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .background(PaperSurface, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
         Text("小说化模型", style = MaterialTheme.typography.bodyMedium, color = Paper)

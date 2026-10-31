@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,6 +50,8 @@ import com.dreamkeeper.ui.theme.InkFaint
 import com.dreamkeeper.ui.theme.Line
 import com.dreamkeeper.ui.theme.Night
 import com.dreamkeeper.ui.theme.Paper
+import com.dreamkeeper.ui.theme.PaperLit
+import com.dreamkeeper.ui.theme.PaperSurface
 
 /** 分段控件总宽：两段各 76dp。见 [LayoutSwitch] 为什么不用「无界宽度 + weight」 */
 private val SwitchWidth = 152.dp
@@ -165,7 +168,7 @@ private fun RowScope.SwitchSegment(
             .weight(1f)
             .fillMaxHeight()
             // 未选中就是**没有背景**，不是透明色叠一层：叠加会盖掉圆角外侧的描边
-            .then(if (selected) Modifier.background(EmberDeep) else Modifier)
+            .then(if (selected) Modifier.background(PaperLit) else Modifier)
             .clickable { onLayout(value) }
             .semantics {
                 contentDescription = "切换到$label"
@@ -176,7 +179,7 @@ private fun RowScope.SwitchSegment(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) Paper else InkDim,
+            color = if (selected) Paper else InkFaint,
             maxLines = 1,
         )
     }
@@ -206,47 +209,30 @@ private fun TimelineEntry(item: LibraryItem, onClick: () -> Unit) {
     // D214：时间轴和卡片必须走同一个文案分派，否则卡片修好了、时间轴还是一条只有日期没内容的空行
     val heading = cardText(dream.title, previewText(item.finalNovelText, dream)).heading
 
-    Row(
+    // 2026-11-01 视觉改版：时间轴从"一根琥珀竖线 + 灰字"改成"一叠纸"。
+    // 每条梦是一张暖纸卡（PaperSurface），日期是注脚、正文是宋体 21sp；
+    // 竖线圆点全部去掉——存在感由纸面与字重承担，不再靠强调色刷屏。
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .height(IntrinsicSize.Min)
-            .clickable(onClick = onClick),
+            .padding(vertical = 6.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(PaperSurface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
     ) {
-        Box(modifier = Modifier.width(RailWidth).fillMaxHeight()) {
-            // 竖线铺满整条（含 20dp 留白），条目之间的线不断开
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxHeight()
-                    .width(1.5.dp)
-                    .background(Ember),
-            )
-            // 圆点对齐日期行（labelSmall 行高 16dp，中心 8dp；点直径 9dp → 顶距 3.5dp，取 4dp）
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 4.dp)
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(Ember),
-            )
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp, bottom = EntryGap),
-        ) {
+        Column {
             Text(
                 text = DayViewModel.titleOf(dream.date),
                 style = MaterialTheme.typography.labelSmall,
                 color = InkFaint,
             )
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = heading,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = Paper,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
         }

@@ -28,15 +28,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.ui.theme.DreamMotion
 import com.dreamkeeper.ui.theme.Ember
+import com.dreamkeeper.ui.theme.OnLamp
 import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.InkDim
 import com.dreamkeeper.ui.theme.InkFaint
@@ -68,6 +74,16 @@ fun CalendarScreen(
     val today = LocalDate.now()
 
     Box(modifier = Modifier.fillMaxSize().background(Night)) {
+        // 月份水印：把原来 39% 屏高的连续真空，变成"一张纸上印着的月份"。
+        // 5% 不透明度、140sp 宋体、贴右边缘出血——可读但不抢戏。
+        Text(
+            text = state.month.monthValue.toString().padStart(2, '0'),
+            style = MaterialTheme.typography.displaySmall.copy(fontSize = 200.sp, lineHeight = 200.sp),
+            color = Paper.copy(alpha = 0.055f),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 96.dp, end = 8.dp),
+        )
         Column(modifier = Modifier.fillMaxSize()) {
             // 头部与星期表头固定，只有日期网格滚动（brief Step 5）
             AnimatedContent(
@@ -118,17 +134,36 @@ fun CalendarScreen(
         }
 
         // 说梦大钮叠在内容之上（Box 后者盖前者），所以网格必须自己留出 112dp
+        // 说梦是"光"：外层径向渐变做晕（不是 shadow——矩形阴影会在近黑底上露边），
+        // 内层是实心琥珀 + 深墨字；不再用砖红填充 + 亮环补丁。
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-                .size(72.dp)
-                .border(1.5.dp, Ember, CircleShape)   // 外环：EmberDeep 只有 2.57:1，靠 Ember 边界把按钮「描」出来
-                .background(EmberDeep, CircleShape)
+                .padding(bottom = 10.dp)
+                .size(132.dp)
+                .background(
+                    Brush.radialGradient(
+                        0.0f to Ember.copy(alpha = 0.30f),
+                        0.55f to Ember.copy(alpha = 0.10f),
+                        1.0f to Color.Transparent,
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .background(Ember, CircleShape)
                 .clickable { onRecord() },
             contentAlignment = Alignment.Center,
         ) {
-            Text("说梦", color = Paper, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "说梦",
+                color = OnLamp,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
         }
     }
 }
@@ -275,19 +310,14 @@ private fun DayCell(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // 日期是主内容：有梦的日子用正文色 + 600 字重，没梦的退到注脚灰。
+                // 旧版把日期压在次级灰、再用 4dp 琥珀点表示"存在"，等于让标题比内容更亮。
                 Text(
                     text = "${date.dayOfMonth}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (hasDreams) Paper else InkDim,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = if (hasDreams) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (hasDreams) Paper else InkFaint,
                 )
-                if (hasDreams) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 2.dp)
-                            .size(4.dp)
-                            .background(Ember, CircleShape),
-                    )
-                }
             }
         }
     }

@@ -2,21 +2,51 @@ package com.dreamkeeper.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** 夜色背景：冷灰（偏蓝调的墨黑），不是暖黑。这个值不动——整屏观感由它定调，改了所有对比度都得重算 */
-val Night = Color(0xFF0B0E13)
-/** 抬升层（卡片、弹窗） */
-val NightRaised = Color(0xFF12161F)
-/** 正文：冷灰的浅色（偏蓝调），不用纯白 */
-val Paper = Color(0xFFE6EAF2)
-/** 次要文字 */
-val InkDim = Color(0xFF8B95A7)
-/** 更弱的辅助信息。12sp 也属于正文，必须 ≥ 4.5:1 —— 旧值 #5A6474 只有 3.23:1 */
-val InkFaint = Color(0xFF7C8698)
-/** 分隔线：**只做装饰**。旧值拿它画"今天"的描边（1.34:1）等于看不见，今天改用 Ember */
-val Line = Color(0xFF232A36)
-/** 唯一强调色：琥珀，夜间不刺眼，也不与"红钮"抢注意力（Night 上 6.4:1，够做 1.5dp 描边） */
-val Ember = Color(0xFFC8873F)
-/** 录音状态专用**填充色**：暗红。不做文字色（Night 上只有 2.57:1），只用于说梦钮与错误容器的底色 */
-val EmberDeep = Color(0xFF8C3B34)
-/** 错误文字：EmberDeep 当 `error` 用时对比度不达标，M3 的 `error` 必须用这个（Night 上 7.18:1） */
+/**
+ * 视觉方向「灯下纸」（2026-11-01 改版）：
+ * 冷桌（Night/Void）承载结构与工具，暖纸（PaperSurface/PaperLit）承载文字，
+ * 琥珀（Ember/Lamp）**只作光**——用于当前时刻、录音钮、播放头，一屏最多一处。
+ *
+ * 旧版问题（可量化）：Ember #C8873F 与 InkDim #8B95A7 的 L* 只差 0.1，
+ * 强调色与二级文字一样亮；且 6 个 token 挤在 hue 218–222，整屏只有明度没有温度。
+ */
+
+/** 桌面/空间：冷黑，比旧版更沉（#0B0E13 → #0A0B0E） */
+val Night = Color(0xFF0A0B0E)
+/** 工具面：卡片、弹窗、输入框（冷） */
+val NightRaised = Color(0xFF131519)
+/** 冷底细线：只做装饰性分隔 */
+val Line = Color(0xFF272A30)
+
+/** 暖纸面：正文区域、列表卡片、空态纸面 */
+val PaperSurface = Color(0xFF231C15)
+/** 抬起的纸：小说稿、选中的版本 */
+val PaperLit = Color(0xFF2D2418)
+/** 纸上细线 */
+val PaperRule = Color(0xFF3A2F21)
+
+/** 纸面正文：暖象牙，不再偏蓝（旧 Paper #E6EAF2 r−b = −12，是屏幕不是纸） */
+val Paper = Color(0xFFE7DCC4)
+/** 纸面/冷面次级文字 */
+val InkDim = Color(0xFFB6A98F)
+/** 注脚（仍需 ≥4.5:1） */
+val InkFaint = Color(0xFF9C8D72)
+
+/** 冷面正文（工具区用） */
+val Ash = Color(0xFFB7BAC0)
+/** 冷面次级 */
+val AshDim = Color(0xFF7C8088)
+/** 冷面注脚 */
+val AshFaint = Color(0xFF6E727A)
+
+/** 唯一的光：琥珀。L* 71.3，比任何文字都亮，才配当强调 */
+val Ember = Color(0xFFE2A24E)
+/** 光的沉淀：只做 ≤2dp 描边或 ≤8% 晕，永远不做大面积填充 */
+val EmberDeep = Color(0xFF7A4E22)
+/** 说梦钮上的字：光底上的深墨 */
+val OnLamp = Color(0xFF1A1108)
+
+/** 错误文字：保留唯一语义色，不与品牌光抢 */
 val ErrorText = Color(0xFFE08578)
+/** 错误容器：中性暗红，不再复用 EmberDeep（旧版把品牌砖红注册成 errorContainer） */
+val ErrorContainer = Color(0xFF4A2620)

@@ -1,0 +1,75 @@
+APK_SHA256=0401f34122a384f5 (0.10.0 重打，debug 同源代码另测)
+DEVICE_TIME=2026-11-01T00:35:11+08:00
+HOST_TIME=2026-11-01T00:35:11+08:00
+REPLAY=./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks; ./gradlew --no-daemon :app:assembleRelease
+
+# 视觉改版（用户反馈「美学/配色没变化」后的重做）
+
+## 为什么改
+
+Plan 5 只加了 4 张插画和图标，配色仍是 Plan 1 的「冷蓝夜色 + 砖红按钮」。
+两位设计专家的量化审计（只读）：
+
+- `Ember #C8873F` 与 `InkDim #8B95A7` 的 L* 分别 61.6 / 61.5——强调色**没有明度特权**，
+  对比度只有 1.006×；琥珀承担 10 个角色但只占 0.2% 面积。
+- 冷色像素 98.3%、暖色 1.2%；8 个颜色 token 里 6 个色相在 218–222（钢蓝）。
+- 卡片 `NightRaised` 与背景 `Night` 的 ΔL* 只有 3.3（1.07:1），层级靠 1dp 描边。
+- 首页最大连续空白 356.6dp（39% 屏高），列表 ink 覆盖率 20.3%。
+- `EmberDeep #8C3B34` 同时当 `errorContainer` 和「说梦」主钮填充，正文对比 2.57:1。
+- `darkColorScheme` 只覆写 9 个槽，其余落 M3 基线 neutral-violet；`surfaceTint` 未设，
+  带 elevation 的表面会被琥珀染色。
+
+## 改法（方向 A「灯下纸」）
+
+- 结构走冷、内容与强调走暖（`ui/theme/Color.kt` 全量换值，旧 token 名保留）：
+  `Night #0A0B0E`、`NightRaised #131519`、`Line #272A30`；
+  `Paper #E7DCC4`（暖象牙，原来是 r−b=−12 的冷白）、`InkDim #B6A98F`、`InkFaint #9C8D72`；
+  `Ember #E2A24E`（L* 71，比所有文字亮）、`OnLamp #1A1108`；
+  新增 `PaperSurface #231C15`、`PaperLit #2D2418`、`PaperRule #3A2F21`、`Ash*` 冷操作色、
+  `ErrorContainer #4A2620`。
+- `Theme.kt`：`surfaceTint = Color.Transparent`（elevation 不再染琥珀）、`errorContainer`
+  不再复用 `EmberDeep`、`onPrimary` 用深墨。
+- `Type.kt`：宋体承载**内容**（displaySmall/headlineSmall/titleLarge/bodyLarge），
+  无衬线承载**操作**（titleMedium/bodyMedium/label*），全部加 letterSpacing。
+- 首页：日期数字改宋体 `titleLarge`（有梦 SemiBold + `Paper`，无梦 `InkFaint`），删掉 4dp
+  琥珀点；「说梦」从砖红填充改**实心琥珀 + 深墨字 + 径向渐变光晕**（一屏唯一光源）；
+  日历下方加 200sp 月份水印（`Paper` alpha 0.055，出血到右边缘），把 39% 真空变成「纸上印的月份」。
+- 列表：时间轴「琥珀竖线 + 灰字」改**暖纸卡片**（`PaperSurface` 14dp 圆角、日期 labelSmall
+  + 标题宋体 titleLarge），分段控件选中态用 `PaperLit` 而不是砖红。
+- 详情：小说正文放进 `PaperSurface` 圆角纸面（18dp），不再浮在近黑底上。
+- 设置：卡片从「1dp 描边」改**面差**（`PaperSurface` 14dp），保存按钮用琥珀 + 深墨字。
+- 空态：插画 116→168dp、标题 headlineSmall、间距 28/8。
+
+## 证据（截图，裁掉状态栏 100px 后 nearWhite 全 0）
+
+| 文件 | sha256 前16 | 字节 | nearWhite |
+| --- | --- | --- | --- |
+| p6-ui-04-after-home.png | 0c8b8d6e54f2c191 | 151955 | 0.0000% |
+| p6-ui-05-after-list.png | f6434955b4d844a1 | 97851 | 0.0000% |
+| p6-ui-06-after-detail.png | 815555de4e9b8ef5 | 171668 | 0.0000% |
+| p6-ui-07-after-settings.png | bef4a823a43f8590 | 228439 | 0.0000% |
+| p6-ui-08-before-home.png | （改版前，对照） | — | — |
+| p6-ui-09-before-list.png | （改版前，对照） | — | — |
+| p6-ui-10-before-detail.png | （改版前，对照） | — | — |
+
+改版后 4 张为 debug 包（种子数据，同一份代码）；release 0.10.0 重打后：
+
+- APK 9,728,730 B，sha256 `0401f34122a384f5…`，versionCode 3 / 0.10.0，证书 `cf1a5dce…`。
+- 卸载重装 release，冷启 ×3：478 / 447 / 493 ms；`FATAL EXCEPTION`=0；`dk_debug_save_key`=0。
+- 全量单测 `--rerun-tasks`：**classes=59 tests=488 failures=0 errors=0**（1m21s）。
+
+## 读法
+
+1. 打开 `p6-ui-08/09/10`（before）与 `p6-ui-04/05/06`（after）对照：同一页、同一数据，
+   区别只在配色、字体、面差与光。
+2. 首页看两处：日期是宋体暖象牙、有梦的日子更重；「说梦」是整屏唯一亮面。
+3. 列表看卡片：有纸面、有圆角、有标题层级，不再是「竖线 + 一行灰字」。
+4. 详情看正文：纸面承托、宋体 17/31、行距更松。
+
+## 未覆盖 / 已知取舍
+
+- 只做深色主题（`Theme.kt` 只有 darkColorScheme，设计稿也没有浅色）。
+- 宋体依赖系统 fallback（`sans-serif` 之外未打包字体），国产 ROM 可能落到思源/系统宋体；
+  未做字体内嵌——会增大约 3–8 MB，留待真机字体观感确认后再定。
+- 空态插画未按新纸色重绘（现有 4 张仍是 Plan 5 版），只调了尺寸；重绘列为后续。
+- 触控 48dp、1.3× 不截断等既有约束未回退；TalkBack 仍未覆盖（D487）。

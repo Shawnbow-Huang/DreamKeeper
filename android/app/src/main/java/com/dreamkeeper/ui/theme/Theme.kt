@@ -3,23 +3,30 @@ package com.dreamkeeper.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 
 private val DreamColorScheme = darkColorScheme(
     primary = Ember,
-    onPrimary = Night,
+    onPrimary = OnLamp,
+    primaryContainer = EmberDeep,
+    onPrimaryContainer = Paper,
+    secondary = Ash,
+    onSecondary = Night,
     background = Night,
     onBackground = Paper,
     surface = NightRaised,
     onSurface = Paper,
+    surfaceVariant = PaperSurface,
     onSurfaceVariant = InkDim,
-    // outline 是"必须看得见的边界"（输入框、可点容器），不能给 Line（1.34:1）；
-    // 装饰性分隔线走 outlineVariant —— 这是 Line 在 M3 里的唯一去处
+    // 边界要看得见（输入框、可点容器）；装饰线走 outlineVariant
     outline = InkDim,
     outlineVariant = Line,
     error = ErrorText,
-    // EmberDeep 只做填充：错误容器的底色，不是错误文字的颜色
-    errorContainer = EmberDeep,
+    errorContainer = ErrorContainer,
     onErrorContainer = Paper,
+    // 关键：M3 默认 surfaceTint = primary，任何 elevation 都会被琥珀染色；
+    // 近黑底上这点染色会变成"脏棕"，必须关掉。
+    surfaceTint = Color.Transparent,
 )
 
 @Composable

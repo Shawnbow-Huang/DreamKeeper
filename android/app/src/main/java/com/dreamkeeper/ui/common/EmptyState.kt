@@ -41,7 +41,7 @@ fun EmptyState(
                 Image(
                     painter = illustration,
                     contentDescription = null,
-                    modifier = Modifier.width(116.dp),
+                    modifier = Modifier.width(168.dp),
                 )
                 Spacer(modifier = Modifier.height(24.dp))
             }
