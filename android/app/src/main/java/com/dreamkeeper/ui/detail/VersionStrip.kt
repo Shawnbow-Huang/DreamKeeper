@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -123,20 +125,27 @@ fun VersionStrip(
 @Composable
 private fun VersionChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val background = if (selected) Ember.copy(alpha = 0.18f) else NightRaised
-    Row(
+    // 可视仍是 36dp 胶囊，点击区扩到 48dp（Plan 5 T6 / A11y：触控目标 ≥48dp）。
+    Box(
         modifier = Modifier
-            .height(36.dp)
-            .background(background, RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            color = if (selected) Paper else InkDim,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-        )
+        Row(
+            modifier = Modifier
+                .height(36.dp)
+                .background(background, RoundedCornerShape(18.dp))
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                color = if (selected) Paper else InkDim,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+            )
+        }
     }
 }

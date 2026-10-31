@@ -1,0 +1,50 @@
+APK_SHA256=9d3fdce8b75d9749
+DEVICE_TIME=Sat Oct 31 22:28:20 CST 2026
+REPLAY=adb shell settings put system font_scale 1.3 && adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell uiautomator dump /sdcard/ui3.xml
+FONT_SCALE=1.3 (adb shell settings get system font_scale)
+
+# p5-a11y-01-bounds.txt — T6 触控目标 ≥48dp（1.3× 字号下实测）
+
+## 怎么测
+1. `adb shell settings put system font_scale 1.3`，`force-stop` 后冷启；
+2. 进 10月8日「教室」→「小说化」tab（版本线 + 快捷 chips 同屏）；
+3. `adb shell uiautomator dump /sdcard/ui3.xml` 后 `exec-out cat` 拉回，解析所有 `clickable="true"` 节点；
+4. 设备 1080×2400 / 420dpi → 48dp = 126px，判据 `height >= 126`。
+
+## 结果
+clickable 节点 **17 个，全部 ≥126px，0 个低于门槛**。抽样（原始 bounds）：
+
+```
+版本线 chip v9   [42,704][297,830]    h=126
+版本线 chip v8   [318,704][573,830]   h=126
+版本线 chip v7   [594,704][1080,830]  h=126
+快捷 chips（4 枚同排）
+                 [42,1830][266,1956]  h=126
+                 [287,1830][511,1956] h=126
+                 [532,1830][796,1956] h=126
+                 [817,1830][1038,1956] h=126
+tab（原样/小说化/标签/素材）
+                 [42,189][291,315]    h=126
+返回/更多        [11,63][137,189]     h=126  [943,63][1069,189] h=126
+```
+完整 17 行原始 bounds 见 `.scratch/ui3.xml`（不入库，可用上面 REPLAY 重现）。
+
+## 读法
+- 「可视胶囊」仍是 36dp（`VersionChip` 内层 `height(36.dp)`），但外层 `Box(heightIn(min = 48.dp))` 承担点击；因此截图里胶囊看起来没变高，点击区却从 36dp 扩到 48dp。
+- 快捷 chips 同理（`ReviseSheet` 外层 Box 48dp + 内层胶囊 36dp）。
+- 设置页的选择 chips 本来就是 `heightIn(min = 48.dp)`，未改。
+
+## 1.3× 字号回归
+- `p5-ui-05-fontscale.png`：设置页 1.3× 下模型 chips 单行不截断（改前「DeepSeek V4 Pro」被挤成两行 → T6 把 `ChoiceRow` 从 `Row` 换成 `FlowRow`，放不下就换行，不挤断文案）；「关于」卡完整可见。
+- `p5-ui-06-version.png`：小说化 tab 1.3× 下版本线/成本行/正文/快捷 chips 全部不截断，无重叠。
+
+## 截图元数据
+```
+p5-ui-05-fontscale.png  sha256 4366dda853e07623…  (1080x2400)  nearWhite(顶部裁 100px, ≥245)=0  nw250=0
+p5-ui-06-version.png    sha256 2ae6510be56eac2f…  (1080x2400)  nearWhite(顶部裁 100px, ≥245)=0  nw250=0
+```
+状态栏未裁时两张各约 0.21% 近白（时钟/信号/电量），按 Plan 5 README 的 `TopOffset=100` 口径排除。
+
+## 未覆盖
+- 系统字体放大到 2.0×（Android 上限）不在 v1 承诺内；1.3× 是 Plan 5 的验收档。
+- TalkBack 逐项朗读未做真机验证（模拟器无中文 TTS），A11y 仅覆盖触控尺寸与截断。

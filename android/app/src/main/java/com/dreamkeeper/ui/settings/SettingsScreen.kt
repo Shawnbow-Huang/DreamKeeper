@@ -3,7 +3,10 @@ package com.dreamkeeper.ui.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreamkeeper.llm.GenerationOptions
 import com.dreamkeeper.llm.ThinkingLevel
+import com.dreamkeeper.BuildConfig
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.ErrorText
@@ -86,6 +90,28 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 onModel = vm::setModel,
                 onThinking = vm::setNovelThinking,
             )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            SectionLabel("关于")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NightRaised, RoundedCornerShape(14.dp))
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = "梦匣 ${BuildConfig.VERSION_NAME} · 本地运行 · 无账号",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Paper,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "所有记录只在本机；除你配置的模型服务外，不上传任何内容。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkFaint,
+                )
+            }
 
         }
     }
@@ -286,7 +312,8 @@ private fun GenerationCard(
     }
 }
 
-/** 单行胶囊选择器：选中 Ember 边 + Paper 字，未选 Line 边 + InkDim 字。 */
+/** 单行胶囊选择器：选中 Ember 边 + Paper 字，未选 Line 边 + InkDim 字。大字号下自动换行，不把文案挤断。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> ChoiceRow(
     options: List<Pair<Int, T>>,
@@ -294,13 +321,15 @@ private fun <T> ChoiceRow(
     label: (T) -> String,
     onSelect: (Int) -> Unit,
 ) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        options.forEachIndexed { index, (value, item) ->
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { (value, item) ->
             val active = value == selected
             Text(
                 text = label(item),
                 modifier = Modifier
-                    .padding(end = 8.dp)
                     .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(if (active) Night else Night)
@@ -309,6 +338,7 @@ private fun <T> ChoiceRow(
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (active) Paper else InkDim,
+                maxLines = 1,
             )
         }
     }

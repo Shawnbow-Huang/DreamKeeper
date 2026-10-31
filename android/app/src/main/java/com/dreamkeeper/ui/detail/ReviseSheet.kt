@@ -3,11 +3,12 @@ package com.dreamkeeper.ui.detail
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -71,19 +72,26 @@ fun ReviseSheet(
             .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
     ) {
         LazyRow(
-            modifier = Modifier.fillMaxWidth().height(48.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 6.dp),
         ) {
             items(REVISE_QUICK_PICKS) { pick ->
-                Row(
+                // 触控目标 48dp，胶囊视觉仍是 36dp（Plan 5 T6 / A11y）。
+                Box(
                     modifier = Modifier
-                        .background(NightRaised, RoundedCornerShape(18.dp))
-                        .clickable(enabled = !sending) { onValueChange(appendQuickPick(value, pick)) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .heightIn(min = 48.dp)
+                        .clickable(enabled = !sending) { onValueChange(appendQuickPick(value, pick)) },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(text = pick, color = InkDim, fontSize = 12.sp, maxLines = 1)
+                    Row(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .background(NightRaised, RoundedCornerShape(18.dp))
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = pick, color = InkDim, fontSize = 12.sp, maxLines = 1)
+                    }
                 }
             }
         }

@@ -126,6 +126,11 @@ T0 契约冻结（Lead）→ T1 资产生成与压缩（Lead，DSH 生图）→ 
 T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `llm/`，约定先 T2 后 T5；T4 依赖 T1 的插画；T6 依赖 T4；T7 依赖 T2–T6 全绿。
 
 ## §0.9 偏差登记（从 D461 起）
+| D484 | 2026-10-31 | T6 | 版本线/快捷 chips 改「外层 48dp 点击区 + 内层 36dp 胶囊」，可视高度不变 | UI Designer 规格：触控 ≥48dp，但不改设计语言 |
+| D485 | 2026-10-31 | T6 | 设置页模型 chips `Row` 改 `FlowRow`，1.3× 字号下允许换行而不是挤断 | 1.3× 实测「DeepSeek V4 Pro」被挤成两行，违反「不截断」 |
+| D486 | 2026-10-31 | T6 | 设置页新增「关于」卡（版本/本地运行/无账号 + 隐私一句） | 需求 #1 收口 + 发布信息；版本号随 T7 升到 0.9.0 |
+| D487 | 2026-10-31 | T6 | A11y 用 uiautomator bounds + 1.3× 截图取证；TalkBack 真机朗读明确未覆盖而非 PENDING | 模拟器无中文 TTS，不能假称通过 |
+
 | D478 | 2026-10-31 | T4 | Lead 直接实施、未先红（纯 UI 组合无逻辑可测）；设备截图推到 T7 release 空库一轮拍 | 空态组件只取材于四张已入库插画，行为由既有 UI 测试覆盖 |
 | D479 | 2026-10-31 | T4 | T4 不新增单测；空态正确性由 T7 的 release 空库截图 + 资产目录测试覆盖 | 避免为「无逻辑组件」写假断言 |
 | D480 | 2026-10-31 | T5 | A1 修复改变旧语义：占位头被修复且水位未追平时现在置 PENDING（原保持 OK） | 否则被杀的首次录音永远不会补转写；属有意的行为修正 |
@@ -302,6 +307,16 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 - 结论：通过。
 
 ## §10 验收记录
+
+### Task 6 验收（Lead，2026-10-31）
+
+- **交付**：`VersionStrip`/`ReviseSheet` 触控区 48dp（内层胶囊 36dp）、`SettingsScreen` 关于卡 + `ChoiceRow` 改 `FlowRow`。
+- **Lead 独立复跑**：`:app:testDebugUnitTest --rerun-tasks` BUILD SUCCESSFUL 57s，**52 类/443 例/0/0/0**（T6 未改测试，计数不退化）。
+- **设备证据**：APK sha 前16 `9d3fdce8b75d9749`，`font_scale=1.3`；`p5-ui-05-fontscale.png`（设置页，模型 chips 单行不截断）、`p5-ui-06-version.png`（版本线/成本行/正文不截断）、`p5-a11y-01-bounds.txt`（17 个 clickable 全部 ≥126px）。
+- **契约**：截图全 nearWhite=0；触控尺寸按 420dpi 换算 48dp=126px；未新增依赖、未改主题 token。
+- **PENDING**：TalkBack 真机朗读（无中文 TTS）、2.0× 字号（超出 v1 承诺）。
+- **结论**：通过。
+
 
 ### Task 4 验收（Lead，2026-10-31）
 
