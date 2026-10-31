@@ -86,6 +86,11 @@ import com.dreamkeeper.export.ExportResult
 import com.dreamkeeper.llm.GenerationKind
 import com.dreamkeeper.llm.ReviseOrchestrator
 import com.dreamkeeper.ui.day.DayViewModel
+import com.dreamkeeper.R
+import com.dreamkeeper.ui.common.EmptyState
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.ErrorText
@@ -136,7 +141,8 @@ private enum class DetailTab(val label: String) {
 }
 
 /** 小说化还没有稿子时的占位。等 Plan 2 接上大模型，这里换成正文 */
-private const val NOVEL_EMPTY = "还没有小说稿。点上面的「小说化」，想好怎么写可以直接生成。"
+private const val NOVEL_EMPTY_TITLE = "还没有小说稿"
+private const val NOVEL_EMPTY_HINT = "点上面的「小说化」，想好怎么写可以直接生成。"
 
 /** 波形根数：定值，别按宽度算——换个屏就换一个波形，截图对不上 */
 private const val WAVE_BARS = 40
@@ -166,6 +172,8 @@ fun DetailScreen(
     generationScope: kotlinx.coroutines.CoroutineScope? = null,
     /** Plan 4 T6b：跨页生成进度表；null 时只在 ViewModel 内有效（测试/预览）。 */
     generationTracker: GenerationTracker? = null,
+    /** Plan 5 T5（A2）：「重试转写」拨回 PENDING 后真正去跑 STT 的入口；null 时只改状态。 */
+    onRetryTranscription: (() -> Unit)? = null,
 ) {
     val vm: DetailViewModel = viewModel {
         DetailViewModel(
@@ -177,6 +185,7 @@ fun DetailScreen(
             revise = orchestrator,
             generationScope = generationScope,
             tracker = generationTracker,
+            onRetryTranscription = onRetryTranscription,
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -769,7 +778,12 @@ private fun NovelTab(
         ) {
             val body = novelText?.takeIf { it.isNotBlank() }
             if (body == null) {
-                Text(text = NOVEL_EMPTY, style = MaterialTheme.typography.bodyLarge, color = InkDim)
+                EmptyState(
+                    illustration = painterResource(R.drawable.illus_novel_empty),
+                    title = NOVEL_EMPTY_TITLE,
+                    hint = NOVEL_EMPTY_HINT,
+                    modifier = Modifier.height(320.dp),
+                )
             } else {
                 body.split(Regex("\n+")).map { it.trim() }.filter { it.isNotEmpty() }.forEach { paragraph ->
                     Text(
@@ -996,6 +1010,12 @@ private fun MediaTab() {
                 .border(1.dp, InkDim, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
+            Image(
+                painter = painterResource(R.drawable.illus_media),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),

@@ -39,6 +39,9 @@ import com.dreamkeeper.ui.common.DreamCard
 import com.dreamkeeper.ui.common.cardText
 import com.dreamkeeper.ui.common.firstSentence
 import com.dreamkeeper.ui.day.DayViewModel
+import com.dreamkeeper.R
+import com.dreamkeeper.ui.common.EmptyState
+import androidx.compose.ui.res.painterResource
 import com.dreamkeeper.ui.theme.Ember
 import com.dreamkeeper.ui.theme.EmberDeep
 import com.dreamkeeper.ui.theme.InkDim
@@ -290,21 +293,9 @@ private fun CardStream(entries: List<LibraryItem>, onOpen: (String) -> Unit) {
  */
 @Composable
 private fun EmptyLibrary() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = "还没有梦",
-                style = MaterialTheme.typography.bodyLarge,
-                color = InkDim,
-            )
-            Text(
-                text = "去日历页，按那个橙色的钮",
-                style = MaterialTheme.typography.labelSmall,
-                color = InkFaint,
-            )
-        }
-    }
+    EmptyState(
+        illustration = painterResource(R.drawable.illus_library_empty),
+        title = "还没有梦",
+        hint = "去日历页，按那个橙色的钮",
+    )
 }
