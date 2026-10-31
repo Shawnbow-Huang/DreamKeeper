@@ -1,0 +1,49 @@
+APK_SHA256=f27bf2259afbabab
+DEVICE_TIME=Sat Oct 31 22:32:30 CST 2026
+REPLAY=cd android && JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:assembleRelease
+VERSION=0.9.0 (versionCode 2)
+
+# p5-release-01-build.txt — Plan 5 T7 发布包构建与签名
+
+## 构建
+```
+./gradlew --no-daemon :app:assembleRelease
+BUILD SUCCESSFUL in 1m 24s
+52 actionable tasks: 27 executed, 1 from cache, 24 up-to-date
+产物：android/app/build/outputs/apk/release/app-release.apk
+```
+
+## 产物
+```
+versionCode=2  versionName=0.9.0  (aapt2 dump badging)
+size=9,695,958 B
+sha256=f27bf2259afbabab…（前 16 位；完整值见本目录 git blob）
+```
+体积对照：Plan 4 的 release 未签名包 9,612,189 B → 现在 9,695,958 B，增量 83,769 B（v2 签名块 + 证书 + 版本号），未超 1.2 MiB 预算。
+
+## 签名（本地 keystore，不入仓）
+```
+Signer #1 certificate DN: CN=DreamKeeper, O=Local, C=CN
+Signer #1 certificate SHA-256 digest: cf1a5dce2884e84560d4a7f235eca65f0c206a88ba0dfc017d3921e7960d4b53
+apksigner verify --print-certs exit 0
+```
+- keystore：`C:/Users/17383/.dreamkeeper/dreamkeeper-release.jks`（仓库外），`android/keystore.properties` 由 `.gitignore` 排除；口令未写入任何入库文件。
+- 构建配置：`android/app/build.gradle.kts` 读 `keystore.properties`，缺失时 release 产出 unsigned 包且不失败（D488）。
+
+## 包内资产（aapt2 dump resources）
+```
+color/ic_launcher_background
+drawable/ic_launcher_foreground
+drawable/illus_day_empty
+drawable/illus_library_empty
+drawable/illus_media
+drawable/illus_novel_empty
+mipmap/ic_launcher
+mipmap/ic_launcher_round
+```
+
+## 秘密检查
+```
+git ls-files | grep -cE "\.jks$|keystore\.properties$"   → 0
+grep -R "storePassword" 只命中 build.gradle.kts 的属性读取    → 无明文
+```

@@ -126,6 +126,11 @@ T0 契约冻结（Lead）→ T1 资产生成与压缩（Lead，DSH 生图）→ 
 T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `llm/`，约定先 T2 后 T5；T4 依赖 T1 的插画；T6 依赖 T4；T7 依赖 T2–T6 全绿。
 
 ## §0.9 偏差登记（从 D461 起）
+| D488 | 2026-10-31 | T7 | release 签名改从 `android/keystore.properties` 条件加载（缺失则产出 unsigned 包），keystore 放仓库外 | 密钥不入仓；没有配置文件时构建不应失败 |
+| D489 | 2026-10-31 | T7 | 日视图空态（「这天没有梦」）截图不伪造：`CalendarScreen.kt:267` 空日不可点，UI 上无法到达 | 设计约束（空日点击无反应），不是环境限制；登记而非 PENDING |
+| D490 | 2026-10-31 | T7 | 首启空库证据通过「adb uninstall → install release」取得；截图含 0 梦日历 + 库/小说/素材三张插画 | 覆盖安装不会清库，只有卸载重装才是真首启 |
+| D491 | 2026-10-31 | T7 | 新增 `RELEASE.md` 与 `CHANGELOG.md`（0.9.0），并记录签名/安装/PENDING 清单 | 发布交付物缺失：此前只有证据目录 |
+
 | D484 | 2026-10-31 | T6 | 版本线/快捷 chips 改「外层 48dp 点击区 + 内层 36dp 胶囊」，可视高度不变 | UI Designer 规格：触控 ≥48dp，但不改设计语言 |
 | D485 | 2026-10-31 | T6 | 设置页模型 chips `Row` 改 `FlowRow`，1.3× 字号下允许换行而不是挤断 | 1.3× 实测「DeepSeek V4 Pro」被挤成两行，违反「不截断」 |
 | D486 | 2026-10-31 | T6 | 设置页新增「关于」卡（版本/本地运行/无账号 + 隐私一句） | 需求 #1 收口 + 发布信息；版本号随 T7 升到 0.9.0 |
@@ -307,6 +312,17 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 - 结论：通过。
 
 ## §10 验收记录
+
+### Task 7 验收（Lead，2026-10-31）
+
+- **交付**：`versionCode 2 / versionName 0.9.0`、条件签名（`keystore.properties`）、`RELEASE.md`、`CHANGELOG.md`。
+- **构建**：`:app:assembleRelease` BUILD SUCCESSFUL 1m24s，APK 9,695,958 B、sha 前16 `f27bf2259afbabab`；`apksigner verify` 通过，证书 SHA-256 `cf1a5dce2884e845…d4b53`。
+- **安装/冷启**：卸载 debug → 装 release Success；冷启 3 次 440/436/431 ms（中位 436）；`FATAL EXCEPTION`=0；`dk_debug_save_key`=0。
+- **首启为空**：0 梦日历 + 库/小说/素材三张插画（nearWhite 全 0）；日视图空态不可达（D489，不伪造）。
+- **资产核对**：`aapt2 dump resources` 含 4 张插画、图标前景/背景、adaptive mipmap；包内资产与 debug 同源。
+- **PENDING**：真机安装/麦克风/系统 STT（P1/P2/P9）、API 26–28（无镜像）、导出打开态（无查看器）。
+- **结论**：通过（候选版）。
+
 
 ### Task 6 验收（Lead，2026-10-31）
 

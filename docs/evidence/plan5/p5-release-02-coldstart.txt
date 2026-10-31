@@ -1,0 +1,33 @@
+APK_SHA256=f27bf2259afbabab
+DEVICE_TIME=Sat Oct 31 22:33:10 CST 2026
+REPLAY=adb uninstall com.dreamkeeper && adb install android/app/build/outputs/apk/release/app-release.apk && for i in 1 2 3; do adb shell am force-stop com.dreamkeeper; adb shell am start -W -n com.dreamkeeper/.MainActivity; done
+
+# p5-release-02-coldstart.txt — 覆盖安装/冷启/首启为空
+
+## 安装
+```
+adb uninstall com.dreamkeeper        → Success
+adb install app-release.apk          → Performing Streamed Install / Success
+```
+（先卸载是因为 release 用真签名，debug 包与它签名不同，直接 install -r 会 INSTALL_FAILED_UPDATE_INCOMPATIBLE。）
+
+## 冷启动 ×3（force-stop 后 am start -W）
+| # | Status | TotalTime | WaitTime |
+| - | ------ | --------- | -------- |
+| 1 | ok | **440 ms** | 443 ms |
+| 2 | ok | **436 ms** | 438 ms |
+| 3 | ok | **431 ms** | 433 ms |
+中位 436 ms，门槛「3 次中位 ≤1200ms」通过。
+
+## 稳定性与秘密
+```
+adb shell logcat -d | grep -c "FATAL EXCEPTION"   → 0
+adb shell logcat -d | grep -c "dk_debug_save_key"  → 0
+```
+release 的 `BuildConfig.DEBUG=false`，`MainActivity` 的 debug Key 注入分支不会执行；设置页 Key 区仍在，但用户输入写 Keystore 且不落日志（D365）。
+
+## 首启为空（release 无种子）
+- 桌面 0 条梦：日历页「共 **0** 天有梦」，`p5-empty-00-calendar.png`。
+- 全部 tab：`EmptyState` 插画 +「还没有梦 / 去日历页，按那个橙色的钮」，`p5-empty-01-library.png`。
+- 随后为验证另外两张插画，用模拟器录了一条 2.4s 梦（无 STT）、进入详情：小说化 tab 见「还没有小说稿」插画（`p5-empty-02-novel.png`），素材 tab 见空画框插画（`p5-empty-03-media.png`）。
+- **日视图空态不可达**：`CalendarScreen.kt:267` 的 DayCell 只在 `hasDreams` 时挂 `clickable`（空日点击无反应，添加只有「说梦」一个入口），所以「这天没有梦」在 UI 上无法进入；登记 D489，不伪造截图。
