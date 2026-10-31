@@ -1,0 +1,34 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-31T15:11:57Z
+REPLAY=cd android && ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.llm.ConnectionTesterTest" --rerun-tasks --console=plain
+REPLAY_FULL=cd android && ./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks --console=plain
+
+## 这份证据回答什么
+「测试连接」按钮点下去，会不会连点两次发两次请求？没配 Key 会不会发空 `Bearer` 出去？
+失败会不会被当成成功？结果回来时用户已经切到别家，会不会串台？
+
+## 契约（Plan 6 §0.4 / T3）
+- **只测已保存的 Key**：`keyOf(provider)` 返回空 → `Failed(NO_KEY)`，**0 HTTP**。
+- **单次请求**：`RetryPolicy(maxAttempts=1)`，call/read/connect = 20s/15s/10s；不跟生成链的 4 次重试共用。
+- **单飞**：同一时刻只允许一次请求；重复点击立即返回 `Failed(UNKNOWN)`（UI 表现为「正在测试，请稍候」）。
+- **结果带 providerId + nonce**：UI 用它丢弃「切走之后才回来的旧结果」。
+- **不写库、不进生成作用域**：本类不碰 `llm_calls`，也不持有生成状态。
+- 请求体：`max_tokens=1`、思考关闭、不要求 JSON（D504）。
+
+## 测试（6 例，全绿）
+`android/app/src/test/java/com/dreamkeeper/llm/ConnectionTesterTest.kt`
+1. `success reports latency http status and the default model` —— 200 → Ok(200, 延迟, 默认模型 qwen3.8-max, nonce 原样返回, 1 次请求)
+2. `missing key makes zero http requests` —— 空 Key → NO_KEY 且服务器计数 0
+3. `401 is auth and sent once` —— AUTH，请求数 1（不重试）
+4. `429 is rate limited and never retried` —— RATE_LIMITED，请求数 1
+5. `read timeout is reported as timeout` —— 服务器故意 1.5s，readTimeout 200ms → TIMEOUT
+6. `second tap while in flight makes no second request` —— 第一次在飞时第二次立即 UNKNOWN，服务器只收到 1 次
+
+## 全量
+`--rerun-tasks` BUILD SUCCESSFUL in 1m 8s；XML 重数 **classes=58 tests=475 failures=0 errors=0 skipped=0**
+（T2 基线 57/469 + 本任务 1 类 6 例）。
+
+## 未覆盖（写清楚）
+- 五家真连通仍 PENDING（D502）：本证据只证「请求怎么发、结果怎么判、失败怎么分类」。
+- UI 三态与按钮禁用属 T4（`SettingsViewModel`/`SettingsScreen`）；本层没有 UI。
+- 「测试成功后是否写入任何状态」刻意不做：结果只在内存/界面，不落库（D501 的「已保存」语义）。

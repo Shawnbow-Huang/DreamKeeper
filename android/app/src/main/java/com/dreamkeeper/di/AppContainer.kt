@@ -17,6 +17,7 @@ import com.dreamkeeper.data.settings.GenerationPrefs
 import com.dreamkeeper.data.security.KeystoreApiKeyStore
 import com.dreamkeeper.llm.AssetPriceCardSource
 import com.dreamkeeper.llm.AssetPromptSource
+import com.dreamkeeper.llm.ConnectionTester
 import com.dreamkeeper.llm.DeepSeekClient
 import com.dreamkeeper.llm.ProviderChatClient
 import com.dreamkeeper.llm.ProviderId
@@ -219,6 +220,35 @@ class AppContainer(
      */
     val generationPrefs: GenerationPrefs by lazy {
         GenerationPrefs(appContext.getSharedPreferences(GenerationPrefs.PREFS_NAME, Context.MODE_PRIVATE))
+    }
+
+    /**
+     * 「测试连接」（Plan 6 T3）：独立短超时 client、单次请求、只测已保存的 Key。
+     *
+     * 不复用 [providerClients]：生成链的 300s/180s 是给长文用的，测试连接 20s/15s/10s 才合理；
+     * 也不复用 `RetryPolicy()` 的 4 次预算——这里 `maxAttempts=1`。
+     */
+    val connectionTester: ConnectionTester by lazy {
+        ConnectionTester(
+            clientFor = { provider ->
+                if (provider == ProviderId.DEEPSEEK) {
+                    DeepSeekClient(
+                        callTimeoutMs = 20_000,
+                        readTimeoutMs = 15_000,
+                        retry = com.dreamkeeper.llm.RetryPolicy(maxAttempts = 1),
+                    )
+                } else {
+                    ProviderChatClient(
+                        spec = ProviderRegistry.of(provider),
+                        callTimeoutMs = 20_000,
+                        readTimeoutMs = 15_000,
+                        connectTimeoutMs = 10_000,
+                        retry = com.dreamkeeper.llm.RetryPolicy(maxAttempts = 1),
+                    )
+                }
+            },
+            keyOf = { provider -> apiKeyStore.load(provider) },
+        )
     }
 
     val generationStore: GenerationStore by lazy { RoomGenerationStore(database) }

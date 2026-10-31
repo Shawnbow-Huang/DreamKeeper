@@ -127,6 +127,9 @@
 | D511 | 2026-10-31 | T2 | MiniMax 的 `base_resp` 假成功在**状态判定阶段**翻成 `BAD_REQUEST`（不重试）；解析阶段再兜一层 | 若只在解析处翻，`attempts` 会先被记为成功行，与 `llm_calls` 口径冲突 |
 | D512 | 2026-10-31 | T2 | Qwen 的 `HIGH`/`MAX` 都映射到 `xhigh`；`LOW→low` | Qwen 官方 effort 只有 low/medium/xhigh，没有 high/max；发非法枚举会被服务端拒 |
 | D513 | 2026-10-31 | T2 | T2 由 Lead 直接实施；`providerClients` 只在容器建映射，生成链仍走 DeepSeek | 派工/等待成本高于本层改动；按 provider 派发属于 T4/T5 的接线范围 |
+| D514 | 2026-10-31 | T3 | 单飞用 `AtomicBoolean` 而非 Mutex：第二个调用立即返回 `UNKNOWN`，不挂起排队 | 连接测试是用户手动点的小操作，排队等待没有意义；立即返回也让「连点」可测 |
+| D515 | 2026-10-31 | T3 | DeepSeek 的测试连接复用 `DeepSeekClient`（20s/15s、maxAttempts=1），不新建 client | DeepSeek 请求体已冻基线；独立短超时实例避免了 300s 挂死 |
+| D516 | 2026-10-31 | T3 | T3 由 Lead 直接实施；结果分类 `ConnectionOutcome.Reason` 独立于 ui 层 `UserFacingReason` | llm 层不反向依赖 ui；T4 负责把 Reason 翻成人话 |
 
 ## §0.10 顺序与闸门
 
@@ -230,3 +233,9 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - 契约：MiMo 不发 effort；MiniMax 永不发 response_format；Qwen 用 `enable_thinking` 且 `HIGH/MAX→xhigh`；GLM/DeepSeek 用 thinking 对象；`max_tokens` 仅显式传入时出现；未知模型回落默认。
 - 错误：MiniMax 200 假成功→BAD_REQUEST 且 attempts=1；401 单次；429 用满预算；空 content/非 JSON 不重试。
 - 结论：通过。PENDING：五家真连通、强制思考模型、地域/端点实测。
+
+### T3 测试连接（Lead，2026-10-31）
+- 交付：`llm/ConnectionTester.kt`（单飞 / 空 Key 0 HTTP / 单次预算 / 结果带 providerId+nonce / Reason 分类）、`di/AppContainer.kt`（短超时 clientFor）、`ConnectionTesterTest` 6 例、`docs/evidence/plan6/p6-conn-01-tester.txt`。
+- 独立复跑：targeted 53s 绿；全量 68s，XML **58 类 475 例 0 失败**。
+- 契约：已保存 Key 才测；`maxAttempts=1`；20/15/10s；连点只发一次；失败分 AUTH / RATE_LIMITED / TIMEOUT / NETWORK / BAD_REQUEST / SERVER / BAD_CONTENT / NO_KEY。
+- 结论：通过。PENDING：五家真连通（无真实 Key）、UI 三态（T4）。

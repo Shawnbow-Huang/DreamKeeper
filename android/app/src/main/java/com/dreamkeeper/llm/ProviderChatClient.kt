@@ -37,6 +37,7 @@ class ProviderChatClient(
     private val client: OkHttpClient = OkHttpClient(),
     callTimeoutMs: Long = 300_000,
     readTimeoutMs: Long = 180_000,
+    connectTimeoutMs: Long = 10_000,
     private val baseUrlOverride: String? = null,
     private val sleeper: suspend (Long) -> Unit = { delay(it) },
     private val clock: () -> Long = System::currentTimeMillis,
@@ -47,6 +48,7 @@ class ProviderChatClient(
     private val http: OkHttpClient = client.newBuilder()
         .callTimeout(callTimeoutMs, TimeUnit.MILLISECONDS)
         .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
+        .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
         .build()
 
     private val endpoint: String =
