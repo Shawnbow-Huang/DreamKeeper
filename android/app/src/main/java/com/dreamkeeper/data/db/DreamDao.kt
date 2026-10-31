@@ -273,13 +273,30 @@ interface DreamDao {
         transcriptStatus: String,
     ): Int
 
+    /**
+     * 启动扫描发现「文件变长了」（A1）：把新时长落库，并且**若有未覆盖音频就置 PENDING**。
+     *
+     * 旧行为只改 `rawAudioMs`、状态保持 `OK`，于是「追加录音中途被杀」的尾巴永远不会被
+     * 补转写（启动补跑只扫 PENDING）。`transcriptMs < :ms` 时置 PENDING 是唯一的自我修复点；
+     * 已追平的行保持原状态（不要无端把 OK 打回 PENDING）。
+     */
+    @Query("""
+        UPDATE dreams
+        SET rawAudioMs = :ms,
+            transcriptStatus = CASE WHEN transcriptMs < :ms THEN 'PENDING' ELSE transcriptStatus END
+        WHERE id = :id
+          AND (rawAudioMs IS NULL OR rawAudioMs < :ms)
+    """)
+    suspend fun markAppendDetected(id: String, ms: Long): Int
+
     /** 手动「重试转写」：把 `FAILED` 打回 `PENDING`，让 Writer 重新排队（0 行 = 已被别处推进）。 */
     @Query("""
         UPDATE dreams
         SET transcriptStatus = 'PENDING'
         WHERE id = :id
           AND rawAudioMs = :expectedMs
-          AND transcriptStatus = 'FAILED'
+          AND transcriptStatus IN ('OK', 'FAILED')
+          AND transcriptMs < :expectedMs
     """)
     suspend fun markTranscriptionRetry(id: String, expectedMs: Long): Int
 

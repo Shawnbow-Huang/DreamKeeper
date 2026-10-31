@@ -105,6 +105,8 @@ class DetailViewModel(
      * 知道怎么装配它们。类型是 [GenerationRunner] 而不是具体编排器：按钮只需要两个 suspend 入口。
      */
     private val orchestrator: GenerationRunner? = null,
+    /** 「重试转写」成功把行拨回 PENDING 后，真正让 Writer 去补跑（A2）。 */
+    private val onRetryTranscription: (() -> Unit)? = null,
     /** 对话改稿入口（Task 9）。默认 null 同样只为不破既有两参单测；生产由根容器注入。 */
     private val revise: ReviseOrchestrator? = null,
     /**
@@ -268,7 +270,11 @@ class DetailViewModel(
     /** 尾部没转成文字：把 FAILED 拨回 PENDING，交给收尾/启动路径补跑。 */
     fun retryTranscription() {
         val total = state.value.dream?.rawAudioMs ?: return
-        viewModelScope.launch { runCatching { repo.markTranscriptionRetry(dreamId, total) } }
+        viewModelScope.launch {
+            val rows = runCatching { repo.markTranscriptionRetry(dreamId, total) }.getOrDefault(0)
+            // 0 行 = 水位已追平/状态不对，没必要再排一次；>0 才让 Writer 真正去转写（A2）。
+            if (rows > 0) onRetryTranscription?.invoke()
+        }
     }
 
     /** 用户决定「这段不用转写」：把水位追平，生成闸门放行。 */
@@ -334,6 +340,19 @@ class DetailViewModel(
                 GenerationPhase.Failed(
                     kind,
                     "原文是空的，先补上字再生成",
+                ),
+            )
+            return
+        }
+
+        // A3：还有没转成文字的音频时也不许生成——半截原文进模型只会得到残稿。
+        val total = dream.rawAudioMs ?: 0L
+        if (total > dream.transcriptMs) {
+            val seconds = ((total - dream.transcriptMs) / 1000).coerceAtLeast(1)
+            publishPhase(
+                GenerationPhase.Failed(
+                    kind,
+                    "还有 $seconds 秒没转成文字，先重试转写或点「这段不用转写」",
                 ),
             )
             return

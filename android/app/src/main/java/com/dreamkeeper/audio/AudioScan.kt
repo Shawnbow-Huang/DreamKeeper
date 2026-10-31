@@ -125,7 +125,13 @@ class AudioScan(
             matched += row.id
             val dbDirty = row.rawAudioMs != ms
             if (!headerDirty && !dbDirty) return ScanOutcome.Noop
-            repository.fixAudioMs(row.id, ms)
+            // A1：文件变长（追加录音写完了但状态没更新）走「检测」路径，
+            // 有未覆盖音频时会把状态置 PENDING，交给启动 reconcile 补转写。
+            if ((row.rawAudioMs ?: 0L) < ms) {
+                repository.markAppendDetected(row.id, ms)
+            } else {
+                repository.fixAudioMs(row.id, ms)
+            }
             return ScanOutcome.Repaired(row.id, repaired.fileBytes)
         }
 

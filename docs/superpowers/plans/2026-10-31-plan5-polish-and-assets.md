@@ -126,6 +126,13 @@ T0 契约冻结（Lead）→ T1 资产生成与压缩（Lead，DSH 生图）→ 
 T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `llm/`，约定先 T2 后 T5；T4 依赖 T1 的插画；T6 依赖 T4；T7 依赖 T2–T6 全绿。
 
 ## §0.9 偏差登记（从 D461 起）
+| D478 | 2026-10-31 | T4 | Lead 直接实施、未先红（纯 UI 组合无逻辑可测）；设备截图推到 T7 release 空库一轮拍 | 空态组件只取材于四张已入库插画，行为由既有 UI 测试覆盖 |
+| D479 | 2026-10-31 | T4 | T4 不新增单测；空态正确性由 T7 的 release 空库截图 + 资产目录测试覆盖 | 避免为「无逻辑组件」写假断言 |
+| D480 | 2026-10-31 | T5 | A1 修复改变旧语义：占位头被修复且水位未追平时现在置 PENDING（原保持 OK） | 否则被杀的首次录音永远不会补转写；属有意的行为修正 |
+| D481 | 2026-10-31 | T5 | 生成闸门分两层：编排器统一文案「转写未完成或原文为空」，详情页给「还有 N 秒…」 | 编排器不依赖 UI 文案，详情页负责可操作性；单测各覆盖一层 |
+| D482 | 2026-10-31 | T5 | 计数修正：T1 后实为 51 类/431 例，+12 例 → 52 类/443 例（计划原写 52/441） | 4 限制 + 2 扫描 + 4 CAS + 1 回调 + 1 闸门 = 12 |
+| D483 | 2026-10-31 | T4 | `DetailScreen` 的 `onRetryTranscription` 传参随 T4 提交（`dcfd732`）先落，T5 提交只含 VM/服务/DAO 与测试 | 两任务同改一个文件，按先提交者归属 |
+
 
 | 编号 | 日期 | 任务 | 偏差 | 原因 |
 | --- | --- | --- | --- | --- |
@@ -295,6 +302,26 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 - 结论：通过。
 
 ## §10 验收记录
+
+### Task 4 验收（Lead，2026-10-31）
+
+- **交付**：`dcfd732` — `ui/common/EmptyState.kt` + `LibraryScreen`/`DayScreen`/`DetailScreen`(NOVEL_EMPTY)/`MediaTab` 四处接入。
+- **Lead 独立复跑**：`assembleDebug` BUILD SUCCESSFUL 26s；全量 51 类/431 例 0 失败（当时尚无 T5 用例）。
+- **契约**：插画只来自 `drawable-nodpi` 四张（AssetCatalogTest 守）；`EmptyState` 只在 `loaded && empty` 调用；空态文案与原两行文案一致。
+- **证据**：设备空态必须 release 空库，按 T7 一轮拍（D478/D479）。
+- **PENDING**：空态设备截图（T7）。
+- **结论**：通过（组件与接入成立，视觉证据待 T7）。
+
+### Task 5 验收（Lead，2026-10-31）
+
+- **交付**：T5 改动（A1–A4）+ `docs/evidence/plan5/p5-t5-reliability.txt`；DetailScreen 接线参数在 T4 提交里（D483）。
+- **Lead 独立复跑**：targeted 5 类 62 例（修断言后 21s 全绿）；全量 `--rerun-tasks` BUILD SUCCESSFUL 57s，**52 类/443 例/0/0/0**。
+- **契约**：A1 文件变长 → `markAppendDetected`（PENDING 仅当水位未追平）；A2 CAS 放宽到 OK/FAILED 且水位未追平，命中后触发 Writer（回调恰一次）；A3 编排器与详情页双层闸门；A4 4h + 128MB。
+- **变异**：`AudioScan` 改回 `fixAudioMs` → 2 例红（BUILD FAILED 23s），恢复 sha `6219e02d…` 与备份逐字节同。
+- **证据**：`p5-t5-reliability.txt`（含绿跑/变异原文/未覆盖）。
+- **PENDING**：真机 4h 长录与低存储（P9）、进程被杀窗口的设备复现（P7/P9）。
+- **结论**：通过。
+
 
 ### Task 0 验收（Lead，2026-10-31）
 - 交付 `9f3f742`：计划 §0.1–§0.9 定稿（T0–T8、D461–D470）、`docs/evidence/plan5/README.md`、`.gitattributes` plan5 规则、决策记录 `.superpowers/sdd/2026-10-31-plan5-polish/decisions.md`。

@@ -1,0 +1,45 @@
+APK_SHA256=n/a (host-only JVM test; no APK involved)
+DEVICE_TIME=host-only 2026-10-31T14:20:04Z
+REPLAY=cd android && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks --console=plain
+T13=./gradlew --no-daemon :app:testDebugUnitTest --tests "com.dreamkeeper.audio.RecordingLimitsTest" --tests "com.dreamkeeper.audio.AudioScanTest" --tests "com.dreamkeeper.data.db.AppendTranscriptTest" --tests "com.dreamkeeper.ui.detail.AppendEntryTest" --tests "com.dreamkeeper.llm.GenerationOrchestratorTest"
+
+# p5-t5-reliability.txt — T5 可靠性四条（A1/A2/A3/A4）
+
+## 为什么做
+Plan 4 审阅留下的四条实现缺陷（不是环境限制，不能 PENDING）：
+- A1 追加录音中途被杀 → `AudioScan` 只改 `rawAudioMs` 不改状态，启动补转写只扫 PENDING → 尾巴永不补。
+- A2「重试转写」是死按钮：CAS 只认 `FAILED`，头部换了状态（OK 但有未覆盖尾巴）时 0 行；且 ViewModel 只改库不触发 Writer。
+- A3 生成闸门只看 `transcriptStatus==OK && 原文非空`，半截原文可以进模型。
+- A4 全仓库没有录音时长/剩余空间守卫（4h≈460MB）。
+
+## 改法
+1. `DreamDao.markAppendDetected(id, ms)`：`rawAudioMs=:ms`，并且 `CASE WHEN transcriptMs < :ms THEN 'PENDING'`；`AudioScan` 在「文件变长」时改走它（缩短/相等仍走 `fixAudioMs`）。
+2. `markTranscriptionRetry` 放宽为 `status IN ('OK','FAILED') AND transcriptMs < :expectedMs`；`DetailViewModel.retryTranscription()` 命中行后调用注入的 `onRetryTranscription`；`AppContainer.requestTranscriptionRetry()` 用 `transcriptionScope` 跑 `writer.reconcilePending()`；`DreamKeeperRoot`/`MainActivity` 接线。
+3. 生成闸门两处都加 `(rawAudioMs ?: 0) <= transcriptMs`：`GenerationOrchestrator.generatable`（统一文案「转写未完成或原文为空」）与 `DetailViewModel.generate()`（具体到「还有 N 秒没转成文字…」）。
+4. 新 `audio/RecordingLimits.kt`：4h 硬上限 + 开录前 128MB 剩余空间；`RecordingService.startRecording` 空间不足 `session.fail` + `stopSelf`；`ActiveRecording.readLoop` 到上限自动 `stopRecording()`（只 post 一次）。
+
+## 测试（12 条新增，5 个类）
+- `RecordingLimitsTest` 4 例（128MB 边界、4h 边界、常量字面量）。
+- `AudioScanTest` +2（文件变长且水位未追平 → PENDING 且正文不动；水位已覆盖 → 保持 OK），并修正 1 条旧断言（占位头修复后现在应为 PENDING）。
+- `AppendTranscriptTest` +4（markAppendDetected 置 PENDING / 保持 OK；OK+未覆盖可重试 / 追平 0 行）。
+- `AppendEntryTest` +1（重试命中后回调恰好一次）。
+- `GenerationOrchestratorTest` +1（覆盖闸门拦住且 0 次 HTTP）。
+
+## 绿跑
+targeted：`62 tests completed, 1 failed` → 修正断言后 `BUILD SUCCESSFUL in 21s`（RecordingLimitsTest 4/4、GenerationOrchestratorTest 16/16）。
+全量：`BUILD SUCCESSFUL in 57s`，XML 汇总 **classes=52 tests=443 failures=0 errors=0 skipped=0**（T1 后 51/431，+1 类 +12 例）。
+
+## 变异反证
+把 `AudioScan` 的「文件变长」分支改回只调 `repository.fixAudioMs(row.id, ms)`：
+```
+AudioScanTest > a grown file with an uncovered tail is marked pending so reconcile picks it up FAILED
+AudioScanTest > repairs a placeholder file for an existing row and fixes the duration FAILED
+20 tests completed, 2 failed
+BUILD FAILED in 23s
+```
+恢复后 `AudioScan.kt` sha256 `6219e02d01d1c77916dfcbc9430920f1dca4802841680a8bbfbb584d77929fd8`，与备份逐字节同；复跑 `BUILD SUCCESSFUL in 16s`。
+
+## 未覆盖 / PENDING
+- 真机长录 4h 与低存储的实际行为（模拟器无稳定麦克风、跑 4h 不现实）→ P9。
+- `AudioRecord` 写满时的静默停读只在真机可见；本层只保证「开录前拦住 + 到点收尾」。
+- 进程被杀后 `beginAppend` 未落库的极端窗口仍靠 `AudioScan` 兜底，已有 JVM 覆盖；设备复现留 P7/P9。

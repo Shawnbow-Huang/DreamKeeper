@@ -78,7 +78,8 @@ class AudioScanTest {
         assertEquals("dataSize = 3244 - 44", 3200L, state.dataSize)
         val dream = dream(ROW_ID)!!
         assertEquals("3200 字节 / 32 = 100 ms", 100L, dream.rawAudioMs)
-        assertEquals("窄更新不许碰转写状态", TranscriptStatus.OK, dream.transcriptStatus)
+        // A1（Plan 5 T5）：文件变长且水位没追平时要置 PENDING，启动 reconcile 才会补转写。
+        assertEquals("有未覆盖音频时状态置 PENDING", TranscriptStatus.PENDING, dream.transcriptStatus)
         assertEquals("窄更新不许碰 updatedAt", FIXED_NOW, dream.updatedAt)
     }
 
@@ -109,6 +110,42 @@ class AudioScanTest {
         assertEquals(listOf<ScanOutcome>(ScanOutcome.Repaired(ROW_ID, 3244L)), outcomes)
         assertEquals(100L, dream(ROW_ID)!!.rawAudioMs)
         assertEquals(FIXED_NOW, dream(ROW_ID)!!.updatedAt)
+    }
+
+    // -------------------------------------------------- A1：文件变长 → 置 PENDING
+
+    @Test
+    fun `a grown file with an uncovered tail is marked pending so reconcile picks it up`() = runTest {
+        // 行里记的是 0ms（追加时被杀），文件已有 300ms：水位 0 < 300 → 必须置 PENDING。
+        val file = cleanFile(ROW_ID, dataBytes = 9_600)
+        seedRow(ROW_ID, path = file.absolutePath, ms = 0L, transcript = "旧的一段")
+
+        scan()
+
+        val dream = dream(ROW_ID)!!
+        assertEquals("300 字节换算 = 300ms", 300L, dream.rawAudioMs)
+        assertEquals(TranscriptStatus.PENDING, dream.transcriptStatus)
+        assertEquals("已经转过的正文不许动", "旧的一段", dream.rawTranscript)
+        assertEquals(FIXED_NOW, dream.updatedAt)
+    }
+
+    @Test
+    fun `a grown file whose watermark already covers it keeps the old status`() = runTest {
+        // 罕见但合法：行里 transcriptMs 已经等于文件长度（比如手动跳过），扫描不应把 OK 打回 PENDING。
+        val file = cleanFile(ROW_ID, dataBytes = 9_600)
+        seedRow(
+            ROW_ID,
+            path = file.absolutePath,
+            ms = 100L,
+            transcript = "旧的一段",
+            watermarkMs = 300L,
+        )
+
+        scan()
+
+        val dream = dream(ROW_ID)!!
+        assertEquals(300L, dream.rawAudioMs)
+        assertEquals("水位已追平，状态保持 OK", TranscriptStatus.OK, dream.transcriptStatus)
     }
 
     // ---------------------------------------------------------------- ② 有文件无行
@@ -351,6 +388,7 @@ class AudioScanTest {
         transcript: String = "",
         status: String = TranscriptStatus.OK,
         draft: Boolean = false,
+        watermarkMs: Long = 0L,
     ) {
         repository.save(
             Dream(
@@ -366,6 +404,7 @@ class AudioScanTest {
                 transcriptStatus = status,
                 rawAudioPath = path,
                 rawAudioMs = ms,
+                transcriptMs = watermarkMs,
             ),
         )
     }

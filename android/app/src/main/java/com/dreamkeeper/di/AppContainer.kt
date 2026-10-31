@@ -30,6 +30,7 @@ import com.dreamkeeper.stt.TranscriptWriter
 import com.dreamkeeper.ui.library.LayoutPrefs
 import com.dreamkeeper.ui.library.SharedPreferencesLayoutPrefs
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
@@ -64,6 +65,16 @@ class AppContainer(
      * SupervisorJob，互不负责取消对方。
      */
     val generationScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+
+    /**
+     * 详情页「重试转写」的落点：DAO 只把行拨回 PENDING，真正去跑 STT 的入口在 Writer。
+     * 抛进 app 级 scope，点完立刻返回；失败/无 Key 由 Writer 自己落 FAILED（不冒泡到 UI 线程）。
+     */
+    fun requestTranscriptionRetry() {
+        transcriptionScope.launch {
+            runCatching { transcriptWriter.reconcilePending() }
+        }
+    }
 
     private val appContext: Context = context.applicationContext
 

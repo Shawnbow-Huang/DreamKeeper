@@ -114,6 +114,7 @@ class MainActivity : ComponentActivity() {
                     // D352：Task 9 只加这一行传参；装配细节在 ReviseOrchestrator.kt 的容器扩展里。
                     orchestrator = container.orchestrator,
                     generationScope = container.generationScope,
+                    onRetryTranscription = { container.requestTranscriptionRetry() },
                 )
             }
         }

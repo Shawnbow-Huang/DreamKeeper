@@ -565,7 +565,10 @@ class GenerationOrchestrator(
     )
 
     private fun generatable(dream: Dream): Boolean =
-        dream.transcriptStatus == TranscriptStatus.OK && dream.rawTranscript.trim().isNotEmpty()
+        dream.transcriptStatus == TranscriptStatus.OK &&
+            dream.rawTranscript.trim().isNotEmpty() &&
+            // A3：半截原文不许进模型（rawAudioMs > transcriptMs 说明还有没转成文字的尾巴）。
+            (dream.rawAudioMs ?: 0L) <= dream.transcriptMs
 
     private fun attemptOf(stage: GenerationStage): Int = stage.ordinal + 1
 

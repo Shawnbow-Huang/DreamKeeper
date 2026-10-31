@@ -169,6 +169,26 @@ class AppendEntryTest {
     }
 
     // 6) 「这段不用转写」把水位追平
+    // 5b) A2：重试转写把行拨回 PENDING 后，必须真的让 Writer 去跑（恰一次）
+    @Test
+    fun `retry transcription invokes the writer exactly once when it flipped the row`() = runTest(dispatcher) {
+        seed(dream("d4b", status = TranscriptStatus.FAILED, rawAudioMs = 2_000, transcriptMs = 1_000))
+        var retried = 0
+        val vm = DetailViewModel(
+            repo,
+            "d4b",
+            orchestrator = runner,
+            onRetryTranscription = { retried += 1 },
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        withTimeout(5_000) { vm.state.first { it.loaded && it.dream != null } }
+
+        vm.retryTranscription()
+        advanceUntilIdle()
+        assertEquals(TranscriptStatus.PENDING, repo.findById("d4b")?.transcriptStatus)
+        assertEquals("拨回 PENDING 后必须补跑一次", 1, retried)
+    }
+
     @Test
     fun `skip transcription catches the watermark up`() = runTest(dispatcher) {
         seed(dream("d5", rawAudioMs = 2_000, transcriptMs = 1_000))

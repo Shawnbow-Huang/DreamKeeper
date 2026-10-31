@@ -461,6 +461,28 @@ class GenerationOrchestratorTest {
 
     private fun transportAttempt(): Attempt = attempt(1, null, NOW, Kind.NETWORK)
 
+    // ------------------------------------------------------------ A3：半截原文不许进模型
+
+    @Test
+    fun `coverage gate blocks generation when audio tail is not transcribed`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(
+            dreamEntity().copy(rawAudioMs = 3_000L, transcriptMs = 2_400L),
+        )
+        val llm = FakeLlm()
+
+        val result = newOrchestrator(llm, RoomGenerationStore(db)).generateFaithful(DREAM_ID)
+
+        val failure = result.failure
+        assertTrue("必须失败，实际=$result", failure is GenerationFailure.Protocol)
+        assertEquals(
+            "编排器这一层用统一闸门文案（详情页那一层才说具体几秒）",
+            "转写未完成或原文为空",
+            (failure as GenerationFailure.Protocol).message,
+        )
+        assertTrue("被闸门拦住时一次 HTTP 都不许发", llm.requests.isEmpty())
+    }
+
     private fun dreamEntity(
         id: String = DREAM_ID,
         raw: String = RAW,

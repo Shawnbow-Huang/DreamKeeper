@@ -161,6 +161,45 @@ class AppendTranscriptTest {
         assertEquals("已经 OK 的行不许被手动重试打回 PENDING", 0, dao().markTranscriptionRetry("d9", 3_000L))
     }
 
+    // -------------------------------------------------- A1：启动扫描发现文件变长
+
+    @Test
+    fun markAppendDetectedSetsPendingWhenTailIsUncovered() = runBlocking {
+        newRow("d11", audioMs = 200L, watermarkMs = 100L, text = "旧的一段")
+        assertEquals(1, dao().markAppendDetected("d11", 300L))
+        val r = row("d11")
+        assertEquals(300L, r.rawAudioMs)
+        assertEquals("水位没追平就置 PENDING，启动 reconcile 才看得见", TranscriptStatus.PENDING, r.transcriptStatus)
+        assertEquals("正文与水位都不许动", "旧的一段", r.rawTranscript)
+        assertEquals(100L, r.transcriptMs)
+        assertEquals("重复扫描 0 行", 0, dao().markAppendDetected("d11", 300L))
+    }
+
+    @Test
+    fun markAppendDetectedKeepsStatusWhenWatermarkCoversIt() = runBlocking {
+        newRow("d12", audioMs = 200L, watermarkMs = 300L, text = "已经转满")
+        assertEquals(1, dao().markAppendDetected("d12", 300L))
+        val r = row("d12")
+        assertEquals(300L, r.rawAudioMs)
+        assertEquals("水位已覆盖，不许把 OK 打回 PENDING", TranscriptStatus.OK, r.transcriptStatus)
+    }
+
+    // -------------------------------------------------- A2：重试转写不再只认 FAILED
+
+    @Test
+    fun markTranscriptionRetryAlsoWorksForOkRowWithUncoveredTail() = runBlocking {
+        newRow("d13", audioMs = 300L, watermarkMs = 100L, status = TranscriptStatus.OK, text = "旧的一段")
+        assertEquals("OK 但尾巴没转完，也要能重试", 1, dao().markTranscriptionRetry("d13", 300L))
+        assertEquals(TranscriptStatus.PENDING, row("d13").transcriptStatus)
+    }
+
+    @Test
+    fun markTranscriptionRetryReturnsZeroWhenWatermarkIsCaughtUp() = runBlocking {
+        newRow("d14", audioMs = 300L, watermarkMs = 300L, status = TranscriptStatus.OK, text = "已经转满")
+        assertEquals("水位追平时点重试是空操作", 0, dao().markTranscriptionRetry("d14", 300L))
+        assertEquals(TranscriptStatus.OK, row("d14").transcriptStatus)
+    }
+
     @Test
     fun skipUncoveredAudioMovesWatermarkAndKeepsText() = runBlocking {
         newRow("d10", audioMs = 3_000L, watermarkMs = 2_400L, text = "旧段。")

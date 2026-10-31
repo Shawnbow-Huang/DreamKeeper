@@ -99,6 +99,8 @@ fun DreamKeeperRoot(
     orchestrator: ReviseOrchestrator? = null,
     /** 生成任务作用域（T6b）：容器持有，切页不取消。 */
     generationScope: kotlinx.coroutines.CoroutineScope? = null,
+    /** Plan 5 T5（A2）：「重试转写」触发 Writer 补跑的入口。 */
+    onRetryTranscription: (() -> Unit)? = null,
 ) {
     val nav = rememberNavController()
     // T6b：进度表活在导航根上——详情页重建（返回再进入）仍能看见在跑/失败。
@@ -223,6 +225,7 @@ fun DreamKeeperRoot(
                     onAppend = { target -> nav.navigate(DreamRoute.Append(target).route) },
                     generationScope = generationScope,
                     generationTracker = generationTracker,
+                    onRetryTranscription = onRetryTranscription,
                 )
             }
             composable("append/{dreamId}") { backStackEntry ->

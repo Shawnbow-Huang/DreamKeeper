@@ -20,6 +20,7 @@ import com.dreamkeeper.DreamKeeperApp
 import com.dreamkeeper.audio.PcmSource
 import com.dreamkeeper.audio.RecorderCore
 import com.dreamkeeper.audio.RecorderStop
+import com.dreamkeeper.audio.RecordingLimits
 import com.dreamkeeper.audio.SourceState
 import com.dreamkeeper.audio.WavMath
 import com.dreamkeeper.audio.WavSink
@@ -73,6 +74,7 @@ class RecordingService : Service() {
         private const val ERROR_AUDIO_OPEN = "打不开麦克风"
         private const val ERROR_AUDIO_DEAD = "麦克风没有数据"
         private const val ERROR_STORAGE = "写不进录音文件"
+        private const val ERROR_LOW_STORAGE = "存储空间不足，至少留 128 MB 再录"
         private const val ERROR_FOREGROUND = "无法进入前台录音"
 
         /** `RecorderStop.reason` 的取值（RecorderCore 里是 private，这里按契约比较）。 */
@@ -129,6 +131,14 @@ class RecordingService : Service() {
         if (!hasMicrophonePermission()) {
             Log.w(TAG, "没有 RECORD_AUDIO，拒绝启动前台录音")
             session.fail(ERROR_NO_PERMISSION)
+            stopSelf()
+            return
+        }
+        // ②b A4：开录前查剩余空间——写满时 AudioRecord 会静默停读，用户以为还在录。
+        val freeBytes = runCatching { filesDir.usableSpace }.getOrDefault(0L)
+        if (!RecordingLimits.canStart(freeBytes)) {
+            Log.w(TAG, "存储空间不足：free=$freeBytes")
+            session.fail(ERROR_LOW_STORAGE)
             stopSelf()
             return
         }
@@ -351,6 +361,10 @@ class RecordingService : Service() {
         @Volatile
         var cancelRequested = false
 
+        /** 4h 上限只 post 一次自动收尾，避免每个进度回调都 hit 一遍。 */
+        @Volatile
+        var limitStopPosted = false
+
         /** 读失败时源给的文案（权限被收回 / 没有数据），收尾时优先用它。 */
         val failureMessage: String?
             get() = source.failureMessage
@@ -382,10 +396,17 @@ class RecordingService : Service() {
             val stop = try {
                 // 3.4c：进度只用真实字节算，不另起计时器；振幅来自 RecorderCore 的 dBFS。
                 core.run(startedAtMs) { bytes, amplitudeDb ->
+                    val elapsed = bytes / WavMath.BYTES_PER_MS
                     session.update(
-                        elapsedMs = bytes / WavMath.BYTES_PER_MS,
+                        elapsedMs = elapsed,
                         amplitude = (amplitudeDb + 60) / 60f,
                     )
+                    // A4：到 4h 硬上限自动收尾（主线程 stop，读循环随后自然退出）。
+                    if (!limitStopPosted && RecordingLimits.shouldAutoStop(elapsed)) {
+                        limitStopPosted = true
+                        Log.w(TAG, "到达录音时长上限 ${RecordingLimits.MAX_DURATION_MS}ms，自动收尾")
+                        mainHandler.post { stopRecording() }
+                    }
                 }
             } catch (e: Throwable) {
                 // RecorderCore 内部已兜住所有常规异常；这里只防 Error 级炸裂，仍要尝试回填头。

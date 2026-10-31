@@ -324,6 +324,10 @@ class DreamRepository(
     /** 启动补跑：`PENDING` 且 `rawAudioMs > transcriptMs` 的行。 */
     suspend fun pendingAppends(): List<Dream> = dreams.pendingAppends().map(::toDomain)
 
+    /** 启动扫描发现文件变长：时长落库，有未覆盖音频时置 `PENDING`（A1）。 */
+    suspend fun markAppendDetected(id: String, rawAudioMs: Long): Int =
+        dreams.markAppendDetected(id, rawAudioMs)
+
     /** 手动重试转写：`FAILED` → `PENDING`。 */
     suspend fun markTranscriptionRetry(id: String, expectedMs: Long): Int =
         dreams.markTranscriptionRetry(id, expectedMs)
