@@ -126,6 +126,9 @@ T0 契约冻结（Lead）→ T1 资产生成与压缩（Lead，DSH 生图）→ 
 T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `llm/`，约定先 T2 后 T5；T4 依赖 T1 的插画；T6 依赖 T4；T7 依赖 T2–T6 全绿。
 
 ## §0.9 偏差登记（从 D461 起）
+| D492 | 2026-10-31 | T8 | 终态实测 **52 类/443 例**，与计划冻结的 52/440 不同：+12 可靠性例 −8 计划估算 +1 空态… | 计划是估算；以实测与 XML 为准（D482），终审按实测登记 |
+| D493 | 2026-10-31 | T8 | 计划 §10 用「验收记录」而非独立 ACCEPTANCE：Plan 5 的 B1–B15 表并入 `docs/evidence/plan1/ACCEPTANCE.md` `## 3f` | 全仓验收表一直集中在 plan1/ACCEPTANCE；避免两份口径 |
+
 | D488 | 2026-10-31 | T7 | release 签名改从 `android/keystore.properties` 条件加载（缺失则产出 unsigned 包），keystore 放仓库外 | 密钥不入仓；没有配置文件时构建不应失败 |
 | D489 | 2026-10-31 | T7 | 日视图空态（「这天没有梦」）截图不伪造：`CalendarScreen.kt:267` 空日不可点，UI 上无法到达 | 设计约束（空日点击无反应），不是环境限制；登记而非 PENDING |
 | D490 | 2026-10-31 | T7 | 首启空库证据通过「adb uninstall → install release」取得；截图含 0 梦日历 + 库/小说/素材三张插画 | 覆盖安装不会清库，只有卸载重装才是真首启 |
@@ -312,6 +315,14 @@ T3/T4 同改 `res/` 与 Manifest，派工时约定先 T3 后 T4；T2/T5 都改 `
 - 结论：通过。
 
 ## §10 验收记录
+
+### Task 8 验收（Lead，2026-10-31）
+
+- **交付**：`docs/evidence/plan5/FINAL-REVIEW.md`（基线对照/任务表/证据索引/PENDING P1–P11/风险结论）、`docs/evidence/plan1/ACCEPTANCE.md` `## 3f`。
+- **复核**：全量 `:app:testDebugUnitTest --rerun-tasks` 57s，**52 类/443 例/0/0/0**；Plan 5 共 9 个提交（`9f3f742`…`5771377` + 终审提交）；`docs/evidence/plan5/` 24 份（含本文件）。
+- **PENDING**：P1–P11（见 FINAL-REVIEW §五），无实现缺陷混入。
+- **结论**：候选版通过；真机项待清单执行。
+
 
 ### Task 7 验收（Lead，2026-10-31）
 
