@@ -6,6 +6,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.provider.Settings
 import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -444,6 +445,7 @@ private fun TranscriptTab(
     onSkipTranscription: () -> Unit,
 ) {
     if (dream == null) return
+    val context = LocalContext.current
     var dialogOpen by rememberSaveable { mutableStateOf(false) }
     var showRaw by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -527,9 +529,27 @@ private fun TranscriptTab(
                         color = DreamColors.inkDim,
                         textAlign = TextAlign.Center,
                     )
-                    if (status == TranscriptStatus.FAILED) {
+                    if (status == TranscriptStatus.PENDING) {
+                        // 真机上「离线包缺失/服务不应答」会让这里干等；把等待时长和出口一起给出来。
+                        TranscribingWaited()
+                    }
+                    // PENDING 也允许手动补字：转写慢不该把人锁死在这一页。
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = { dialogOpen = true }) {
                             Text("手动补字", color = DreamColors.ember)
+                        }
+                        if (status == TranscriptStatus.FAILED) {
+                            // 缺离线包是系统侧问题，把用户送到系统语音设置，别让人猜去哪下载。
+                            TextButton(
+                                onClick = {
+                                    val opened = runCatching {
+                                        context.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
+                                    }.isSuccess
+                                    if (!opened) onMessage("打不开系统语音设置，请手动到「设置 → 语言与输入 → 语音输入」下载中文包")
+                                },
+                            ) {
+                                Text("去下载语音包", color = DreamColors.inkDim)
+                            }
                         }
                     }
                 }
@@ -594,6 +614,25 @@ private fun TranscriptTab(
             },
         )
     }
+}
+
+
+/** 转写中的等待提示：每秒刷新，最多等到 SttEngine 的 90s 硬上限。 */
+@Composable
+private fun TranscribingWaited() {
+    var seconds by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1_000)
+            seconds += 1
+        }
+    }
+    Text(
+        text = "已等 $seconds 秒，最多 90 秒；等不及可以先手动补字。",
+        style = MaterialTheme.typography.labelSmall,
+        color = DreamColors.inkFaint,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable

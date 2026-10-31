@@ -162,7 +162,8 @@ class SystemSttEngine(
         val texts = ArrayList<String>(ranges.size)
         for ((index, range) in ranges.withIndex()) {
             val segmentMs = (range.last - range.first + 1) / WavMath.BYTES_PER_MS
-            val timeoutMs = maxOf(MIN_SEGMENT_TIMEOUT_MS, 2 * segmentMs)
+            // 上限 90s：真机上离线包缺失或服务不应答时，不能让用户对着「正在转写…」等 3 分钟。
+            val timeoutMs = minOf(MAX_SEGMENT_TIMEOUT_MS, maxOf(MIN_SEGMENT_TIMEOUT_MS, 2 * segmentMs))
             val result = transcribeSegment(
                 file = file,
                 startDataByte = range.first,
@@ -397,6 +398,9 @@ class SystemSttEngine(
 
         /** 每段预算：至少 60 s，长段按 2 倍段长。 */
         const val MIN_SEGMENT_TIMEOUT_MS = 60_000L
+
+        /** 单段硬上限；超时按失败收口，UI 才能给出「手动补字」。 */
+        const val MAX_SEGMENT_TIMEOUT_MS = 90_000L
 
         const val PROBE_TIMEOUT_MS = 5_000L
         const val PIPE_BUFFER_BYTES = 16 * 1024
