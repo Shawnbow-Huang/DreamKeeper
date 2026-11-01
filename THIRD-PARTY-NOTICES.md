@@ -34,3 +34,12 @@ You may obtain a copy of the License at
 
 - 选型与验证细节：`docs/ASR-SENSEVOICE.md`
 - 决策记录：`docs/superpowers/plans/2026-10-31-plan6-providers.md` 的 D563–D566
+
+## story-skills（小说化 v3 内嵌写作方法）
+
+- 来源：https://github.com/danjdewhurst/story-skills
+- 许可证：MIT
+- 版权：Copyright (c) danjdewhurst 及贡献者
+- 用法：把 `skills/**/*.md` 原样内嵌到 `android/app/src/main/assets/skills/story/`，按阶段注入提示词（PLAN/DRAFT/POLISH）。
+- 归档 sha256：`1943297babdcdfedc5652a3c60b713a9c9d73e5c04fd093ed4e767cf85f355d4`（ref=main，131 个 md，816,099 B）。
+- 说明：内容不翻译、不裁剪语义；只在总长度超预算时从最后一个文件截断，并在提示词里标「节选」。
