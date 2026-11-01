@@ -1,5 +1,33 @@
 # 变更记录
 
+## 0.14.0 — 2026-11-01（小说化 v3：规划 → 写作 → 润色）
+
+小说化不再是「一次调用改全文」：先出规划 JSON，再按规划写，最后逐行润色；
+每段单独记账，失败不静默产出。
+
+### 1. 三段式
+
+- PLAN：`novel.v3-plan.md`（`8a176536`）→ 规划 JSON，校验 premise/反前提/3–5 场景/coreImages 逐字来自原样稿。
+- DRAFT：`novel.v3-draft.md`（`4e9ddb3d`）→ 按规划写正文；N1 结构 + N2 文风都要过。
+- POLISH：`novel.v3-polish.md`（`f937c885`）→ 只做 line-edit；两次不过就回退 DRAFT 并记一条 WARN 手记。
+- 每段一条 `generation_job`（stage=PLAN/DRAFT/POLISH，attemptNo=1/2/3）。
+
+### 2. 内嵌写作方法
+
+- `story-skills`（MIT）131 个英文原件 / 816,099 B 打进 assets，按阶段注入（PLAN/DRAFT/POLISH 各三份，≤12,000 字符）。
+- 不翻译：prompt 里保留英文原文，schema 与说明仍是中文。
+
+### 3. 闸门与手记
+
+- 新增 `scripts/check-novel.py`（N1/N2/N3，14 条冻结向量 + 9 条自测）与 Kotlin `NovelGates`（同向量，防漂移）。
+- 创作手记：`[{type:"借用|舍弃|新造|主题", detail}]`；UI 说「创作手记 N 条」，旧 `quote` 数据仍显示「补写 N 处」。
+- 阶段文案：「正在规划故事…」「正在写正文…」「正在逐行润色…」。
+
+### 4. 手动修改
+
+- 原样稿：就地覆盖 `faithfulText`（不动版本线）。
+- 小说稿：新建 `origin=manual` 版本，旧版保留可回退。
+
 ## 0.13.2 — 2026-11-01（T2 不再用原文回退冲掉好稿）
 
 - T2（只加标点）提交前加 F3 守卫：原文本身有「呃/嗯/那个」时，逐字等值的输出等于退回原文，

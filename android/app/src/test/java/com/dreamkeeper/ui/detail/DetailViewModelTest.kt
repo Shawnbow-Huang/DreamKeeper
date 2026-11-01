@@ -114,6 +114,12 @@ class DetailViewModelTest {
         // tab 标题格式是 D41 契约，一个字都不许改
         assertEquals("小说化", novelTabLabel(0))
         assertEquals("小说化 · 补写 6 处", novelTabLabel(6))
+        // v3 创作手记：新格式（无 quote）说「创作手记 N 条」，旧格式（带 quote）仍是「补写 N 处」。
+        val notes = """[{"type":"借用","detail":"楼梯"},{"type":"舍弃","detail":"吃饭"}]"""
+        val legacy = """[{"type":"补写","detail":"补了海风","quote":"海风很大"}]"""
+        assertEquals("创作手记 2 条 · 查看", changeLogCaption(notes, 2))
+        assertEquals("补写 1 处 · 查看", changeLogCaption(legacy, 1))
+        assertEquals(null, changeLogCaption(notes, 0))
     }
 
     /**

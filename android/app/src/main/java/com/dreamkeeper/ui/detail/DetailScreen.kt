@@ -131,6 +131,28 @@ fun novelChangeCount(changeLog: String?): Int {
     return Regex("补\\s*写\\s*(\\d+)\\s*处").find(raw)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 }
 
+/**
+ * 创作手记口径：v3 起 `changeLogJson` 是 `[{type:"借用|舍弃|新造|主题", detail}]`，
+ * 旧数据仍是 `[{type:"补写", detail, quote}]` 或「补写 N 处」文本。
+ * 判定只看条目里有没有 `quote`：有就是旧格式（不能说成「创作手记」）。
+ */
+fun isCreationNotes(changeLog: String?): Boolean {
+    val raw = changeLog?.trim().orEmpty()
+    if (!raw.startsWith("[")) return false
+    val arr = runCatching { org.json.JSONArray(raw) }.getOrNull() ?: return false
+    if (arr.length() == 0) return false
+    return (0 until arr.length()).none { i ->
+        arr.optJSONObject(i)?.has("quote") == true
+    }
+}
+
+/** 小说化内容区顶部那行 caption：旧数据「补写 N 处」，v3「创作手记 N 条」。 */
+fun changeLogCaption(changeLog: String?, count: Int): String? = when {
+    count <= 0 -> null
+    isCreationNotes(changeLog) -> "创作手记 $count 条 · 查看"
+    else -> "补写 $count 处 · 查看"
+}
+
 /** 四个 tab 的固定文案：不把「补写 N 处」塞进来（brief 0.7 / D66） */
 private enum class DetailTab(val label: String) {
     ORIGINAL("原样"),
@@ -271,6 +293,7 @@ fun DetailScreen(
 
                             1 -> NovelTab(
                                 count = state.novelChangeCount,
+                            changeLog = state.dream?.novelChangeLog,
                                 // §0.7：详情正文用最终稿（selected ?: maxVersion），不用 dreams.novelText。
                                 novelText = state.finalNovel?.novelText ?: state.dream?.novelText,
                                 // 是否有「小说稿」：只认 novel / novel_revise 版本，原样整理稿不算（D394）。
@@ -774,6 +797,7 @@ private fun BodyScroll(text: String, color: Color) {
 @Composable
 private fun NovelTab(
     count: Int,
+    changeLog: String?,
     novelText: String?,
     /**
      * 是否已有小说稿。不能拿 [novelText] 判：`finalNovel` 在没有版本时会回退到
@@ -840,9 +864,10 @@ private fun NovelTab(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (count > 0) {
+            val caption = changeLogCaption(changeLog, count)
+            if (caption != null) {
                 Text(
-                    text = "补写 $count 处 · 查看",
+                    text = caption,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
                     color = DreamColors.ember,
@@ -1051,7 +1076,12 @@ private fun GenerationActions(
                 text = if (phase.kind == GenerationKind.FAITHFUL) {
                     "正在原样整理…（第 ${phase.attempt} 步）"
                 } else {
-                    "正在小说化…（第 ${phase.attempt} 步）"
+                    when (phase.attempt) {
+                        1 -> "正在规划故事…"
+                        2 -> "正在写正文…"
+                        3 -> "正在逐行润色…"
+                        else -> "正在小说化…"
+                    }
                 },
                 modifier = Modifier.padding(top = 8.dp),
                 style = MaterialTheme.typography.labelSmall,
