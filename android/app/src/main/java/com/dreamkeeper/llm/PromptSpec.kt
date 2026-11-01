@@ -102,7 +102,46 @@ object PromptSpecs {
         markers = emptyList(),
     )
 
-    val ALL = listOf(FAITHFUL, NOVEL, NOVEL_REVISE)
+
+    val NOVEL_PLAN = PromptSpec(
+        promptId = "novel_plan",
+        version = "v3",
+        assetPath = "prompts/novel.v3-plan.md",
+        sha256_8 = "8a176536",
+        slots = listOf(
+            SlotSpec("原始转写", required = true),
+            SlotSpec("原样稿", required = true),
+            SlotSpec("用户想法 / 选填", required = false, allowEmpty = true),
+        ),
+        markers = emptyList(),
+    )
+
+    val NOVEL_DRAFT = PromptSpec(
+        promptId = "novel_draft",
+        version = "v3",
+        assetPath = "prompts/novel.v3-draft.md",
+        sha256_8 = "4e9ddb3d",
+        slots = listOf(
+            SlotSpec("规划 JSON", required = true),
+            SlotSpec("原样稿", required = true),
+            SlotSpec("用户想法 / 选填", required = false, allowEmpty = true),
+        ),
+        markers = emptyList(),
+    )
+
+    val NOVEL_POLISH = PromptSpec(
+        promptId = "novel_polish",
+        version = "v3",
+        assetPath = "prompts/novel.v3-polish.md",
+        sha256_8 = "f937c885",
+        slots = listOf(
+            SlotSpec("规划 JSON", required = true),
+            SlotSpec("小说草稿 JSON", required = true),
+        ),
+        markers = emptyList(),
+    )
+
+    val ALL = listOf(FAITHFUL, NOVEL, NOVEL_REVISE, NOVEL_PLAN, NOVEL_DRAFT, NOVEL_POLISH)
 
     fun byId(promptId: String): PromptSpec =
         ALL.firstOrNull { it.promptId == promptId }

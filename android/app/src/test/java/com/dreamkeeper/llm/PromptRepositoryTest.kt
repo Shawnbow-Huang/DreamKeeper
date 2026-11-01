@@ -31,6 +31,9 @@ class PromptRepositoryTest {
         "faithful" to "82c6e1f1",
         "novel" to "cc497720",
         "novel_revise" to "45a17e0a",
+        "novel_plan" to "8a176536",
+        "novel_draft" to "4e9ddb3d",
+        "novel_polish" to "f937c885",
     )
 
     @Test
@@ -58,6 +61,9 @@ class PromptRepositoryTest {
         "<当前这版的",
         "<用户原话",
         "<user / assistant",
+        "<PLAN 阶段",
+        "<DRAFT 阶段",
+        "<用户想怎么写",
     )
 
     private val transcript = "我梦见车站。等了好久，车一直不来。"
@@ -85,6 +91,20 @@ class PromptRepositoryTest {
         "faithful" -> faithfulSlots
         "novel" -> novelSlots
         "novel_revise" -> reviseSlots
+        "novel_plan" -> mapOf(
+            "原始转写" to transcript,
+            "原样稿" to "我梦见车站。",
+            "用户想法 / 选填" to null,
+        )
+        "novel_draft" -> mapOf(
+            "规划 JSON" to "{}",
+            "原样稿" to "我梦见车站。",
+            "用户想法 / 选填" to null,
+        )
+        "novel_polish" -> mapOf(
+            "规划 JSON" to "{}",
+            "小说草稿 JSON" to "{\"body\":\"x\"}",
+        )
         else -> error("测试数据缺 promptId=$promptId")
     }
 
@@ -156,8 +176,13 @@ class PromptRepositoryTest {
                     "${spec.promptId} 残留槽【${slot.name}】",
                     text.contains("【${slot.name}】"),
                 )
-                val value = values[slot.name] ?: error("测试数据缺 ${spec.promptId}/${slot.name}")
-                assertTrue("${spec.promptId} 的槽【${slot.name}】没落进送出串", text.contains(value))
+                val value = values[slot.name]
+                if (value == null) {
+                    // 可选槽传 null = 整对删除，此时只要求不残留占位符（上面已断言）。
+                    assertFalse("${spec.promptId} 可选槽【${slot.name}】为 null 却出现了槽名", text.contains(slot.name))
+                } else {
+                    assertTrue("${spec.promptId} 的槽【${slot.name}】没落进送出串", text.contains(value))
+                }
             }
             for (hint in slotHintPrefixes) {
                 assertFalse("${spec.promptId} 残留槽提示行 $hint", text.contains(hint))
