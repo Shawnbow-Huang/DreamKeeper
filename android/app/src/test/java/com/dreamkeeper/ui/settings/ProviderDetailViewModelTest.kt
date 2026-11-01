@@ -289,6 +289,25 @@ class ProviderDetailViewModelTest {
     }
 
     @Test
+    fun `changing faithful thinking only writes its own preference`() = runTest {
+        val vm = ProviderDetailViewModel(
+            apiKeyStore = store,
+            generationPrefs = prefs,
+            connectionTester = null,
+            io = io,
+            initialProvider = ProviderId.DEEPSEEK,
+        )
+        advanceUntilIdle()
+
+        vm.setFaithfulThinking(com.dreamkeeper.llm.ThinkingLevel.MAX)
+        advanceUntilIdle()
+
+        assertEquals(com.dreamkeeper.llm.ThinkingLevel.MAX, vm.state.value.faithfulThinking)
+        assertEquals(com.dreamkeeper.llm.ThinkingLevel.MAX, prefs.options().faithfulThinking)
+        assertEquals(com.dreamkeeper.llm.ThinkingLevel.HIGH, prefs.options().novelThinking)
+    }
+
+    @Test
     fun `discover models adds candidates without changing the current pick`() = runTest {
         prefs.setDetectedModels(ProviderId.DEEPSEEK, emptyList())
         val probe = object : com.dreamkeeper.llm.ModelProbe {

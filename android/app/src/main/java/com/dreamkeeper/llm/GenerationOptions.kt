@@ -26,8 +26,8 @@ enum class ThinkingLevel(val label: String, val effort: ReasoningEffort?) {
  * 单例而不是散落参数：设置页写、编排器读，中间不经过 ViewModel——用户改完档位
  * 不必退回详情页重进才能生效。
  *
- * 忠实整理（faithful）**不吃这个档位**：设计 §9 要求它恒 `thinking=disabled`、temp 0.1，
- * 开着思考整理一段口述只会更慢更贵，且闸门本来就要逐字保守。
+ * 忠实整理（faithful）有独立档位（v3 起，默认「低」）：它现在允许换词，
+ * 需要一点判断但不需要长篇推理；开思考时与小说化一样不发 temperature。
  */
 data class GenerationOptions(
     /** Plan 6：当前供应商；生成链按它选 baseUrl / 请求体风格。 */
@@ -42,6 +42,8 @@ data class GenerationOptions(
     val faithfulModel: String = model,
     /** 小说化默认「高」；改稿固定「低」（见 ReviseOrchestrator 的 REVISE_LEVEL）。 */
     val novelThinking: ThinkingLevel = ThinkingLevel.HIGH,
+    /** 原样整理默认「低」：换句不换事，不需要长推理。 */
+    val faithfulThinking: ThinkingLevel = ThinkingLevel.LOW,
 ) {
     companion object {
         const val FLASH = "deepseek-flash"

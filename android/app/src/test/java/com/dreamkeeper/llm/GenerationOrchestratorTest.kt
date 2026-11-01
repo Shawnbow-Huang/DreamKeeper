@@ -78,10 +78,10 @@ class GenerationOrchestratorTest {
         assertEquals(1, result.attempts)
         assertTrue(result.costMicroYuan > 0)
 
-        // 请求形态：T0 = temp 0.1、无标记——与「不传 markers 的渲染结果」逐字相等。
+        // 请求形态：v3 默认 LOW 思考 => 不发 temperature、无标记——与「不传 markers 的渲染结果」逐字相等。
         // 不能断言「不含【上一版违规清单】」：提示词正文本身就在解释这两个标记。
         val request = llm.requests.single()
-        assertEquals(0.1, request.temperature!!, 1e-9)
+        assertNull("默认「低」思考，不发 temperature", request.temperature)
         assertEquals(
             prompts.render(PromptSpecs.FAITHFUL.promptId, mapOf("待理顺转写" to RAW)).text,
             request.messages.single().content,
@@ -131,7 +131,7 @@ class GenerationOrchestratorTest {
         assertTrue("T1 请求体缺少违规清单标记", t1Body.contains("【上一版违规清单】"))
         assertTrue("T1 载荷里没有 T0 的具体事实锚点", t1Body.contains("三十次"))
         assertFalse("T1 不是保守档，不该带只做标点的指令", t1Body.contains(PUNCTUATION_DIRECTIVE))
-        assertEquals(0.0, llm.requests[1].temperature!!, 1e-9)
+        assertNull("思考开着时 T1 也不发 temperature", llm.requests[1].temperature)
 
         // 只提交一版，档位是 T1。
         assertEquals(1, store.commits.size)
@@ -184,7 +184,7 @@ class GenerationOrchestratorTest {
         val t2Body = llm.requests[2].messages.single().content
         assertTrue("T2 必须带只做标点的指令", t2Body.contains(PUNCTUATION_DIRECTIVE))
         assertFalse("T2 不该再带 T1 的违规载荷", t2Body.contains("丢了事实"))
-        assertEquals(0.0, llm.requests[2].temperature!!, 1e-9)
+        assertNull("思考开着时 T2 也不发 temperature", llm.requests[2].temperature)
 
         assertEquals("T2", store.commits.single().stage)
         assertTrue(FaithfulGates.isConservativeOk(RAW, T2_CONSERVATIVE))
@@ -395,19 +395,23 @@ class GenerationOrchestratorTest {
     }
 
     @Test
-    fun `忠实整理不吃小说化思考档位`() = runTest {
+    fun `原样整理用独立档位：小说化改成最高也不影响它`() = runTest {
         val llm = FakeLlm().apply { enqueue(ok(CLEAN_T1)) }
         val store = FakeStore(dreamDomain())
 
         newOrchestrator(llm, store, options = {
-            GenerationOptions(model = GenerationOptions.PRO, novelThinking = ThinkingLevel.MAX)
+            GenerationOptions(
+                model = GenerationOptions.PRO,
+                novelThinking = ThinkingLevel.MAX,
+                faithfulThinking = ThinkingLevel.LOW,
+            )
         }).generateFaithful(DREAM_ID)
 
         val request = llm.requests.single()
         assertEquals(GenerationOptions.PRO, request.model)
-        assertEquals(Thinking.DISABLED, request.thinking)
-        assertNull(request.effort)
-        assertEquals(0.1, request.temperature!!, 1e-9)
+        assertEquals(Thinking.ENABLED, request.thinking)
+        assertEquals(ReasoningEffort.LOW, request.effort)
+        assertNull("v3：思考开着就不发 temperature", request.temperature)
     }
 
     // -------------------------------------------------------------- fixtures
@@ -562,6 +566,27 @@ class GenerationOrchestratorTest {
         assertEquals("cost-v1", row.formulaVersion)
         assertTrue(row.costMicroYuan > 0)
         assertNotNull(row.priceSnapshotJson)
+    }
+
+    @Test
+    fun `原样整理 HIGH 时请求带 thinking 且不带 temperature`() = runTest {
+        val prefs = com.dreamkeeper.data.settings.GenerationPrefs(
+            ApplicationProvider.getApplicationContext<android.content.Context>()
+                .getSharedPreferences("orchestrator-thinking-" + System.nanoTime(), android.content.Context.MODE_PRIVATE),
+        ).apply { setFaithfulThinking(ThinkingLevel.HIGH) }
+        val llm = FakeLlm().apply { enqueue(ok(CLEAN_T1)) }
+        val orchestrator = newOrchestrator(
+            llm = llm,
+            store = FakeStore(dreamDomain()),
+            options = { prefs.options() },
+        )
+
+        val result = orchestrator.generateFaithful(DREAM_ID)
+
+        assertNull(result.failure)
+        val request = llm.requests.single()
+        assertEquals(Thinking.ENABLED, request.thinking)
+        assertNull("开思考时不许再发 temperature", request.temperature)
     }
 
     // ------------------------------------------------------------ v3 闸门清单（2026-11-01）

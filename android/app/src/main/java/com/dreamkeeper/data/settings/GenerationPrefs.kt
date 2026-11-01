@@ -22,7 +22,8 @@ import com.dreamkeeper.llm.ThinkingLevel
  * - `dk_generation_faithful[.<wire>]`：忠实整理模型（2026-11-01 新增，默认跟随小说化）；
  * - `dk_generation_models.<wire>`：上一次「检测可用模型」的结果（逗号分隔，只作候选；
  *   不覆盖当前选择，也不参与清洗期的白名单判定之外的事）；
- * - `dk_generation_thinking`：小说化思考档位（与供应商无关）。
+ * - `dk_generation_thinking`：小说化思考档位（与供应商无关）；
+ * - `dk_generation_faithful_thinking`：原样整理思考档位（与供应商无关，默认低）。
  */
 class GenerationPrefs(private val prefs: SharedPreferences) {
 
@@ -38,11 +39,15 @@ class GenerationPrefs(private val prefs: SharedPreferences) {
         val thinking = prefs.getString(KEY_THINKING, null)
             ?.let { raw -> ThinkingLevel.entries.firstOrNull { it.name == raw } }
             ?: GenerationOptions.DEFAULT.novelThinking
+        val faithfulThinking = prefs.getString(KEY_FAITHFUL_THINKING, null)
+            ?.let { raw -> ThinkingLevel.entries.firstOrNull { it.name == raw } }
+            ?: GenerationOptions.DEFAULT.faithfulThinking
         return GenerationOptions(
             provider = provider,
             model = novel,
             faithfulModel = faithful,
             novelThinking = thinking,
+            faithfulThinking = faithfulThinking,
         )
     }
 
@@ -102,6 +107,10 @@ class GenerationPrefs(private val prefs: SharedPreferences) {
         prefs.edit().putString(KEY_THINKING, level.name).apply()
     }
 
+    fun setFaithfulThinking(level: ThinkingLevel) {
+        prefs.edit().putString(KEY_FAITHFUL_THINKING, level.name).apply()
+    }
+
     private fun modelKey(provider: ProviderId, mode: Mode): String {
         val base = if (mode == Mode.FAITHFUL) KEY_FAITHFUL else KEY_MODEL
         // DeepSeek 的小说化沿用 Plan 5 的旧键（零迁移）；其余一律带 wire 后缀。
@@ -123,5 +132,6 @@ class GenerationPrefs(private val prefs: SharedPreferences) {
         const val KEY_FAITHFUL = "dk_generation_faithful"
         const val KEY_DETECTED = "dk_generation_models"
         const val KEY_THINKING = "dk_generation_thinking"
+        const val KEY_FAITHFUL_THINKING = "dk_generation_faithful_thinking"
     }
 }

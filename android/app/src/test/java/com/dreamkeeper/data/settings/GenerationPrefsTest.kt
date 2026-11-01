@@ -83,6 +83,17 @@ class GenerationPrefsTest {
     }
 
     @Test
+    fun `原样整理思考默认低且可单独设置`() {
+        assertEquals(ThinkingLevel.LOW, prefs().options().faithfulThinking)
+
+        prefs().setFaithfulThinking(ThinkingLevel.MAX)
+
+        assertEquals(ThinkingLevel.MAX, prefs().options().faithfulThinking)
+        // 小说化的档位不受影响。
+        assertEquals(ThinkingLevel.HIGH, prefs().options().novelThinking)
+    }
+
+    @Test
     fun `检测到的模型进入候选并跨实例保留`() {
         val first = prefs()
         first.setDetectedModels(com.dreamkeeper.llm.ProviderId.MIMO, listOf("mimo-v9-experimental"))

@@ -150,7 +150,7 @@ class GenerationOrchestrator(
 
     private fun newRun(dreamId: String): Run {
         val cfg = options()
-        return Run(dreamId, cfg.provider, cfg.model, cfg.faithfulModel)
+        return Run(dreamId, cfg.provider, cfg.model, cfg.faithfulModel, cfg.faithfulThinking)
     }
 
     private suspend fun faithfulChain(
@@ -241,8 +241,9 @@ class GenerationOrchestrator(
             ChatRequest(
                 model = run.faithfulModel,
                 messages = listOf(ChatMessage("user", rendered.text)),
-                thinking = Thinking.DISABLED,
-                temperature = temperature,
+                thinking = run.faithfulThinking.thinking,
+                effort = run.faithfulThinking.effort,
+                temperature = if (run.faithfulThinking == ThinkingLevel.OFF) temperature else null,
                 jsonMode = false,
                 apiKey = keyFor(run.provider),
                 kind = "FAITHFUL",
@@ -698,6 +699,8 @@ class GenerationOrchestrator(
         val model: String,
         /** 忠实整理单独选择的模型；为 null 时不使用，统一走 [model]。 */
         val faithfulModel: String,
+        /** 原样整理思考档位（v3）：开思考时不发 temperature。 */
+        val faithfulThinking: ThinkingLevel,
     ) {
         var attempts: Int = 0
         var costMicroYuan: Long = 0

@@ -96,12 +96,14 @@ fun ProviderDetailScreen(
                 novelModel = state.model,
                 faithfulModel = state.faithfulModel,
                 novelThinking = state.novelThinking,
+                faithfulThinking = state.faithfulThinking,
                 discovering = state.discovering,
                 discoveryNote = state.discoveryNote,
                 onNovelModel = vm::setModel,
                 onFaithfulModel = vm::setFaithfulModel,
                 onDiscover = vm::discoverModels,
                 onThinking = vm::setNovelThinking,
+                onFaithfulThinking = vm::setFaithfulThinking,
             )
 
             if (state.provider != ProviderId.DEEPSEEK) {
@@ -267,7 +269,7 @@ private fun KeyCard(state: ProviderDetailViewModel.UiState, vm: ProviderDetailVi
 /**
  * 模型与思考档位（按供应商给模型）。
  *
- * 为什么只暴露「小说化的思考档位」：忠实整理恒关（逐字保守、更快更便宜），
+ * 两个模式各有一个思考档位（v3 起）：原样整理默认「低」、小说化默认「高」；
  * 改稿的 low + 固定温度链属于另一条契约（D471），不在这张卡里给用户假开关。
  */
 @Composable
@@ -276,12 +278,14 @@ private fun GenerationCard(
     novelModel: String,
     faithfulModel: String,
     novelThinking: ThinkingLevel,
+    faithfulThinking: ThinkingLevel,
     discovering: Boolean,
     discoveryNote: String?,
     onNovelModel: (String) -> Unit,
     onFaithfulModel: (String) -> Unit,
     onDiscover: () -> Unit,
     onThinking: (ThinkingLevel) -> Unit,
+    onFaithfulThinking: (ThinkingLevel) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -327,10 +331,20 @@ private fun GenerationCard(
         Spacer(modifier = Modifier.height(6.dp))
         ModelDropdown(models = models, selected = faithfulModel, onSelect = onFaithfulModel)
         Text(
-            text = "原样整理只做「补标点、顺语序」，思考固定关闭；可以单独选一个更便宜的模型。",
+            text = "事实一个都不改，话可以重新说；可以单独选一个更便宜的模型。",
             modifier = Modifier.padding(top = 6.dp),
             style = MaterialTheme.typography.labelSmall,
             color = DreamColors.inkFaint,
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("原样整理思考", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
+        Spacer(modifier = Modifier.height(8.dp))
+        ChoiceRow(
+            options = ThinkingLevel.entries,
+            selected = faithfulThinking,
+            label = { it.label },
+            onSelect = onFaithfulThinking,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -349,7 +363,7 @@ private fun GenerationCard(
         )
 
         Text(
-            text = "思考开着时，服务端会忽略 temperature；原样整理固定关闭思考。",
+            text = "思考开着时，服务端会忽略 temperature；两个模式的档位互相独立。",
             modifier = Modifier.padding(top = 12.dp),
             style = MaterialTheme.typography.labelSmall,
             color = DreamColors.inkFaint,

@@ -107,8 +107,10 @@ class ProviderDetailViewModel(
         val discovering: Boolean = false,
         /** 上一次检测结果的人话（成功/降级都写这里） */
         val discoveryNote: String? = null,
-        /** 小说化思考档位（faithful 恒关，改稿仍走关闭 + 温度，见 D471） */
+        /** 小说化思考档位（改稿仍走关闭 + 温度，见 D471） */
         val novelThinking: ThinkingLevel = GenerationOptions.DEFAULT.novelThinking,
+        /** 原样整理思考档位（v3 起独立，默认低） */
+        val faithfulThinking: ThinkingLevel = GenerationOptions.DEFAULT.faithfulThinking,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -135,6 +137,7 @@ class ProviderDetailViewModel(
                     model = novel,
                     faithfulModel = faithful,
                     novelThinking = options?.novelThinking ?: it.novelThinking,
+                    faithfulThinking = options?.faithfulThinking ?: it.faithfulThinking,
                 )
             }
         }
@@ -241,11 +244,21 @@ class ProviderDetailViewModel(
         generationPrefs?.setProvider(_state.value.provider)
     }
 
-    /** 换小说化思考档位；忠实整理与改稿不受影响（§0.2 / D471）。 */
+    /** 换小说化思考档位；原样整理与改稿不受影响（§0.2 / D471）。 */
     fun setNovelThinking(level: ThinkingLevel) {
         val prefs = generationPrefs ?: return
         prefs.setNovelThinking(level)
-        _state.update { it.copy(novelThinking = prefs.options().novelThinking) }
+        _state.update {
+            val options = prefs.options()
+            it.copy(novelThinking = options.novelThinking, faithfulThinking = options.faithfulThinking)
+        }
+    }
+
+    /** 换原样整理思考档位；只写自己的键，不碰小说化（v3 / D579）。 */
+    fun setFaithfulThinking(level: ThinkingLevel) {
+        val prefs = generationPrefs ?: return
+        prefs.setFaithfulThinking(level)
+        _state.update { it.copy(faithfulThinking = prefs.options().faithfulThinking) }
     }
 
     /** 重读本机存储（当前供应商）。解密失败时 store 返回 null，界面自然回到「还没配置」。 */
