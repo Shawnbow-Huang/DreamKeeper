@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -216,8 +217,15 @@ fun DetailScreen(
 
     // 手动改字：原样稿就地改、小说稿建新版本；保存成功后由 editSavedAck 关弹层。
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+    var changeLogOpen by remember { mutableStateOf(false) }
     LaunchedEffect(state.editSavedAck) {
         if (state.editSavedAck > 0) editTarget = null
+    }
+    if (changeLogOpen) {
+        ChangeLogSheet(
+            changeLog = state.dream?.novelChangeLog,
+            onDismiss = { changeLogOpen = false },
+        )
     }
     editTarget?.let { target ->
         EditTextDialog(
@@ -294,6 +302,7 @@ fun DetailScreen(
                             1 -> NovelTab(
                                 count = state.novelChangeCount,
                             changeLog = state.dream?.novelChangeLog,
+                            onOpenChangeLog = { changeLogOpen = true },
                                 // §0.7：详情正文用最终稿（selected ?: maxVersion），不用 dreams.novelText。
                                 novelText = state.finalNovel?.novelText ?: state.dream?.novelText,
                                 // 是否有「小说稿」：只认 novel / novel_revise 版本，原样整理稿不算（D394）。
@@ -798,6 +807,7 @@ private fun BodyScroll(text: String, color: Color) {
 private fun NovelTab(
     count: Int,
     changeLog: String?,
+    onOpenChangeLog: () -> Unit,
     novelText: String?,
     /**
      * 是否已有小说稿。不能拿 [novelText] 判：`finalNovel` 在没有版本时会回退到
@@ -868,7 +878,7 @@ private fun NovelTab(
             if (caption != null) {
                 Text(
                     text = caption,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).clickable { onOpenChangeLog() },
                     style = MaterialTheme.typography.labelSmall,
                     color = DreamColors.ember,
                 )
@@ -1354,7 +1364,7 @@ private enum class EditKind { FAITHFUL, NOVEL }
 
 private data class EditTarget(val kind: EditKind, val title: String, val text: String)
 
-/** 手动改字弹层：占屏 88% 宽 / 72% 高，标题固定、正文自己滚，避免长文本把标题顶出屏幕。 */
+/** 手动修改弹层：占屏 92% 宽 / 80% 高，标题固定、文本框自己滚，键盘弹出时不遮保存按钮。 */
 @Composable
 private fun EditTextDialog(
     title: String,
@@ -1367,19 +1377,27 @@ private fun EditTextDialog(
     var text by remember { mutableStateOf(initial) }
     Dialog(onDismissRequest = { if (!saving) onDismiss() }) {
         Surface(
-            modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.72f),
+            modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.80f),
             shape = RoundedCornerShape(16.dp),
             color = DreamColors.paperSurface,
             border = androidx.compose.foundation.BorderStroke(1.dp, DreamColors.inkFaint.copy(alpha = 0.16f)),
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text(text, style = MaterialTheme.typography.titleMedium, color = DreamColors.paper)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .imePadding(),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = DreamColors.paper)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     textStyle = MaterialTheme.typography.bodyMedium,
+                    // 多行 + 不限行数：内容超过高度时输入框自己滚，不再需要外层层层测高度。
+                    maxLines = 200,
+                    singleLine = false,
                 )
                 if (error != null) {
                     Text(
@@ -1406,5 +1424,56 @@ private fun EditTextDialog(
                 }
             }
         }
+    }
+}
+
+/** 创作手记 / 补写清单的查看弹层：只读，条目 type + detail（旧数据带 quote 时把原句也显示）。 */
+@Composable
+private fun ChangeLogSheet(changeLog: String?, onDismiss: () -> Unit) {
+    val entries = remember(changeLog) { parseChangeLogEntries(changeLog) }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.70f),
+            shape = RoundedCornerShape(16.dp),
+            color = DreamColors.paperSurface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, DreamColors.inkFaint.copy(alpha = 0.16f)),
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                Text("创作手记", style = MaterialTheme.typography.titleMedium, color = DreamColors.paper)
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    entries.forEach { entry ->
+                        Text(
+                            text = entry.type,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = DreamColors.ember,
+                        )
+                        Text(
+                            text = entry.detail,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = DreamColors.paper,
+                        )
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("关闭", color = DreamColors.inkDim) }
+                }
+            }
+        }
+    }
+}
+
+private data class ChangeLogEntry(val type: String, val detail: String)
+
+private fun parseChangeLogEntries(changeLog: String?): List<ChangeLogEntry> {
+    val raw = changeLog?.trim().orEmpty()
+    if (!raw.startsWith("[")) return emptyList()
+    val arr = runCatching { org.json.JSONArray(raw) }.getOrNull() ?: return emptyList()
+    return (0 until arr.length()).mapNotNull { i ->
+        val o = arr.optJSONObject(i) ?: return@mapNotNull null
+        val type = o.optString("type").ifBlank { "备注" }
+        val detail = o.optString("detail").ifBlank { o.optString("quote") }
+        if (detail.isBlank()) null else ChangeLogEntry(type, detail)
     }
 }
