@@ -9,6 +9,8 @@ import android.media.AudioManager
 import android.provider.Settings
 import android.os.Build
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -332,7 +334,7 @@ fun DetailScreen(
                                 },
                             )
 
-                            2 -> TagsTab(tags = state.tags)
+                            2 -> TagsTab(tags = state.tags, onDelete = vm::deleteTag)
 
                             else -> MediaTab()
                         }
@@ -1135,12 +1137,21 @@ private fun AskBubble(text: String) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-private fun TagsTab(tags: List<Tag>) {
+private fun TagsTab(tags: List<Tag>, onDelete: (String) -> Unit) {
+    var pending by remember { mutableStateOf<Tag?>(null) }
     if (tags.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无标签", style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkDim)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("还没有标签", style = MaterialTheme.typography.bodyLarge, color = DreamColors.inkDim)
+                Text(
+                    "原样整理完成后会自动打 3–6 个标签",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DreamColors.inkFaint,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
         return
     }
@@ -1155,6 +1166,7 @@ private fun TagsTab(tags: List<Tag>) {
                 text = tag.name,
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
+                    .combinedClickable(onClick = {}, onLongClick = { pending = tag })
                     .background(DreamColors.nightRaised)
                     .border(1.dp, DreamColors.line, RoundedCornerShape(50))
                     .padding(horizontal = 12.dp, vertical = 5.dp),
@@ -1162,6 +1174,25 @@ private fun TagsTab(tags: List<Tag>) {
                 color = DreamColors.paper,
             )
         }
+    }
+
+    val target = pending
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("删掉「${target.name}」？", color = DreamColors.paper) },
+            text = { Text("只从这个梦里移除，别的梦还在用这个标签。", color = DreamColors.inkDim) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(target.id)
+                    pending = null
+                }) { Text("删除", color = DreamColors.ember) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending = null }) { Text("取消", color = DreamColors.inkDim) }
+            },
+            containerColor = DreamColors.paperSurface,
+        )
     }
 }
 

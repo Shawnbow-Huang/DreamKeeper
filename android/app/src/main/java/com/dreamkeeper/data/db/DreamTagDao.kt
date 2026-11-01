@@ -33,6 +33,17 @@ interface DreamTagDao {
 
     @Query("DELETE FROM dream_tags WHERE tagId = :tagId") suspend fun deleteByTag(tagId: String)
 
+    /** 同 [observeTagsForDream] 的联表查询，但给「重打标签」用（一次性读，不订阅）。 */
+    @Query("""
+        SELECT tags.* FROM tags
+        INNER JOIN dream_tags ON tags.id = dream_tags.tagId
+        WHERE dream_tags.dreamId = :dreamId
+    """)
+    suspend fun listTagsForDream(dreamId: String): List<TagEntity>
+
+    @Query("DELETE FROM dream_tags WHERE dreamId = :dreamId AND tagId = :tagId")
+    suspend fun deleteLink(dreamId: String, tagId: String)
+
     /**
      * 一条梦当前挂着的标签 id（**不是** `COUNT(*)`：测试要断言「剩下哪一个」）。
      *

@@ -87,6 +87,8 @@ class GenerationOrchestrator(
      * 小说化 v3 三段提示词。生产由容器注入；null 时退回旧的单次 `novel.v2.1`（旧测试/无 Context 装配）。
      */
     private val novelPrompts: NovelPrompts? = null,
+    /** 原样整理成功后自动打标签（生产开、单测默认关，避免旧测试的请求队列被多打一次）。 */
+    private val autoTag: Boolean = false,
 ) : GenerationRunner {
     /** 每个 dream 一把锁：同一梦的两次生成不能交错写 `novel_versions`（§0.9 / D321）。 */
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -292,6 +294,44 @@ class GenerationOrchestrator(
         return FaithfulCall(rendered, response, report)
     }
 
+
+    /**
+     * 原样整理成功后的自动打标签：**尽力而为**，任何失败都不能影响整理结果。
+     * 一次小调用（thinking 关、temperature 0.2、jsonMode），失败只记日志。
+     */
+    private suspend fun bestEffortTags(run: Run, faithfulText: String) {
+        try {
+            val rendered = prompts.render(
+                PromptSpecs.TAG.promptId,
+                mapOf("原样稿" to faithfulText),
+            )
+            val response = chat(
+                run,
+                GenerationKind.TAG,
+                ChatRequest(
+                    model = run.faithfulModel,
+                    messages = listOf(ChatMessage("user", rendered.text)),
+                    thinking = Thinking.DISABLED,
+                    temperature = 0.2,
+                    jsonMode = true,
+                    apiKey = keyFor(run.provider),
+                    kind = "TAG",
+                    provider = run.provider,
+                ),
+            )
+            when (val parsed = com.dreamkeeper.llm.tags.TagExtractor.parse(response.content, faithfulText)) {
+                is com.dreamkeeper.llm.tags.TagExtractor.Result.Ok -> {
+                    store.saveAutoTags(run.dreamId, parsed.drafts)
+                    android.util.Log.d("DreamGen", "tags ok n=" + parsed.drafts.size)
+                }
+                is com.dreamkeeper.llm.tags.TagExtractor.Result.Bad ->
+                    android.util.Log.d("DreamGen", "tags skip " + parsed.reason)
+            }
+        } catch (e: Exception) {
+            android.util.Log.d("DreamGen", "tags failed " + e.javaClass.simpleName)
+        }
+    }
+
     private suspend fun commitFaithful(
         run: Run,
         stage: GenerationStage,
@@ -317,6 +357,7 @@ class GenerationOrchestrator(
             faithfulTextForDream = call.response.content,
         )
         store.recordJob(job(run.dreamId, stage, attemptOf(stage), error = null))
+        if (autoTag) bestEffortTags(run, call.response.content)
         return GenerationResult(
             kind = GenerationKind.FAITHFUL,
             finalStage = stage,

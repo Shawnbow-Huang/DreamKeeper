@@ -34,6 +34,7 @@ class PromptRepositoryTest {
         "novel_plan" to "8a176536",
         "novel_draft" to "4e9ddb3d",
         "novel_polish" to "f937c885",
+        "tag" to "c2d9b4eb",
     )
 
     @Test
@@ -106,6 +107,7 @@ class PromptRepositoryTest {
             "规划 JSON" to "{}",
             "小说草稿 JSON" to "{\"body\":\"x\"}",
         )
+        "tag" -> mapOf("原样稿" to "我梦见车站。")
         else -> error("测试数据缺 promptId=$promptId")
     }
 

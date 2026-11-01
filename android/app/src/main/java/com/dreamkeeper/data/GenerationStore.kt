@@ -3,6 +3,9 @@ package com.dreamkeeper.data
 import androidx.room.withTransaction
 import com.dreamkeeper.data.db.DreamDatabase
 import com.dreamkeeper.data.db.DreamEntity
+import com.dreamkeeper.data.db.DreamTagEntity
+import com.dreamkeeper.data.db.TagEntity
+import com.dreamkeeper.data.db.TagSource
 import com.dreamkeeper.data.db.GenerationJobEntity
 import com.dreamkeeper.data.db.LlmCallEntity
 import com.dreamkeeper.data.db.NovelMessageEntity
@@ -58,6 +61,19 @@ interface GenerationStore {
      */
     suspend fun saveManualNovel(dreamId: String, text: String): Int {
         throw UnsupportedOperationException("当前 Store 不支持手动改字")
+    }
+
+    /**
+     * 自动打标签：替换这篇梦上来源为 AUTO 的旧标签，再写入新标签（同名复用 tags 行）。
+     * 用户手动标签（source=USER）不动。
+     */
+    /** 用户手动删掉一个标签关联（只删 `dream_tags`，不动全局 `tags` 行）。 */
+    suspend fun deleteTagLink(dreamId: String, tagId: String) {
+        throw UnsupportedOperationException("当前 Store 不支持删除标签")
+    }
+
+    suspend fun saveAutoTags(dreamId: String, drafts: List<com.dreamkeeper.llm.tags.TagExtractor.Draft>) {
+        throw UnsupportedOperationException("当前 Store 不支持自动打标签")
     }
 
     /** 该梦已记账的 HTTP 交换数。 */
@@ -172,6 +188,32 @@ class RoomGenerationStore(private val db: DreamDatabase) : GenerationStore {
             stage = null,
             faithfulTextForDream = null,
         )
+    }
+
+    override suspend fun deleteTagLink(dreamId: String, tagId: String) {
+        db.dreamTagDao().deleteLink(dreamId, tagId)
+    }
+
+    override suspend fun saveAutoTags(
+        dreamId: String,
+        drafts: List<com.dreamkeeper.llm.tags.TagExtractor.Draft>,
+    ) {
+        val existing = db.dreamTagDao().listTagsForDream(dreamId)
+        existing.filter { it.source == TagSource.AUTO }.forEach {
+            db.dreamTagDao().deleteLink(dreamId, it.id)
+        }
+        val links = mutableListOf<DreamTagEntity>()
+        for (d in drafts) {
+            val row = db.tagDao().findByName(d.name) ?: TagEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                name = d.name,
+                kind = d.kind,
+                source = TagSource.AUTO,
+                evidenceText = d.evidence,
+            ).also { db.tagDao().upsert(it) }
+            links += DreamTagEntity(dreamId = dreamId, tagId = row.id)
+        }
+        db.dreamTagDao().upsertAll(links)
     }
 
     override suspend fun callCount(dreamId: String): Int = db.llmCallDao().countByDream(dreamId)

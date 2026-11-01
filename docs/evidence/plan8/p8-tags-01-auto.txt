@@ -1,0 +1,24 @@
+APK_SHA256=n/a（真机 debug 口径见下表；release 见 dist）
+DEVICE=vivo V2405A / Android 16 / arm64-v8a
+DEVICE_TIME=2026-11-02T00:09:00+08:00
+RED_BASELINE=（无独立 red：本任务是新增能力，先写 9 例单测再接线）
+
+# 为什么做
+用户 2026-11-01 23:52：「现在开始吧。这版的整理效果我觉得挺好的」——批准在原样整理成功后自动打标签。
+
+# 改法
+1. `prompts/tag.v1.md`（sha `c2d9b4eb`）：3–6 个标签，name 1–8 字，kind ∈ PERSON/PLACE/OBJECT/ACTION/EMOTION/OTHER，
+   evidence 必须是原样稿里逐字出现的片段，同名去重，只输出 JSON。
+2. `PromptSpecs.TAG` + `TagExtractor`（剥围栏、数量/长度/kind/evidence 子串校验）。
+3. `GenerationStore.saveAutoTags`：先删该梦 `source=AUTO` 的关联，再同名复用或新建 `tags` 行、插 `dream_tags`。
+4. `GenerationOrchestrator.bestEffortTags`：原样整理成功后打一次 TAG（thinking OFF、temperature 0.2、jsonMode），失败只记日志不影响正文。
+5. 标签页：`TagsTab` 读 `observeTagsForDream`，空态改「原样整理完成后会自动打 3–6 个标签」；长按胶囊弹确认后可删（只删关联）。
+
+# 真机结果（本次整理 380 字 → 279 字）
+- `logs`: `faithful ok stage=T1 in=380 out=279` 后紧接 `tags ok n=5`。
+- 标签页出现 5 个：带枪被拦 / 激动 / 宇宙飞船 / 家人 / 澳门（1 ACTION + 1 EMOTION + 1 OBJECT + 1 PERSON + 1 PLACE，混合达标）。
+- 截图 `p8-tags-01-auto.png` 103771 B sha256 前16 `d356522f6f556e07`。
+
+# 未覆盖
+- 标签删除的长按+确认只做了编译与单测（`delete_tag_link_hides_tag_but_keeps_row`），真机手势未验。
+- 标签管理页（全局）仍为只读分组；跨梦复用只验证了同梦重跑（AUTO 替换）。

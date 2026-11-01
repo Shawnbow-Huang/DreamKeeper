@@ -1,6 +1,7 @@
 package com.dreamkeeper.ui.detail
 
 import android.content.ContentResolver
+import android.util.Log
 import android.media.MediaPlayer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -314,6 +315,14 @@ class DetailViewModel(
     /** 手动改字（小说化稿）：新建一版 `origin=manual`，保留可回退。 */
     fun saveEditedNovel(text: String) = saveEdit { requireStore().saveManualNovel(dreamId, text) }
 
+    /** 删掉这个梦与某个标签的关联（全局 tags 行保留，别的梦还在用）。 */
+    fun deleteTag(tagId: String) {
+        viewModelScope.launch {
+            runCatching { requireStore().deleteTagLink(dreamId, tagId) }
+                .onFailure { Log.w("Detail", "delete tag failed", it) }
+        }
+    }
+
     private fun requireStore(): com.dreamkeeper.data.GenerationStore =
         store ?: error("这条装配没有注入 GenerationStore")
 
@@ -416,6 +425,8 @@ class DetailViewModel(
                 GenerationKind.NOVEL -> runner.generateNovel(id, idea) { _, attempt ->
                     onGenerationProgress(kind, attempt)
                 }
+                // TAG 只能由原样整理成功后内部触发，UI 不直接发起。
+                GenerationKind.TAG -> return@launch
             }
             val failure = result.failure
             if (failure != null) {

@@ -293,6 +293,7 @@ class AppContainer(
                 repository.observeTagsForDream(dreamId).first().map { it.name }
             },
             novelPrompts = com.dreamkeeper.llm.NovelPrompts(appContext),
+            autoTag = true,
         )
     }
 }

@@ -141,7 +141,16 @@ object PromptSpecs {
         markers = emptyList(),
     )
 
-    val ALL = listOf(FAITHFUL, NOVEL, NOVEL_REVISE, NOVEL_PLAN, NOVEL_DRAFT, NOVEL_POLISH)
+    val TAG = PromptSpec(
+        promptId = "tag",
+        version = "v1",
+        assetPath = "prompts/tag.v1.md",
+        sha256_8 = "c2d9b4eb",
+        slots = listOf(SlotSpec("原样稿", required = true)),
+        markers = emptyList(),
+    )
+
+    val ALL = listOf(FAITHFUL, NOVEL, NOVEL_REVISE, NOVEL_PLAN, NOVEL_DRAFT, NOVEL_POLISH, TAG)
 
     fun byId(promptId: String): PromptSpec =
         ALL.firstOrNull { it.promptId == promptId }
