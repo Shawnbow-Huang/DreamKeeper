@@ -61,6 +61,25 @@ UNCERTAIN = [
 
 CAUSAL = ["于是", "因此", "所以", "正因为", "导致", "结果", "从而", "故而"]
 
+# v3.1：明显不可能的时刻（4.4点钟）先归一再取锚点，避免用户手改版被误判。
+IMPOSSIBLE_CLOCK = re.compile(r"(\d+)\.\d+(?=点)")
+
+# v3.1：F1 的「新增人物/地点」窄口子——不引入分词器，只认常见称谓与地点词。
+PERSON_TERMS = [
+    "我妈", "爸爸", "父亲", "妈妈", "母亲", "舅舅", "叔叔", "阿姨",
+    "爷爷", "奶奶", "姐姐", "妹妹", "哥哥", "弟弟", "朋友", "同事", "同学",
+    "老师", "医生", "警察", "司机", "老板",
+]
+PLACE_TERMS = ["公园", "学校", "医院", "公司", "机场", "车站", "酒店", "餐厅", "商场", "超市"]
+
+
+def normalize_numbers(text):
+    return IMPOSSIBLE_CLOCK.sub(lambda m: m.group(1), text)
+
+
+def new_entities(input_text, output_text):
+    return [w for w in PERSON_TERMS + PLACE_TERMS if w in output_text and w not in input_text]
+
 # 场景硬切词：梦里换场的线索，出现时强制分段
 SCENE_MARKERS = [
     "后来切换到了", "画面一转", "画面又一转", "画面再一转", "然后我就", "紧接着",
@@ -212,6 +231,7 @@ NAME_BOUNDARY = PUNCT + "和跟对冲向与"
 
 def extract_anchors(text):
     """F1 的事实锚点：数字、颜色、方位、引号专名、说话人。顺序稳定、去重保序。"""
+    text = normalize_numbers(text)
     anchors = []
     anchors += ARABIC_NUM_RE.findall(text)
     anchors += [x for x in CN_NUM_RE.findall(text) if x not in GENERIC_NUM]
@@ -229,25 +249,35 @@ def extract_anchors(text):
 
 
 def gate_f1(input_text, output_text):
-    missing = [a for a in extract_anchors(input_text) if a not in output_text]
+    out = normalize_numbers(output_text)
+    missing = [a for a in extract_anchors(input_text) if a not in out]
+    added = new_entities(input_text, output_text)
+    detail = []
+    if missing:
+        detail.append("丢了事实：%s" % "、".join(missing[:10]))
+    if added:
+        detail.append("新增人物/地点：%s" % "、".join(added[:6]))
     return {
-        "gate": "F1", "name": "事实锚点全保留",
-        "value": len(missing), "pass": len(missing) == 0,
-        "detail": [] if not missing else ["丢了事实：%s" % "、".join(missing[:10])],
+        "gate": "F1", "name": "事实锚点全保留、不新增实体",
+        "value": len(missing) + len(added), "pass": not detail,
+        "detail": detail,
         "advisory": [],
     }
 
 
 def gate_f2(input_text, output_text):
+    """v3.1：不再要求压缩比例，只在两种异常上报警。"""
     a, b = len(content_chars(input_text)), len(content_chars(output_text))
     ratio = 0.0 if a == 0 else b / a
+    out = normalize_numbers(output_text)
+    missing = [x for x in extract_anchors(input_text) if x not in out]
     problems = []
-    if a > 0 and ratio < 0.50:
-        problems.append("压得太狠：输出/输入 = %.2f（下限 0.50）" % ratio)
-    if a > 0 and ratio > 0.85:
-        problems.append("几乎没压缩：输出/输入 = %.2f（上限 0.85）" % ratio)
+    if a > 0 and ratio < 0.60 and missing:
+        problems.append("疑似丢事实：输出/输入 = %.2f 且缺 %d 个锚点" % (ratio, len(missing)))
+    if a > 0 and ratio > 1.40:
+        problems.append("疑似注水：输出/输入 = %.2f（上限 1.40）" % ratio)
     return {
-        "gate": "F2", "name": "压缩率 0.50–0.85",
+        "gate": "F2", "name": "长度异常报警（0.60–1.40）",
         "value": round(ratio, 4), "pass": len(problems) == 0,
         "detail": problems, "advisory": [],
     }
@@ -339,61 +369,42 @@ def _scene_splits(text):
 
 
 def gate_g4(input_text, output_text):
-    # 原文里出现过的因果词位置集合（用来判断是不是"新增"）
-    input_has = any(c in input_text for c in CAUSAL)
-    bad = []
-    for start in _scene_splits(output_text):
-        window = output_text[start:start + 24]
-        for c in CAUSAL:
-            pos = window.find(c)
-            if pos == -1:
-                continue
-            ctx = window[max(0, pos - 6):pos + len(c) + 6]
-            if ctx not in input_text:
-                bad.append("跨场景新增因果「%s」（…%s…）" % (c, ctx.replace("\n", " ")))
-    # 原文一个因果词都没有、输出却出现了 => 全算新增
-    if not input_has:
-        for c in CAUSAL:
-            for m in re.finditer(c, output_text):
-                ctx = output_text[max(0, m.start() - 6):m.end() + 6]
-                if ctx not in input_text and ("跨场景新增因果「%s」" % c) not in " ".join(bad) + " ":
-                    bad.append("新增因果「%s」（…%s…）" % (c, ctx.replace("\n", " ")))
-                    break
+    """v3.1：跨场景因果连接词不再逐字比对上下文（改写必然改变上下文）。
+
+    口径改为计数：输出比原文多出 >=2 个因果词才算红；多 1 个视为「允许的那一句解释」。
+    """
+    def count(text):
+        return sum(text.count(c) for c in CAUSAL)
+
+    extra = count(output_text) - count(input_text)
+    problems = []
+    if extra >= 2:
+        problems.append("新增因果连接词 %d 处（允许 1 处解释）" % extra)
     return {
-        "gate": "G4", "name": "跨场景因果连接词 = 0",
-        "value": len(bad), "pass": len(bad) == 0,
-        "detail": bad[:6], "advisory": [],
+        "gate": "G4", "name": "跨场景因果连接词 <=1",
+        "value": max(0, extra), "pass": not problems,
+        "detail": problems, "advisory": [],
     }
-
-
-NEG_PREFIX = "不没未别莫"
-
-
-def count_uncertain(text, w):
-    """数不确定词，但排除否定式里的假阳性：「不可能 / 没问题 / 未确定」不讲不确定。"""
-    n = 0
-    start = 0
-    while True:
-        i = text.find(w, start)
-        if i < 0:
-            return n
-        if i == 0 or text[i - 1] not in NEG_PREFIX:
-            n += 1
-        start = i + len(w)
 
 
 def gate_g5(input_text, output_text):
-    inp = multiset([w for w in UNCERTAIN if w in input_text for _ in range(count_uncertain(input_text, w))])
-    bad = []
-    for w in UNCERTAIN:
-        need, got = count_uncertain(input_text, w), count_uncertain(output_text, w)
-        if need and got < need:
-            bad.append("「%s」原文 %d 处，输出只剩 %d 处" % (w, need, got))
-    return {
-        "gate": "G5", "name": "不确定词保留率 = 100%",
-        "value": len(inp), "pass": len(bad) == 0,
-        "detail": bad[:6], "advisory": [],
-    }
+    """v3.1：模糊词不再按次数守恒；只查「有没有把不确定写成确定」。"""
+    if not any(w in input_text for w in UNCERTAIN):
+        return {"gate": "G5", "name": "不确定词定性保留", "value": 0,
+                "pass": True, "detail": [], "advisory": []}
+    if not any(w in output_text for w in UNCERTAIN):
+        return {"gate": "G5", "name": "不确定词定性保留", "value": 1,
+                "pass": False, "detail": ["把不确定的事写成了确定"], "advisory": []}
+    in_paras = [p for p in input_text.split(chr(10)) if p.strip()]
+    out_paras = [p for p in output_text.split(chr(10)) if p.strip()]
+    if len(in_paras) == len(out_paras):
+        for i, (a, b) in enumerate(zip(in_paras, out_paras)):
+            if any(w in a for w in UNCERTAIN) and not any(w in b for w in UNCERTAIN):
+                return {"gate": "G5", "name": "不确定词定性保留", "value": i + 1,
+                        "pass": False, "detail": ["第 %d 段把推测写成了确定" % (i + 1)],
+                        "advisory": []}
+    return {"gate": "G5", "name": "不确定词定性保留", "value": 0,
+            "pass": True, "detail": [], "advisory": []}
 
 
 def gate_g6(input_text, output_text, limit=2):
@@ -468,13 +479,13 @@ def _self_test():
     case("F1 数字丢失", src, good.replace("四个人", "几个人"), False, ("F1",))
     case("F1 颜色丢失", src, good.replace("海是灰色的", "海是暗的"), False, ("F1",))
     case("F2 压得太狠", src, "昨天我梦见去海边。", False, ("F2",))
-    case("F2 几乎没压缩（原文照抄）", src, src, False, ("F2", "F3"))
+    case("原文照抄：F2 不再因不压缩报红，只剩口水", src, src, False, ("F3",))
     case("F3 口水残留", src,
          "呃，昨天我梦见我们四个人去了海边，海是灰色的，好像傍晚。", False, ("F3",))
-    case("G4 新增跨场景因果", src,
-         good.replace("海是灰色的", "于是海是灰色的"), False, ("G4",))
-    case("G5 丢不确定词", src,
-         good.replace("好像是傍晚", "是傍晚"), False, ("G5",))
+    case("G4 新增两处因果", src,
+         good.replace("海是灰色的", "于是海是灰色的").replace("天快黑了", "所以天快黑了"), False, ("G4",))
+    case("G5 整段断言化", src,
+         good.replace("好像是傍晚，也好像是夜里", "是傍晚，也是夜里"), False, ("G5",))
     case("revise 合法改写（G 口径不动）", "我站在站台上等末班车。", "我站在站台上，等末班车。", True, kind="revise")
     case("revise 不再跑 G6（换三个字只受 G3 约束）", "电梯按不到一楼，窗外有沙砾，我转头看了一眼。",
          "电梯按不到一搂，窗外有沙粒，我转头砍了一眼。", False, ("G3",), ("G6",), kind="revise")

@@ -1,0 +1,72 @@
+{
+  "source": "baseline-faithful-2026-11-01.txt",
+  "prompt": "faithful.v3.1",
+  "cases": [
+    {
+      "name": "语义改字：前文无依据、后文可推",
+      "mode": "faithful",
+      "input": "澳门不知道为什么就不进枪了，所以我标里也别的一把枪。走到一个店门口，店门口说不允许你带。",
+      "output": "澳门不知道为什么就不禁枪了，所以我腰里也别着一把枪。走到一个店门口，店门口的人说不允许你带。",
+      "expect_failed": []
+    },
+    {
+      "name": "两读皆通：不动",
+      "mode": "faithful",
+      "input": "他说开放时间是两点，开饭时间是六点。",
+      "output": "他说开放时间是两点了，开饭时间是六点。",
+      "expect_failed": []
+    },
+    {
+      "name": "常见搭配陷阱：不动",
+      "mode": "faithful",
+      "input": "他就坐在座上，没动。",
+      "output": "他就坐在座上，没动。",
+      "expect_failed": []
+    },
+    {
+      "name": "解释超量：注水报警",
+      "mode": "faithful",
+      "input": "我特别激动。",
+      "output": "我特别激动，因为这是我第一次坐飞船。那种感觉很新奇的体验。而且我从小就想飞。",
+      "expect_failed": [
+        "F2"
+      ]
+    },
+    {
+      "name": "新增人物：F1 红",
+      "mode": "faithful",
+      "input": "我跟家里人一起出门。",
+      "output": "我跟我妈、舅舅一起出门。",
+      "expect_failed": [
+        "F1"
+      ]
+    },
+    {
+      "name": "丢事实：F1 红",
+      "mode": "faithful",
+      "input": "比如4点钟出发、6点钟到，到底在这里吃饭还是到澳门再吃。",
+      "output": "比如4点钟出发，到底在这里吃饭还是到澳门再吃。",
+      "expect_failed": [
+        "F1"
+      ]
+    },
+    {
+      "name": "口水残留：F3 红",
+      "mode": "faithful",
+      "input": "呃，我做了个梦。",
+      "output": "呃，我做了个梦。",
+      "expect_failed": [
+        "F3"
+      ]
+    },
+    {
+      "name": "断言化：G5 红",
+      "mode": "faithful",
+      "input": "画面一转，好像就到了澳门。",
+      "output": "画面一转，就到了澳门。",
+      "expect_failed": [
+        "G5"
+      ]
+    }
+  ]
+}
