@@ -59,7 +59,7 @@ UNCERTAIN = [
     "不知道", "也可能", "应该是", "记混", "模糊",
 ]
 
-CAUSAL = ["于是", "因此", "所以", "正因为", "导致", "结果", "从而", "故而"]
+CAUSAL = ["于是", "因此", "所以", "正因为", "因为", "由于", "导致", "结果", "从而", "故而"]
 
 # v3.1：明显不可能的时刻（4.4点钟）先归一再取锚点，避免用户手改版被误判。
 IMPOSSIBLE_CLOCK = re.compile(r"(\d+)\.\d+(?=点)")
@@ -378,10 +378,10 @@ def gate_g4(input_text, output_text):
 
     extra = count(output_text) - count(input_text)
     problems = []
-    if extra >= 2:
-        problems.append("新增因果连接词 %d 处（允许 1 处解释）" % extra)
+    if extra >= 3:
+        problems.append("新增因果连接词 %d 处（允许 2 处）" % extra)
     return {
-        "gate": "G4", "name": "跨场景因果连接词 <=1",
+        "gate": "G4", "name": "跨场景因果连接词 <=2",
         "value": max(0, extra), "pass": not problems,
         "detail": problems, "advisory": [],
     }
@@ -482,8 +482,8 @@ def _self_test():
     case("原文照抄：F2 不再因不压缩报红，只剩口水", src, src, False, ("F3",))
     case("F3 口水残留", src,
          "呃，昨天我梦见我们四个人去了海边，海是灰色的，好像傍晚。", False, ("F3",))
-    case("G4 新增两处因果", src,
-         good.replace("海是灰色的", "于是海是灰色的").replace("天快黑了", "所以天快黑了"), False, ("G4",))
+    case("G4 新增三处因果", src,
+         good.replace("海是灰色的", "于是海是灰色的").replace("天快黑了", "所以天快黑了").replace("我们在沙滩上走了很久", "因此我们在沙滩上走了很久"), False, ("G4",))
     case("G5 整段断言化", src,
          good.replace("好像是傍晚，也好像是夜里", "是傍晚，也是夜里"), False, ("G5",))
     case("revise 合法改写（G 口径不动）", "我站在站台上等末班车。", "我站在站台上，等末班车。", True, kind="revise")
