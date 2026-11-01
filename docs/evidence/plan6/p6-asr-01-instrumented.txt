@@ -1,0 +1,54 @@
+HOST_ONLY=1 (以下命令与结果均在本机执行；不含任何用户数据)
+DEVICE=emulator-5554 (Medium_Phone_API_37.0, x86_64) + 待真机复核
+DATE=2026-11-01T06:31Z / 14:31 CST
+
+# 为什么做
+用户在 vivo 真机上录 1:32，系统离线识别提示「下载中文语音包」，点重新转写卡在
+「正在转写…」。系统语音包不可打包、不可代装；用户 2026-11-01 决定：
+「我不搞在线asr……你把 SenseVoice Small 内置到我们的应用里」（D563）。
+
+# 怎么证明「真的内置并且真的能转」
+JVM 单测加载不了 .so 与 239MB 模型，所以证据分两层：
+1. 纯算法：`SegmentPlanTest`（分段/重叠去重/接缝标点）+ `PcmReaderTest`（LE 采样、越界夹取、格式判断）
+   + `PreferredSttEngineTest`（内置优先/系统兜底/都不可用），共 14 例；
+2. 真推理：`androidTest` 的 `SenseVoiceInstrumentedTest` 把官方 `test_wavs/zh.wav`
+   复制到 cache，调 `SenseVoiceEngine.transcribe()`，断言结果里有汉字。
+
+# 命令与原始输出
+$ bash scripts/fetch-asr.sh
+  sherpa-onnx-2.0.1.aar  a8d09d1d32f3eb85…0ee7  49,441,341 B
+  model.int8.onnx        c71f0ce00bec95b0…cd51  239,233,841 B
+  tokens.txt             f449eb28dc567533…a1dc  315,894 B
+
+$ ./gradlew :app:connectedDebugAndroidTest
+  BUILD SUCCESSFUL; TEST-SenseVoiceInstrumentedTest.xml tests=1 failures=0 time=1.728s
+  （第二次单跑 am instrument：OK (1 test) / Time: 1.906）
+
+$ adb logcat -d -s DreamStt:* SenseVoiceProof:*
+  11-01 06:31:54.552 I DreamStt: segment 1/1 samples=89472 chars=14
+  11-01 06:31:54.552 I DreamStt: sensevoice done chars=14 elapsedMs=1791
+  11-01 06:31:54.553 I SenseVoiceProof: engine=x86_64 text=开饭时间早上9点至下午5点。
+
+$ ./gradlew :app:testDebugUnitTest --rerun-tasks
+  classes=66 tests=526 failures=0 errors=0 skipped=0（基线 63/512 → +3 类 / +14 例）
+
+$ adb install -r app-release.apk ; adb shell am start -W -n com.dreamkeeper/.MainActivity
+  TotalTime：686 / 748 / 776 ms（同机系统设置 546 ms 作对照；宿主机负载高于 10-31 的 431ms 基线）
+  启动日志中无 DreamStt 行 → 239MB 模型没有在冷启时加载（lazy，仅首次转写加载）
+
+$ ls -l app-release.apk
+  338,819,854 B  versionName 0.11.0 / versionCode 5
+
+# 设备证据
+p6-asr-02-settings.png  181,800 B sha256 3bb154e789ff59a9  nearWhite 0.0000%
+  → 设置页「语音识别 / 内置 SenseVoice Small / 离线转写随包安装，不联网、不依赖系统语音包」
+
+# 读法
+- 看到 `SenseVoiceProof: text=开饭时间早上9点至下午5点。` 就说明：APK 里的模型被真的读入、
+  真的跑了 native 推理、真的输出了带标点的中文（模型把「开放」听成「开饭」属识别误差，不影响结论）。
+- `elapsedMs=1791` 含首次模型加载 + 5.6s 音频推理；模型常驻后单段更快。
+
+# 未覆盖 / PENDING
+- vivo 真机上的实际录音转写（真实麦克风、64kbps 录音、1 分钟以上）——待用户在真机安装 0.11.0 后回传；
+- 4 小时长录音的分段接缝质量（当前只验证了 1 段 5.6s）；
+- armeabi-v7a 真机（模拟器只有 x86_64）。

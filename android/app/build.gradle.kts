@@ -24,8 +24,8 @@ android {
         applicationId = "com.dreamkeeper"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.10.1"
+        versionCode = 5
+        versionName = "0.11.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -58,6 +58,20 @@ android {
         compose = true
         // AGP 9.5 的默认值未实测；BuildConfig 里有手写字段（SEED_DEMO_DATA），必须显式开
         buildConfig = true
+    }
+
+    // 内置 SenseVoice Small（离线语音转写，D563）：
+    // · 只留三种真正会被用到的 ABI——x86 是 32 位模拟器，早已不是目标；
+    //   每个 ABI 的 onnxruntime 十几 MB，四份全带等于白送 26MB。
+    // · .onnx 必须 noCompress：sherpa 走 AAssetManager 直接读，压缩过的资产
+    //   拿不到连续缓冲（200MB 模型也经不起每次解压）。
+    defaultConfig {
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+    androidResources {
+        noCompress += listOf("onnx", "txt")
     }
 
     compileOptions {
@@ -106,12 +120,22 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    // D563：内置离线语音识别运行时（sherpa-onnx 2.0.1 官方 AAR，Apache-2.0）。
+    // 官方没有 Maven 坐标，只有 GitHub Release 资产；49MB 的 AAR 直接进 libs/，
+    // 换来的是「不靠系统语音包、不联网也能转写」。
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
     // 提供 MigrationTestHelper：Plan 2 给 dreams 加字段时就靠它验 migration
     testImplementation(libs.room.testing)
+
+    // 内置语音模型的真机/模拟器验证：JVM 单测加载不了 .so 与 239MB 模型，
+    // 只有 androidTest 能证明「真的能转出字」（D563）。
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }
 
 ksp {
@@ -119,6 +143,27 @@ ksp {
     // 它是 "v1 的表结构长什么样" 的唯一机器可读记录。
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+// D563：内置语音识别的两个大二进制（49MB AAR + 239MB int8 模型）不入库，
+// 由 scripts/fetch-asr.sh 拉取并校验 SHA256。缺了就**在最早处**停下并给出可执行命令，
+// 而不是等打包到一半报「文件不存在」。
+val checkBundledAsr = tasks.register("checkBundledAsr") {
+    val aar = file("libs/sherpa-onnx-2.0.1.aar")
+    val model = file("src/main/assets/sensevoice/model.int8.onnx")
+    val tokens = file("src/main/assets/sensevoice/tokens.txt")
+    inputs.files(aar, model, tokens).withPropertyName("bundledAsr")
+    doLast {
+        val missing = listOf(aar, model, tokens).filterNot { it.exists() }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "内置语音识别依赖缺失：" +
+                    missing.joinToString { it.relativeTo(projectDir).path } +
+                    "\n请先运行：bash scripts/fetch-asr.sh",
+            )
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(checkBundledAsr) }
 
 // D266/D273：单测会读仓库里的成本向量（scripts/check-cost.py 的同一份真源）。
 // 不登记成 input 的话，Gradle 会认为 testDebugUnitTest 的输入没变而跳过——向量改了测试不重跑，

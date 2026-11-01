@@ -174,6 +174,10 @@
 | D560 | 2026-11-01 | 双模型 | 忠实链思考仍固定关闭，UI 只给说明不给开关 | 设计 §9 的逐字保守约束；思考开着会改写句子结构，与「整理稿不动措辞」冲突 |
 | D561 | 2026-11-01 | 模型 UI | 模型候选从胶囊平铺改为下拉（当前值 + ▾，菜单内 ✓）；思考仍用 4 枚胶囊 | 用户反馈：一家 3–4 个模型时会出现一排圆角矩形，下拉更美观、更贴「选一个」的语义 |
 | D562 | 2026-11-01 | 模型 UI | 卡内顺序改为 忠实整理 → 小说化 → 思考；下拉容器改纸面 + 发丝线 | 忠实是流程第一步、也是更省的一步；M3 默认淡紫容器与皮肤冲突 |
+| D563 | 2026-11-01 | 语音 | 内置 SenseVoice Small（sherpa-onnx 2.0.1 AAR + `model.int8.onnx` 239MB）进 assets，`.onnx` noCompress，懒加载 | 用户原话「我不搞在线asr，没这个钱……把 SenseVoice Small 内置到我们的应用里」；系统离线包既不能打包也不能代装，真机上直接卡死 |
+| D564 | 2026-11-01 | 语音 | 长录音按 25s 分段 + 0.8s 重叠，文本按最长公共前后缀去重（≤8 字）；采样按段读，不整文件进内存 | 单条上限 4h，整段 float 采样约 920MB；硬切会切在字中间，重叠 + 去重是成本最低的修法 |
+| D565 | 2026-11-01 | 语音 | `PreferredSttEngine`：内置优先 → 系统兜底；都不可用时把**内置**的原因抛给用户 | 内置模型随包发，正常永远是主路径；被商店按 ABI 裁包时系统识别器仍可救场；报「模型缺失，请重装」比「本机没有离线识别」更可行动 |
+| D566 | 2026-11-01 | 语音 | AAR（49MB）与模型（239MB）不入库：`scripts/fetch-asr.sh` 按 SHA256 拉取；Gradle `checkBundledAsr` 缺失即失败；许可证进 `THIRD-PARTY-NOTICES.md` | 二进制进 git 会撑爆历史；可复现性靠脚本 + 哈希，不靠大文件 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -356,3 +360,15 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - **证据**：`docs/evidence/plan6/p6-ui-16-{order,dropdown,switched}.png` + `p6-ui-16-order-dropdown.txt`，nearWhite 全 0.0000%。
 - **测试**：纯 UI 改动，未加新单测；相关行为由既有 10 例守住（含「setFaithfulModel 不改 model」）。全量 63 类/512 例绿。
 - **结论**：通过；模型选择从「数量一多就换行」变为「数量无关的一行」。
+
+### 内置离线语音识别（Lead，2026-11-01）
+
+- 用户原话：「我不搞在线asr，没这个钱。我确定了，你把"SenseVoice Small"这个东西内置到我们的应用里。」
+- **交付**：`stt/SenseVoiceEngine.kt`（lazy 单例 + `OfflineRecognizer` + `SegmentPlan` 分段 + `PcmReader` 按段读）、`stt/SegmentPlan.kt`（25s/0.8s + 最长公共前后缀去重）、`stt/PcmReader.kt`、`stt/PreferredSttEngine.kt`（内置优先/系统兜底）、`AppContainer.sttEngine` 接线；依赖 `android/app/libs/sherpa-onnx-2.0.1.aar`（Apache-2.0，file dependency）与 `assets/sensevoice/{model.int8.onnx,tokens.txt,MODEL-LICENSE.txt}`；构建加 `abiFilters arm64/armv7/x86_64`、`noCompress onnx/txt`、`checkBundledAsr`。
+- **大小与来源**：AAR 49,441,341 B `a8d09d1d…0ee7`；模型 239,233,841 B `c71f0ce0…cd51`；tokens 315,894 B `f449eb28…a1dc`。AAR 来自 sherpa-onnx v2.0.1 Release；模型来自 hf-mirror 的 `csukuangfj/sherpa-onnx-sense-voice-…-2024-07-17`。两者**不入库**，由 `scripts/fetch-asr.sh` 拉取校验。
+- **Lead 独立复跑**：全量 `:app:testDebugUnitTest --rerun-tasks` → **classes=66 tests=526 failures=0 errors=0 skipped=0**（基线 63/512，+3 类 / +14 例）；新增 `androidTest` 的 `SenseVoiceInstrumentedTest` 在 x86_64 模拟器 **1 例绿**（1.728s）。
+- **真推理证据**：logcat `DreamStt: segment 1/1 samples=89472 chars=14`、`sensevoice done chars=14 elapsedMs=1791`、`SenseVoiceProof: engine=x86_64 text=开饭时间早上9点至下午5点。`（官方 zh.wav；「开放」被听成「开饭」属识别误差）。
+- **包体与启动**：release APK 338,819,854 B（0.11.0 / versionCode 5）；冷启 686–776ms（同机系统设置 546ms 对照，宿主机更忙，不能直接对比 10-31 的 431ms）；启动日志无 `DreamStt` → 模型未在冷启加载。
+- **文档**：`docs/ASR-SENSEVOICE.md`（选型/结构/校验/限制）、`THIRD-PARTY-NOTICES.md`（sherpa-onnx Apache-2.0 + SenseVoice/FunASR MIT）、`docs/evidence/plan6/p6-asr-01-instrumented.txt` + `p6-asr-02-settings.png`（nearWhite 0.0000%）。
+- **PENDING**：vivo 真机真实录音（≥1 分钟）、4h 长录音接缝质量、armeabi-v7a 真机；ABI split 减包未做。
+- **结论**：通过（模拟器级真推理）；「不联网、不依赖系统语音包」的目标达成，代价是安装包 +323MB。

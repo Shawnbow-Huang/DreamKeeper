@@ -1,4 +1,4 @@
-> 最后更新：2026-11-01 03:30（Plan 6 完成 7/7 + 设置 IA + 模型自动发现 + **模型下拉与顺序**：候选改下拉、忠实在上小说化在下、纸面菜单（D553–D562），全量 **63 类 512 例**绿，release 0.10.0 见 `dist/`）
+> 最后更新：2026-11-01 14:40（Plan 6 收尾 + **内置 SenseVoice 离线语音识别**：sherpa-onnx 2.0.1 AAR + 239MB int8 模型随包、25s 分段 + 0.8s 重叠去重、内置优先/系统兜底（D563–D566），全量 **66 类 526 例**绿 + androidTest 真推理 1 例绿，release 0.11.0 见 `dist/`）
 
 ## 一、当前在做
 
@@ -225,3 +225,15 @@
 | M6 | 模型候选改下拉 | ✅ | 一行当前值 + ▾；菜单纸面容器 + 发丝线 + 当前项 ✓；3–4 个模型不再换行 |
 | M7 | 顺序先忠实后小说化 | ✅ | 忠实整理 → 小说化 → 思考，按使用顺序排 |
 | M8 | 真机联动 | ✅ | 真实 `/models` 返回 2 个 → 「检测到 2 个可用模型」；忠实切 V4 Pro 不影响小说化（`p6-ui-16-*`） |
+
+### 内置离线语音识别（2026-11-01，D563–D566）
+
+| # | 项 | 状态 | 说明 |
+|---|---|---|---|
+| S1 | 运行时接入 | ✅ | `android/app/libs/sherpa-onnx-2.0.1.aar`（Apache-2.0，49MB，三 ABI）作 file dependency；`abiFilters` 去掉 x86 |
+| S2 | 模型随包 | ✅ | `assets/sensevoice/model.int8.onnx`（239,233,841 B）+ `tokens.txt`；`noCompress onnx/txt`；懒加载，冷启 0 加载 |
+| S3 | 分段与去重 | ✅ | 25s / 0.8s 重叠；`SegmentPlan.mergeSegments` 最长公共前后缀 ≤8 字；`PcmReader` 按段读，4h 也不整段进内存 |
+| S4 | 引擎选择 | ✅ | `PreferredSttEngine`：内置优先 → 系统兜底；都不可用时报内置原因 |
+| S5 | 测试与证据 | ✅ | 新增 3 类 14 例（分段/采样/选择器），全量 66 类/526 例；androidTest 1 例真推理绿（`text=开饭时间早上9点至下午5点。`）；`p6-asr-01/02` |
+| S6 | 包体与许可 | ✅ | release 338,819,854 B；`docs/ASR-SENSEVOICE.md` + `THIRD-PARTY-NOTICES.md`；二进制不入库，`scripts/fetch-asr.sh` 校验 |
+| S7 | 真机验证 | ⏳ PENDING | vivo 真机 ≥1 分钟录音、4h 接缝质量、armv7 真机（模拟器仅 x86_64） |

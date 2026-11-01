@@ -31,6 +31,8 @@ import com.dreamkeeper.llm.PriceCard
 import com.dreamkeeper.llm.PromptRepository
 import com.dreamkeeper.llm.PromptRepositoryAdapter
 import com.dreamkeeper.service.RecordingSession
+import com.dreamkeeper.stt.PreferredSttEngine
+import com.dreamkeeper.stt.SenseVoiceEngine
 import com.dreamkeeper.stt.SttEngine
 import com.dreamkeeper.stt.SystemSttEngine
 import com.dreamkeeper.stt.TranscriptWriter
@@ -176,10 +178,14 @@ class AppContainer(
     val recordingSession: RecordingSession by lazy { RecordingSession() }
 
     /**
-     * 系统 on-device 识别器。构造本身不碰系统服务；真正的探测发生在第一次
-     * `availability()`（结果进程内缓存），所以 Application 启动不会因此变慢。
+     * 转写引擎：内置 SenseVoice Small 优先，系统 on-device 识别器兜底（D563）。
+     *
+     * 两个构造都不碰系统服务、也不加载模型：内置模型的 239MB 只在第一次真正转写时
+     * 由 `OfflineRecognizer` 读入，Application 启动不会因此变慢。
      */
-    val sttEngine: SttEngine by lazy { SystemSttEngine(appContext) }
+    val sttEngine: SttEngine by lazy {
+        PreferredSttEngine(SenseVoiceEngine(appContext), SystemSttEngine(appContext))
+    }
 
     /** 录音收尾 → 一次性本地转写 → CAS 窄更新（§0.5–§0.7 全在里面）。 */
     val transcriptWriter: TranscriptWriter by lazy {

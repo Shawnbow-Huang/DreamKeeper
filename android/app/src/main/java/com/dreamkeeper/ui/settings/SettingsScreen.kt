@@ -37,7 +37,7 @@ import com.dreamkeeper.ui.theme.paletteOf
 /**
  * 设置首页（2026-11-01 改版）：只当索引，不铺配置。
  *
- * 三块：模型服务（一行摘要）→ 外观 → 关于。
+ * 四块：模型服务（一行摘要）→ 外观 → 语音识别 → 关于。
  * 供应商列表与 Key/模型/测试都挪到二级页；这里不再出现任何 Key 输入框——
  * 「设置」是导航页，配置面板应该待在自己的页面里。
  */
@@ -97,6 +97,25 @@ fun SettingsScreen(
 
             SectionLabel("外观")
             SkinCard(selected = state.skin, onSelect = vm::setSkin)
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            SectionLabel("语音识别")
+            CommonCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "内置 SenseVoice Small",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DreamColors.paper,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "离线转写随包安装，不联网、不依赖系统语音包；识别全在本机完成。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DreamColors.inkFaint,
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 

@@ -47,3 +47,8 @@ docs/evidence/plan2/.p2-*
 # DSH image generation scratch output (masters live in docs/art/plan5)
 dsh-image-gen/
 dist/
+
+# D563：内置语音识别的大体积二进制不入库（AAR 49MB + 模型 239MB）。
+# 用 scripts/fetch-asr.sh 拉取并按 SHA256 校验；缺失时构建会给出明确报错。
+android/app/libs/*.aar
+android/app/src/main/assets/sensevoice/model.int8.onnx
