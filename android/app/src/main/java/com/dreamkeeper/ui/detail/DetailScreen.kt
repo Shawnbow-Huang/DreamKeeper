@@ -265,7 +265,7 @@ fun DetailScreen(
                                 onGenerateFaithful = vm::generateFaithful,
                                 onRetryGeneration = vm::retryGeneration,
                                 onEdit = { text ->
-                                    editTarget = EditTarget(EditKind.FAITHFUL, "改原样稿", text)
+                                    editTarget = EditTarget(EditKind.FAITHFUL, "修改原样稿", text)
                                 },
                             )
 
@@ -296,7 +296,7 @@ fun DetailScreen(
                                 onSelectVersion = vm::selectVersion,
                                 onExport = { exportOpen = true },
                                 onEdit = { text ->
-                                    editTarget = EditTarget(EditKind.NOVEL, "改小说稿", text)
+                                    editTarget = EditTarget(EditKind.NOVEL, "修改小说稿", text)
                                 },
                             )
 
@@ -531,7 +531,7 @@ private fun TranscriptTab(
                 enabled = (faithful ?: raw).isNotBlank(),
             ) {
                 Text(
-                    text = "改字",
+                    text = "修改",
                     style = MaterialTheme.typography.labelSmall,
                     color = DreamColors.paper,
                 )
@@ -855,7 +855,7 @@ private fun NovelTab(
                 enabled = hasNovelVersion && !novelText.isNullOrBlank(),
             ) {
                 Text(
-                    text = "改字",
+                    text = "修改",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (hasNovelVersion) DreamColors.paper else DreamColors.inkDim,
                 )
