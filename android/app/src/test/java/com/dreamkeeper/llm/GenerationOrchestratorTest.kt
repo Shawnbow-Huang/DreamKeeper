@@ -442,6 +442,7 @@ class GenerationOrchestratorTest {
         options: () -> GenerationOptions = { GenerationOptions() },
         clientFor: ((ProviderId) -> LlmClient)? = null,
         apiKeyFor: ((ProviderId) -> String)? = null,
+        novelPrompts: NovelPrompts? = null,
     ): GenerationOrchestrator = GenerationOrchestrator(
         llm = llm,
         prompts = prompts,
@@ -455,6 +456,7 @@ class GenerationOrchestratorTest {
         apiKey = { "sk-test-key" },
         clientFor = clientFor ?: { llm },
         apiKeyFor = apiKeyFor,
+        novelPrompts = novelPrompts,
     )
 
     /** 每行一个稳定 id，方便断言「哪条记账是哪次交换」。 */
@@ -863,6 +865,45 @@ class GenerationOrchestratorTest {
 
         /** `PromptRepository` 给【只做标点】自动追加的指令；用它区分「真带了标记」与「正文提到标记」。 */
         const val PUNCTUATION_DIRECTIVE = "本轮按保守档输出"
+    }
+
+    @Test
+    fun `三段式小说化按 PLAN DRAFT POLISH 发三次并各记一条 job`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity(faithful = "我梦见去澳门玩，好像要坐宇宙飞船去别的星球。"))
+        val neutral = "他推开门。走廊尽头有一扇窗。风从窗缝里进来。"
+        val body = buildString {
+            repeat(3) { i ->
+                if (i > 0) append("\n\n")
+                repeat(16) { append(neutral) }
+            }
+        }
+        val plan = """{"premise":"去澳门没出发","want":"去成","obstacle":"纠结","cost":"兴奋被磨",
+            "controllingIdea":"安全感败，因为一直没动身","counterPremise":"安全感胜，因为家人一起走",
+            "pov":"FIRST","targetLength":1500,
+            "scenes":[
+              {"goal":"出发","conflict":"纠结","outcome":"没走","sequel":{"reaction":"愣","dilemma":"走留","decision":"留"}},
+              {"goal":"找船","conflict":"找不到","outcome":"但是上了车","sequel":{"reaction":"急","dilemma":"等不等","decision":"等"}},
+              {"goal":"进店","conflict":"被拦","outcome":"不进去了","sequel":{"reaction":"恼","dilemma":"争不争","decision":"不争"}}],
+            "endingChange":"从兴奋到发怵","coreImages":["澳门"],"emotionalTruth":"想走又怕走"}"""
+        val draft = """{"title":"下不完的楼梯","body":${org.json.JSONObject.quote(body)},"notes":[
+            {"type":"借用","detail":"沿用楼梯"},{"type":"舍弃","detail":"舍掉吃饭"},
+            {"type":"主题","detail":"落在回不去"}],"mood":"发怵"}"""
+        val llm = FakeLlm().apply { enqueue(ok(plan)); enqueue(ok(draft)); enqueue(ok(draft)) }
+        val store = RoomGenerationStore(db)
+        val context: android.content.Context = ApplicationProvider.getApplicationContext()
+
+        val r = newOrchestrator(llm, store, novelPrompts = NovelPrompts(context)).generateNovel(DREAM_ID)
+
+        assertNull(r.failure)
+        assertEquals(GenerationStage.POLISH, r.finalStage)
+        assertEquals(3, llm.requests.size)
+        assertEquals(
+            listOf("PLAN", "DRAFT", "POLISH"),
+            db.generationJobDao().listByDream(DREAM_ID).sortedBy { it.attemptNo }.map { it.stage },
+        )
+        assertEquals(1, store.versions(DREAM_ID).size)
+        assertTrue(llm.requests[1].messages.single().content.contains("去澳门"))
     }
 
     @Test

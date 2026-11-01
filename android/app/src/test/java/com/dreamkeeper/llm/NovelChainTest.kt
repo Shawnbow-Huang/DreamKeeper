@@ -45,7 +45,7 @@ class NovelChainTest {
         renderPlan = { _, _, _ -> stages += "plan"; "PLAN_PROMPT" },
         renderDraft = { plan, _, _ -> stages += "draft:" + plan.contains("去澳门"); "DRAFT_PROMPT" },
         renderPolish = { p, d -> stages += "polish"; "POLISH_PROMPT" },
-        chat = chat,
+        chat = { _, prompt -> chat(prompt) },
     )
 
     @Test

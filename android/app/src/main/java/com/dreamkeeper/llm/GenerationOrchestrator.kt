@@ -83,6 +83,10 @@ class GenerationOrchestrator(
     private val apiKeyFor: ((ProviderId) -> String)? = null,
     /** 标签名列表（§0.5 的「标签 / 选填」槽）；空列表表示不传这一槽。 */
     private val tagsFor: suspend (String) -> List<String> = { emptyList() },
+    /**
+     * 小说化 v3 三段提示词。生产由容器注入；null 时退回旧的单次 `novel.v2.1`（旧测试/无 Context 装配）。
+     */
+    private val novelPrompts: NovelPrompts? = null,
 ) : GenerationRunner {
     /** 每个 dream 一把锁：同一梦的两次生成不能交错写 `novel_versions`（§0.9 / D321）。 */
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -327,12 +331,104 @@ class GenerationOrchestrator(
 
     // ---------------------------------------------------------------- 小说化
 
+    /**
+     * 三段式小说化：每条 job 一行，阶段失败即整次失败；POLISH 失败回退 DRAFT（NovelChain 负责）。
+     */
+    private suspend fun novelThreeStage(
+        dream: Dream,
+        run: Run,
+        idea: String?,
+        prompts: NovelPrompts,
+        onProgress: ((GenerationStage, Int) -> Unit)?,
+    ): GenerationResult {
+        val raw = dream.rawTranscript
+        val base = dream.faithfulText?.takeIf { it.isNotBlank() } ?: raw
+        val cfg = options()
+        val level = cfg.novelThinking
+        val stageNo = mapOf(
+            GenerationStage.PLAN to 1,
+            GenerationStage.DRAFT to 2,
+            GenerationStage.POLISH to 3,
+        )
+        val chain = NovelChain(
+            renderPlan = { r, b, i -> prompts.renderPlan(r, b, i).text },
+            renderDraft = { plan, b, i -> prompts.renderDraft(plan, b, i).text },
+            renderPolish = { plan, d -> prompts.renderPolish(plan, d).text },
+            chat = { stage, prompt ->
+                emit(GenerationKind.NOVEL, stage, stageNo.getValue(stage), onProgress)
+                chat(
+                    run,
+                    GenerationKind.NOVEL,
+                    ChatRequest(
+                        model = run.model,
+                        messages = listOf(ChatMessage("user", prompt)),
+                        thinking = level.thinking,
+                        effort = level.effort,
+                        temperature = if (level.effort == null) NOVEL_TEMPERATURE_NO_THINKING else null,
+                        jsonMode = true,
+                        apiKey = keyFor(run.provider),
+                        kind = "NOVEL",
+                        provider = run.provider,
+                    ),
+                ).content
+            },
+        )
+        val result = chain.run(raw, base, idea?.trim()?.takeIf { it.isNotEmpty() })
+        val stages = when (result) {
+            is NovelChainResult.Success -> result.stages
+            is NovelChainResult.Failure -> result.stages
+        }
+        stages.forEach { stage ->
+            store.recordJob(job(run.dreamId, stage, stageNo.getValue(stage), error = null))
+        }
+        if (result is NovelChainResult.Failure) {
+            return protocol(GenerationKind.NOVEL, result.reason)
+        }
+        result as NovelChainResult.Success
+        val notesJson = org.json.JSONArray().apply {
+            result.draft.notes.forEach { note ->
+                put(org.json.JSONObject().put("type", note.type).put("detail", note.detail))
+            }
+        }.toString()
+        val version = store.commitSuccess(
+            dreamId = run.dreamId,
+            draft = draft(
+                dreamId = run.dreamId,
+                text = result.draft.body,
+                promptId = "novel_v3",
+                promptVersion = "3",
+                promptHash = prompts.bundleSha8(),
+                model = run.model,
+            ),
+            changeLogJson = notesJson,
+            stage = null,
+        )
+        return GenerationResult(
+            kind = GenerationKind.NOVEL,
+            finalStage = GenerationStage.POLISH,
+            text = result.draft.body,
+            version = version,
+            changeLogKept = result.draft.notes.size,
+            changeLogDropped = 0,
+            attempts = run.attempts,
+            costMicroYuan = run.costMicroYuan,
+            failure = null,
+            faithfulText = base,
+            title = result.draft.title,
+            mood = result.draft.mood,
+        )
+    }
+
     private suspend fun novel(
         dream: Dream,
         run: Run,
         idea: String?,
         onProgress: ((GenerationStage, Int) -> Unit)?,
     ): GenerationResult {
+        // v3：三段式（规划→写作→润色）。没有注入三段提示词时仍走下面的旧单次路径。
+        novelPrompts?.let { prompts ->
+            return novelThreeStage(dream, run, idea, prompts, onProgress)
+        }
         emit(GenerationKind.NOVEL, GenerationStage.T0, 1, onProgress)
         // §0.4 两槽分离：【原始转写】永远是 rawTranscript；【理顺稿】优先用忠实链落库的 faithfulText，
         // 没有才回退原文（回退时两槽同值，与 Plan 3 行为一致）。

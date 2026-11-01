@@ -40,7 +40,7 @@ class NovelChain(
     private val renderPlan: (raw: String, base: String, idea: String?) -> String,
     private val renderDraft: (planJson: String, base: String, idea: String?) -> String,
     private val renderPolish: (planJson: String, draftJson: String) -> String,
-    private val chat: suspend (prompt: String) -> String,
+    private val chat: suspend (stage: GenerationStage, prompt: String) -> String,
     private val attemptsPerStage: Int = 2,
 ) {
 
@@ -51,7 +51,7 @@ class NovelChain(
         stages += GenerationStage.PLAN
         val planPrompt = renderPlan(raw, base, idea)
         var planRaw: String? = null
-        val plan = attempt(planPrompt) { text ->
+        val plan = attempt(GenerationStage.PLAN, planPrompt) { text ->
             NovelPlan.parse(text, base)?.also { planRaw = text }
         } ?: return NovelChainResult.Failure(GenerationStage.PLAN, "规划 JSON 两次都不合法", stages)
         val planJson = JSONObject(NovelPlan.stripFence(requireNotNull(planRaw))).toString()
@@ -59,14 +59,14 @@ class NovelChain(
         // ---- DRAFT：按规划写正文；N1/N2 都要过。
         stages += GenerationStage.DRAFT
         val draftPrompt = renderDraft(planJson, base, idea)
-        val draft = attempt(draftPrompt) { text -> parseDraft(text) }
+        val draft = attempt(GenerationStage.DRAFT, draftPrompt) { text -> parseDraft(text) }
             ?: return NovelChainResult.Failure(GenerationStage.DRAFT, "草稿两次都没过 N1/N2", stages)
         val draftJson = draftJsonOf(draft)
 
         // ---- POLISH：润色失败不拦整次，回退草稿并加一条 WARN 手记。
         stages += GenerationStage.POLISH
         val polishPrompt = renderPolish(planJson, draftJson)
-        val polished = attempt(polishPrompt) { text -> parseDraft(text) }
+        val polished = attempt(GenerationStage.POLISH, polishPrompt) { text -> parseDraft(text) }
         return if (polished != null) {
             NovelChainResult.Success(polished, stages, polishFallback = false)
         } else {
@@ -76,9 +76,13 @@ class NovelChain(
     }
 
     /** 每段重试 [attemptsPerStage] 次；[parse] 返回 null 视为不合法。 */
-    private suspend fun <T : Any> attempt(prompt: String, parse: (String) -> T?): T? {
+    private suspend fun <T : Any> attempt(
+        stage: GenerationStage,
+        prompt: String,
+        parse: (String) -> T?,
+    ): T? {
         repeat(attemptsPerStage) {
-            val text = runCatching { chat(prompt) }.getOrNull() ?: return@repeat
+            val text = runCatching { chat(stage, prompt) }.getOrNull() ?: return@repeat
             parse(text)?.let { return it }
         }
         return null
