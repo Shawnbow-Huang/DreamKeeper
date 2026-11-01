@@ -167,49 +167,40 @@ class GenerationOrchestratorTest {
     // ------------------------------------------------------------ §0.11 #4
 
     @Test
-    fun `T1 仍红时 T2 只要求逐字等值即可提交`() = runTest {
+    fun `原文有口水时 T2 不提交，落 T3 保留上一版`() = runTest {
         val llm = FakeLlm()
         llm.enqueue(ok(T0_BAD))
         llm.enqueue(ok(T1_BAD))
-        llm.enqueue(ok(T1_BAD)) // T1b：同档再修一次仍红，才降到 T2
-        llm.enqueue(ok(T2_CONSERVATIVE)) // 与输入内容字完全相同（只差标点）
+        llm.enqueue(ok(T1_BAD)) // T1b
+        llm.enqueue(ok(T2_CONSERVATIVE)) // 逐字等值，但原文有口水 → 不算改进
         val store = FakeStore(dreamDomain())
+
+        val result = newOrchestrator(llm, store).generateFaithful(DREAM_ID)
+
+        assertNull(result.failure)
+        assertEquals("T2 只加标点、原文有口水时不算改进", GenerationStage.T3, result.finalStage)
+        assertEquals(RAW, result.text)
+        assertEquals(0, store.commits.size)
+        assertEquals(4, llm.requests.size)
+        assertNull("思考开着时 T2 也不发 temperature", llm.requests[3].temperature)
+    }
+
+    @Test
+    fun `原文本来干净时 T2 逐字等值仍可提交`() = runTest {
+        val llm = FakeLlm()
+        llm.enqueue(ok(T0_BAD))
+        llm.enqueue(ok(T1_BAD))
+        llm.enqueue(ok(T1_BAD))
+        llm.enqueue(ok(CLEAN_INPUT))
+        val store = FakeStore(dreamDomain(raw = CLEAN_INPUT))
 
         val result = newOrchestrator(llm, store).generateFaithful(DREAM_ID)
 
         assertNull(result.failure)
         assertEquals(GenerationStage.T2, result.finalStage)
-        assertEquals(T2_CONSERVATIVE, result.text)
-        assertEquals(4, llm.requests.size)
-
-        val t2Body = llm.requests[3].messages.single().content
-        assertTrue("T2 必须带只做标点的指令", t2Body.contains(PUNCTUATION_DIRECTIVE))
-        assertFalse("T2 不该再带 T1 的违规载荷", t2Body.contains("丢了事实"))
-        assertNull("思考开着时 T2 也不发 temperature", llm.requests[3].temperature)
-
+        assertEquals(CLEAN_INPUT, result.text)
         assertEquals("T2", store.commits.single().stage)
-        assertTrue(FaithfulGates.isConservativeOk(RAW, T2_CONSERVATIVE))
-        assertFalse("v3 的 CLEAN_T1 是重写，不该被逐字判据放行", FaithfulGates.isConservativeOk(RAW, CLEAN_T1))
-    }
-
-    @Test
-    fun `T1 红但 T1b 修干净时按 T1 提交`() = runTest {
-        val llm = FakeLlm()
-        llm.enqueue(ok(T0_BAD))
-        llm.enqueue(ok(T1_BAD))
-        llm.enqueue(ok(CLEAN_T1)) // T1b 把剩下的违规项也修掉
-        val store = FakeStore(dreamDomain())
-
-        val result = newOrchestrator(llm, store).generateFaithful(DREAM_ID)
-
-        assertNull(result.failure)
-        assertEquals(GenerationStage.T1, result.finalStage)
-        assertEquals(CLEAN_T1, result.text)
-        assertEquals(3, llm.requests.size)
-        assertEquals("T1", store.commits.single().stage) // 同档重试，仍记 T1
-
-        val t1bBody = llm.requests[2].messages.single().content
-        assertTrue("T1b 必须带上一轮的违规项", t1bBody.contains("丢了事实"))
+        assertTrue(FaithfulGates.isConservativeOk(CLEAN_INPUT, CLEAN_INPUT))
     }
 
     // ------------------------------------------------------------ §0.11 #5
@@ -860,6 +851,9 @@ class GenerationOrchestratorTest {
         /** T0/T1 的坏输出：把「三十次」改成「四十次」——F1 事实锚点红，其余绿。 */
         const val T0_BAD = "我梦见车站。等了好久，车一直不来，我数着四十次呼吸。广播声听不清。"
         const val T1_BAD = "我梦见车站。等了好久，车一直不来，我数着四十次呼吸。广播声听不清。"
+
+        /** 原本就干净的口语稿（没有口水），用来验证 T2 在「无需压缩」时仍可提交。 */
+        const val CLEAN_INPUT = "我梦见车站，等了好久，车一直不来，我数着三十次呼吸，有时候会听到广播，可是听不清在说什么。"
 
         /** T2 保守档：与 [RAW] 的内容字逐个相等（只差标点/空白），这才该被 `isConservativeOk` 放行。 */
         const val T2_CONSERVATIVE = RAW

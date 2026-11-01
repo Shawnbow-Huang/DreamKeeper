@@ -220,7 +220,11 @@ class GenerationOrchestrator(
             )
         }
         if (t2 == null) return llmFailure(GenerationKind.FAITHFUL, GenerationStage.T2, run, t2Error!!)
-        if (FaithfulGates.isConservativeOk(input, t2.response.content)) {
+        // T2 只在「原文本来就没有口水」时才算改进：输入满是「呃/嗯/那个」时，
+        // 只加标点的输出等于退回原文，会把上一版更好的原样稿冲掉（真机 21:10 就发生过）。
+        val t2Clean = FaithfulGates.check(input, t2.response.content, GateMode.FAITHFUL)
+            .results.first { it.gate == Gate.F3 }.passed
+        if (t2Clean && FaithfulGates.isConservativeOk(input, t2.response.content)) {
             return commitFaithful(run, GenerationStage.T2, t2, input)
         }
 

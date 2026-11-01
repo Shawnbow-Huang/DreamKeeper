@@ -1,4 +1,15 @@
-> 最后更新：2026-11-01 21:00（**原样整理 v3**：事实守恒提示词 + F1/F2/F3 闸门 + T1b 同档重试 + 同音字窄口子；默认档位改「高」；全量 **67 类 530 例**绿，release **0.13.0**）
+> 最后更新：2026-11-01 21:30（**Plan 7 完成**：原样整理 v3 = 事实守恒 + F1/F2/F3 + T1b + 同音字同篇一致性 + T2 守卫；真机 380→263 字、做→坐已修；全量 **67 类 530 例**绿，release **0.13.2**）
+
+## 〇、Plan 7（原样整理 v3）已完成
+
+| 任务 | 状态 | 证据 |
+|---|---|---|
+| T1 提示词 v3（事实守恒 + 压缩五六成 + 同音字窄口子） | ✅ | `prompts/faithful.v3.md` sha `82c6e1f1` |
+| T2 Python/Kotlin 闸门 F1/F2/F3 + G4/G5 | ✅ | `scripts/check-faithful.py`、`FaithfulGates.kt` |
+| T3 编排 T0→T1→T1b→T2→T3 | ✅ | `GenerationOrchestrator`，T2 加 F3 守卫 |
+| T4 原样整理思考四档（默认 HIGH） | ✅ | `dk_generation_faithful_thinking` |
+| T5 真机校准与证据 | ✅ | [ACCEPTANCE](evidence/plan7/ACCEPTANCE.md) · [p7-faithful-01-vivo.txt](evidence/plan7/p7-faithful-01-vivo.txt) |
+| T6 发布 0.13.2 | ✅ | `dist/DreamKeeper-0.13.2.apk` |
 
 ## 一、当前在做
 

@@ -24,8 +24,8 @@ android {
         applicationId = "com.dreamkeeper"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "0.13.0"
+        versionCode = 13
+        versionName = "0.13.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
