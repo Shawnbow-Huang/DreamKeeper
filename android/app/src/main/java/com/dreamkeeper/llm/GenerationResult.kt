@@ -17,6 +17,11 @@ enum class GenerationStage {
     T1,
     T2,
     T3,
+
+    // 小说化 v3 的三段（与 T 链无关，job 行按 stage.name 记）。
+    PLAN,
+    DRAFT,
+    POLISH,
 }
 
 /**
