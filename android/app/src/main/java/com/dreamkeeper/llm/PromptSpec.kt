@@ -65,7 +65,7 @@ object PromptSpecs {
         promptId = "faithful",
         version = "v3.1",
         assetPath = "prompts/faithful.v3.1.md",
-        sha256_8 = "1a9082be",
+        sha256_8 = "f97fb4e9",
         slots = listOf(
             SlotSpec("待理顺转写", required = true, allowEmpty = true),
         ),
