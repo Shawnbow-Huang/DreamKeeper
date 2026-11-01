@@ -62,20 +62,52 @@ internal object SegmentPlan {
         if (cleaned.isEmpty()) return ""
         val builder = StringBuilder(cleaned.first())
         for (next in cleaned.drop(1)) {
-            val limit = minOf(maxChars, builder.length, next.length)
+            // 用「正文用字」比对，而不是原始字符串：25s 硬切处模型往往会给上一段补个句号、
+            // 给下一段开头补个逗号（真机 2026-11-01 的「去澳。，去澳门」就是这种），
+            // 带标点比对永远撞不上，接缝处就会把同一个词读两遍。
+            val prevContent = contentChars(builder.toString())
+            val nextContent = contentChars(next)
+            val limit = minOf(maxChars, prevContent.length, nextContent.length)
             var overlap = 0
             for (k in limit downTo 2) {
-                if (builder.substring(builder.length - k) == next.substring(0, k)) {
+                if (prevContent.substring(prevContent.length - k) == nextContent.substring(0, k)) {
                     overlap = k
                     break
                 }
             }
-            val tail = next.substring(overlap)
-            // 重叠段本来就属于同一句话：去重后直接续上，不要再插逗号。
-            if (overlap > 0) builder.append(tail) else appendSegment(builder, tail)
+            if (overlap >= 2) {
+                val tail = next.substring(indexAfterContentChars(next, overlap))
+                // 切段处模型补的句号/逗号：后面紧跟着被重复的正文，说明这个标点是切的痕迹，不是话的结束。
+                while (builder.isNotEmpty() && builder.last() in SEAM_PUNCTUATION) {
+                    builder.deleteCharAt(builder.length - 1)
+                }
+                builder.append(tail)
+            } else {
+                appendSegment(builder, next)
+            }
         }
         return builder.toString()
     }
+
+    /** 去掉标点与空白后的正文用字；与 faithfully 的「正文长度」口径一致。 */
+    private fun contentChars(text: String): String =
+        text.filterNot { it.isWhitespace() || it in PUNCTUATION }
+
+    /** 第 [count] 个正文用字之后的下标（用于从下一段里切掉被重复的前缀）。 */
+    private fun indexAfterContentChars(text: String, count: Int): Int {
+        var seen = 0
+        for ((index, ch) in text.withIndex()) {
+            if (ch.isWhitespace() || ch in PUNCTUATION) continue
+            seen++
+            if (seen == count) return index + 1
+        }
+        return text.length
+    }
+
+    private const val PUNCTUATION = "，。！？；：、,.!?;:…—“”\"'（）()《》【】[]"
+
+    /** 接缝处只清理句末标点：逗号/顿号留在原位也没意义，一并清掉。 */
+    private val SEAM_PUNCTUATION = setOf('。', '，', '、', '；', '：', '！', '？', ',', '.', ';', ':', '!', '?')
 
     /**
      * 没有重叠可去时的接缝处理：
@@ -87,7 +119,9 @@ internal object SegmentPlan {
         if (tail.isEmpty()) return
         val last = builder.lastOrNull() ?: return
         val first = tail.first()
-        if (last.isWhitespace() || first.isWhitespace() || first in SEGMENT_PUNCTUATION) {
+        if (last.isWhitespace() || first.isWhitespace() ||
+            last in SEGMENT_PUNCTUATION || first in SEGMENT_PUNCTUATION
+        ) {
             builder.append(tail)
             return
         }

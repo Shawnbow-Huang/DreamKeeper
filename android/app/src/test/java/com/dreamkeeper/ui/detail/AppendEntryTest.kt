@@ -189,6 +189,29 @@ class AppendEntryTest {
         assertEquals("拨回 PENDING 后必须补跑一次", 1, retried)
     }
 
+    // 5c) 僵住的 PENDING：restartTranscription 不改状态，直接让容器再扫一遍
+    @Test
+    fun `restart transcription asks the container to reconcile without touching status`() =
+        runTest(dispatcher) {
+            seed(dream("d4c", status = TranscriptStatus.PENDING, rawAudioMs = 2_000, transcriptMs = 0))
+            var retried = 0
+            val vm = DetailViewModel(
+                repo,
+                "d4c",
+                orchestrator = runner,
+                onRetryTranscription = { retried += 1 },
+            )
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+            withTimeout(5_000) { vm.state.first { it.loaded && it.dream != null } }
+
+            vm.restartTranscription()
+            advanceUntilIdle()
+
+            assertEquals("僵住的 PENDING 也要能让 Writer 再跑一次", 1, retried)
+            // 关键：不把 PENDING 先拨成别的状态（否则 reconcile 的 PENDING 判据就落空了）。
+            assertEquals(TranscriptStatus.PENDING, repo.findById("d4c")?.transcriptStatus)
+        }
+
     @Test
     fun `skip transcription catches the watermark up`() = runTest(dispatcher) {
         seed(dream("d5", rawAudioMs = 2_000, transcriptMs = 1_000))

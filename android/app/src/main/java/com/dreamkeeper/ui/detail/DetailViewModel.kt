@@ -277,6 +277,16 @@ class DetailViewModel(
         }
     }
 
+    /**
+     * 僵住的 PENDING 行：不再改状态，直接把「启动补跑」再执行一次。
+     *
+     * 与 [retryTranscription] 的区别：那条只对 FAILED 生效（先把状态拨回 PENDING），
+     * 对一条卡在 PENDING 的旧行返回 0 行、什么也不会发生。
+     */
+    fun restartTranscription() {
+        onRetryTranscription?.invoke()
+    }
+
     /** 用户决定「这段不用转写」：把水位追平，生成闸门放行。 */
     fun skipTranscription() {
         val total = state.value.dream?.rawAudioMs ?: return

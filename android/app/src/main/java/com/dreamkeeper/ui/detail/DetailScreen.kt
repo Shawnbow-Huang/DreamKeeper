@@ -233,6 +233,7 @@ fun DetailScreen(
                                 onRepolish = vm::generateFaithful,
                                 onRetryTranscription = vm::retryTranscription,
                                 onSkipTranscription = vm::skipTranscription,
+                                onRestartTranscription = vm::restartTranscription,
                             )
 
                             1 -> NovelTab(
@@ -443,6 +444,7 @@ private fun TranscriptTab(
     onRepolish: () -> Unit,
     onRetryTranscription: () -> Unit,
     onSkipTranscription: () -> Unit,
+    onRestartTranscription: () -> Unit,
 ) {
     if (dream == null) return
     val context = LocalContext.current
@@ -538,18 +540,19 @@ private fun TranscriptTab(
                         TextButton(onClick = { dialogOpen = true }) {
                             Text("手动补字", color = DreamColors.ember)
                         }
-                        if (status == TranscriptStatus.FAILED) {
-                            // 缺离线包是系统侧问题，把用户送到系统语音设置，别让人猜去哪下载。
-                            TextButton(
-                                onClick = {
-                                    val opened = runCatching {
-                                        context.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
-                                    }.isSuccess
-                                    if (!opened) onMessage("打不开系统语音设置，请手动到「设置 → 语言与输入 → 语音输入」下载中文包")
-                                },
-                            ) {
-                                Text("去下载语音包", color = DreamColors.inkDim)
+                        when (status) {
+                            // PENDING 也可能是一条僵住的旧行（进程被杀、0.10 超时）：
+                            // 不给出口，界面就会一直「正在转写…」等下去（真机 2026-11-01）。
+                            TranscriptStatus.PENDING -> TextButton(onClick = onRestartTranscription) {
+                                Text("重新转写", color = DreamColors.inkDim)
                             }
+
+                            // FAILED：把状态拨回 PENDING 再让 Writer 重排一次。
+                            TranscriptStatus.FAILED -> TextButton(onClick = onRetryTranscription) {
+                                Text("重新转写", color = DreamColors.ember)
+                            }
+
+                            else -> Unit
                         }
                     }
                 }
@@ -617,7 +620,9 @@ private fun TranscriptTab(
 }
 
 
-/** 转写中的等待提示：每秒刷新，最多等到 SttEngine 的 90s 硬上限。 */
+/** 转写中的等待提示：每秒刷新；90s 是 SttEngine 的硬上限，超过就不再报「正在等」。 */
+private const val WAIT_CAP_SECONDS = 90
+
 @Composable
 private fun TranscribingWaited() {
     var seconds by remember { mutableStateOf(0) }
@@ -628,7 +633,13 @@ private fun TranscribingWaited() {
         }
     }
     Text(
-        text = "已等 $seconds 秒，最多 90 秒；等不及可以先手动补字。",
+        // 90s 是 SttEngine 的硬上限：过了还停在 PENDING，说明这条行已经僵住，
+        // 继续数「已等 196 秒」只会让人以为还在转（真机 2026-11-01）。
+        text = if (seconds < WAIT_CAP_SECONDS) {
+            "已等 $seconds 秒，最多 ${WAIT_CAP_SECONDS} 秒；等不及可以先手动补字。"
+        } else {
+            "等了超过 ${WAIT_CAP_SECONDS} 秒，可能已经卡住：点「重新转写」再排一次，或先手动补字。"
+        },
         style = MaterialTheme.typography.labelSmall,
         color = DreamColors.inkFaint,
         textAlign = TextAlign.Center,

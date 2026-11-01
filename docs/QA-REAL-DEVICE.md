@@ -92,6 +92,9 @@ adb uninstall com.dreamkeeper && adb install DreamKeeper-0.10.0.apk
 - [ ] 再录一条 2 分钟以上的，检查接缝处（每 25 秒一处）有没有重复半句或吞字；
       有的话记下时间点，这是分段算法的已知风险。
 - [ ] 如果转写失败：先看 `adb logcat -s DreamStt`，把 `sensevoice done` / `segment` 行贴回来。
+- [ ] 如果界面停在「正在转写…」超过 90 秒：应显示「可能已经卡住」，点「重新转写」；
+      若仍不动，在电脑上 `adb logcat -s TranscriptWriter DreamStt` 取证（0.11.3 起失败会落 FAILED，不再无限等）。
+- [ ] 60 秒以上录音检查 25 秒接缝处是否还有「同一个词读两遍」（0.11.3 改为按正文比对拼接）。
 - [ ] 注意安装包约 323MiB，安装与首次打开会明显比之前慢；首次转写要等模型加载（1–2 秒）。
 
 ## 4. 原样整理（忠实模式）

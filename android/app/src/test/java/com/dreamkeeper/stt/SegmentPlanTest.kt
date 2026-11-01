@@ -64,6 +64,31 @@ class SegmentPlanTest {
     }
 
     @Test
+    fun `真机接缝：上一段补了句号 下一段补了逗号 仍只保留一份`() {
+        // 2026-11-01 vivo 92 秒录音的三处真实接缝（截取）
+        assertEquals(
+            "那就去澳门就跟好像要坐宇宙飞船",
+            SegmentPlan.mergeSegments(listOf("那就去澳。", "，去澳门就跟好像要坐宇宙飞船")),
+        )
+        assertEquals(
+            "比如说4.4点钟出发，6点钟到啊，那到底",
+            SegmentPlan.mergeSegments(listOf("比如说4.4点钟出发，6点钟到。", "，6点钟到啊，那到底")),
+        )
+        assertEquals(
+            "然后但是呢走到一个店门口呢，所以说不允许",
+            SegmentPlan.mergeSegments(listOf("然后但是呢走到一个店门口呢。", "，店门口呢，所以说不允许")),
+        )
+    }
+
+    @Test
+    fun `没有重叠时不会误删前一段的句号`() {
+        assertEquals(
+            "第一句。第二句",
+            SegmentPlan.mergeSegments(listOf("第一句。", "第二句")),
+        )
+    }
+
+    @Test
     fun `全空段返回空串`() {
         assertEquals("", SegmentPlan.mergeSegments(listOf("", "   ", "")))
     }

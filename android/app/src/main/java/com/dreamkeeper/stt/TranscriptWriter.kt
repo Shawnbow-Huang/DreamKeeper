@@ -174,7 +174,13 @@ class TranscriptWriter(
         for (dream in repository.pendingAppends()) {
             val path = dream.rawAudioPath ?: continue
             val file = File(path)
-            if (!file.exists() || audioStore.isOpen(file)) continue
+            if (!file.exists()) {
+                // 文件被系统清理 / 用户删了缓存：不能继续挂着 PENDING，否则界面永远「正在转写」。
+                Log.w(TAG, "录音文件不存在，标记失败：${dream.id}")
+                dream.rawAudioMs?.let { repository.markAppendFailed(dream.id, it) }
+                continue
+            }
+            if (audioStore.isOpen(file)) continue
             attempts++
             runCatching { onAppendFinished(dream.id, file) }
                 .onFailure { Log.w(TAG, "补转写失败：${dream.id}（${it.message}）") }
@@ -200,6 +206,10 @@ class TranscriptWriter(
         }
 
         val dir = tempDir ?: file.parentFile
+        // 真机事故（2026-11-01）：cacheDir 下的 stt-tail 从来没被创建过，
+        // FileOutputStream 直接 ENOENT；异常又被外层只记日志吞掉，行永远停在 PENDING。
+        // 目录自己建，失败自己标 FAILED——不能让「转写失败」表现成「永远正在转写」。
+        runCatching { dir.mkdirs() }
         val temp = File(dir, "tail-${file.nameWithoutExtension}.wav")
         val result = try {
             val dataBytes = TailWav.sliceTo(file, fromMs, temp)
@@ -209,6 +219,10 @@ class TranscriptWriter(
                 return
             }
             transcribe(temp)
+        } catch (error: Throwable) {
+            Log.w(TAG, "尾段切分/转写异常：$dreamId（${error.message}）")
+            repository.markAppendFailed(dreamId, toMs)
+            return
         } finally {
             temp.delete()
         }

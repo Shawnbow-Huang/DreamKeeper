@@ -1,0 +1,49 @@
+HOST_ONLY=1 （设备日志与截图由本机 adb 采集；转写内容为测试者本人 2026-11-01 的梦，已获准用于证据）
+DEVICE=vivo V2405A / Android 16 / arm64-v8a / 1080x2400
+APP=0.11.1 → 0.11.2(中间包) → 0.11.3
+DATE=2026-11-01T07:40Z / 15:40 CST
+
+# 现场
+用户：「我这里92秒的录音似乎依旧转写有点问题」。设备上打开该条（92.3 秒）：
+原样 tab 显示「正在转写…」「已等 196 秒，最多 90 秒」——状态 PENDING，且没有任何重试入口。
+
+# 根因（logcat，0.11.1）
+W TranscriptWriter: 尾段转写异常：a2153eee-…（/data/user/0/com.dreamkeeper/cache/stt-tail/tail-a2153eee-….wav: open failed: ENOENT)
+→ TranscriptWriter 把尾段写到 cacheDir/stt-tail/，但该目录从未创建；
+  异常被 onAppendFinished 的 runCatching 只记一行日志吞掉，行状态永远停在 PENDING。
+
+# 修复后（0.11.2 中间包，同样 92.3 秒音频）
+I DreamStt: segment 1/4 samples=400000 chars=61
+I DreamStt: segment 2/4 samples=400000 chars=117
+I DreamStt: segment 3/4 samples=400000 chars=140
+I DreamStt: segment 4/4 samples=315200 chars=102
+I DreamStt: sensevoice done chars=423 elapsedMs=4318
+I TranscriptWriter: 尾段写回：a2153eee-… rows=true from=0 to=92300
+I TranscriptWriter: 启动补转写：attempts=1
+
+# 转写全文（原样，未做任何改写；用于定位接缝）
+（节选 header）
+呃，前天的时候我做了一个梦，就是什么呢？
+嗯，我思考一下嗯，哦，对，就是呃好像要去澳门玩，然后但是那个梦里不知道为什么去澳。，去澳门就跟好像要坐宇宙飞船去别的星球一样啊，得做一个类似的东西。然后所以那时候就特别激动啊，真的要做一个类似宇宙飞船一样的东西。然后那时候呢跟家里人一起出去，是跟家人一起出去，然后一家人就在那里纠结，就比如说4.4点钟出发，6点钟到。，6点钟到啊，那到底要在这里吃还是在那里吃，然后这些工略都没有做好，那时候纠结了很久，然后然后然后纠结纠结，最后好像也没有一个结果。但是画面一转，突然就到了澳门了。然后就就很奇怪，就是到那个地方之后嗯，不知道为什么澳门就不进枪了，所以我标里也别的一把枪。然后但是呢走到一个店门口呢。，店门口呢，所以说不允许不允许你带，然后他又要把我那个枪拿下来保管啊，然后然后我就稀里糊涂的也没有想这个有没有逻辑怎样，就好像很好像觉得就该这样子，就给他接受了。然后接下来这个梦就结束了，非常简短的一个梦。
+
+# 三处接缝重复（上一段补句号、下一段补逗号 → 带标点比对撞不上）
+1) 「去澳。，去澳门」       → 期望「去澳门」
+2) 「6点钟到。，6点钟到啊」 → 期望「6点钟到啊」
+3) 「店门口呢。，店门口呢」 → 期望「店门口呢」
+修复：SegmentPlan.mergeSegments 先按「正文用字」（去标点空白）比对最长公共前后缀（≤8 字），
+命中后清掉上一段接缝处多出的句读，再从下一段对应正文位置续写。三条已进单测。
+
+# 证据文件
+p6-asr-03-vivo-transcript.png  157174 B sha256 06123c38a618006f
+  → 真机界面：0.11.2 转写完成后的「原样」tab（含全文与播放条）
+
+# 测试
+新增：TranscriptReconcileTest 2 例（临时目录缺失仍能补跑 / 文件丢失标 FAILED）
+      AppendEntryTest +1（PENDING 的 restartTranscription 不改状态、只请求重扫）
+      SegmentPlanTest +2（三条真机接缝 / 无重叠不误删标点）
+全量：classes=67 tests=533 failures=0 errors=0 skipped=0
+
+# 未覆盖 / PENDING
+- 新录音（≥60 秒）在真机上的接缝效果需用户再录一条确认；
+- 4 小时长录音未测；
+- 「澳门就不进枪了 / 我标里也别的一把枪」这类语义错属 ASR 本身，忠实稿按 D567 不做猜测性纠正。
