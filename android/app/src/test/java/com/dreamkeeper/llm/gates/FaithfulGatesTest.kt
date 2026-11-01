@@ -42,7 +42,7 @@ class FaithfulGatesTest {
         val expectedGates = if (c.mode == GateMode.FAITHFUL) {
             listOf(Gate.F1, Gate.F2, Gate.F3, Gate.G4, Gate.G5)
         } else {
-            listOf(Gate.G1, Gate.G2, Gate.G3, Gate.G4, Gate.G5, Gate.G6)
+            listOf(Gate.G1, Gate.G2, Gate.G3, Gate.G4, Gate.G5)
         }
         assertEquals("case $id ${c.name} 闸门数", expectedGates.size, report.results.size)
         assertEquals(

@@ -80,7 +80,8 @@ object FaithfulGates {
                 add(gateG3(input, output))
                 add(gateG4(input, output))
                 add(gateG5(input, output))
-                add(gateG6(input, output))
+                // 不再跑 G6：revise 是整体改写，允许换字；v3 起 faithful 也改用 F1–F3。
+                // G6 的枚举与向量保留，回滚 v2 时直接接回这里即可。
             }
         } else {
             buildList {

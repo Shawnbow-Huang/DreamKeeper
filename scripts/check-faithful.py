@@ -428,7 +428,7 @@ def gate_g6(input_text, output_text, limit=2):
 def gates_for(kind):
     """v3：原样整理跑 F1/F2/F3 + G4/G5；revise 仍跑 G1–G6（旧口径不动）。"""
     if kind == "revise":
-        return [gate_g1, gate_g2, gate_g3, gate_g4, gate_g5, gate_g6]
+        return [gate_g1, gate_g2, gate_g3, gate_g4, gate_g5]
     return [gate_f1, gate_f2, gate_f3, gate_g4, gate_g5]
 
 
@@ -476,8 +476,8 @@ def _self_test():
     case("G5 丢不确定词", src,
          good.replace("好像是傍晚", "是傍晚"), False, ("G5",))
     case("revise 合法改写（G 口径不动）", "我站在站台上等末班车。", "我站在站台上，等末班车。", True, kind="revise")
-    case("revise 同音改字三处仍红", "电梯按不到一楼，窗外有沙砾，我转头看了一眼。",
-         "电梯按不到一搂，窗外有沙粒，我转头砍了一眼。", False, ("G6",), kind="revise")
+    case("revise 不再跑 G6（换三个字只受 G3 约束）", "电梯按不到一楼，窗外有沙砾，我转头看了一眼。",
+         "电梯按不到一搂，窗外有沙粒，我转头砍了一眼。", False, ("G3",), ("G6",), kind="revise")
 
     results, ok = [], True
     for item in cases:

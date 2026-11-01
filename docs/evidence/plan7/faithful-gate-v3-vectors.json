@@ -72,7 +72,7 @@
     },
     {
       "id": 7,
-      "name": "revise 不受 F 闸门影响",
+      "name": "revise 不受 F 闸门影响（G1–G5 口径）",
       "input": "我站在站台上等末班车。",
       "output": "我站在站台上，等末班车。",
       "mode": "revise",
