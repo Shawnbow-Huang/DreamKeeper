@@ -52,7 +52,13 @@ class NovelChain(
         val planPrompt = renderPlan(raw, base, idea)
         var planRaw: String? = null
         val plan = attempt(GenerationStage.PLAN, planPrompt) { text ->
-            NovelPlan.parse(text, base)?.also { planRaw = text }
+            NovelPlan.parse(text, base)?.also { planRaw = text } ?: run {
+                // 只在本地 debug 日志里记「为什么判废」：字段名与解析错误，不打印梦境正文。
+                val err = runCatching { JSONObject(NovelPlan.stripFence(text)) }.exceptionOrNull()
+                android.util.Log.d("DreamGen", "plan invalid: err=" + err + " keys=" +
+                    runCatching { JSONObject(NovelPlan.stripFence(text)).keys().asSequence().toList() }.getOrNull())
+                null
+            }
         } ?: return NovelChainResult.Failure(GenerationStage.PLAN, "规划 JSON 两次都不合法", stages)
         val planJson = JSONObject(NovelPlan.stripFence(requireNotNull(planRaw))).toString()
 
