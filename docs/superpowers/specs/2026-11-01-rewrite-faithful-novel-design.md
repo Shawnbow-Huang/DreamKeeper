@@ -104,7 +104,7 @@
 
 ### 3.4 思考档位
 
-- 新设置键：`dk_generation_faithful_thinking[.<wire>]`，取值 `OFF/LOW/HIGH/MAX`，默认 `LOW`。
+- 新设置键：`dk_generation_faithful_thinking`（与小说化思考 `dk_generation_thinking` 一样是应用级、不按供应商分），取值 `OFF/LOW/HIGH/MAX`，默认 `LOW`。
 - 请求体：思考开启时不发 `temperature`；关闭时 `temperature=0.1`（现状）。
 - UI：设置 → 模型服务 → 单家详情 → 「原样整理思考」四枚胶囊。
 
@@ -204,7 +204,7 @@
 | 审计 hash | `novel` 的 `promptHash` = `sha256(planBytes ‖ draftBytes ‖ polishBytes ‖ manifestBytes)` 前 8 位；算法写入 `PromptSpec` 注释与本文档 |
 | `GenerationStage` | 新增 `PLAN/DRAFT/POLISH`；faithful 仍 `T0–T3` |
 | `GenerationOptions` | 新增 `faithfulThinking: ThinkingLevel` |
-| `GenerationPrefs` | 新键 `dk_generation_faithful_thinking[.<wire>]`，默认 LOW |
+| `GenerationPrefs` | 新键 `dk_generation_faithful_thinking`（应用级），默认 LOW |
 | `Gate` 枚举 | 新增 `F1/F2/F3`、`N1/N2/N3`；按 mode 组合 |
 | `check-faithful.py` | 支持 v3 闸门组（`--kind faithful/revise`，v3 为默认）；v2 冻结向量保留作历史回归 |
 | 新增 `scripts/check-novel.py` | N1/N2/N3，`--self-test` 与向量 |
