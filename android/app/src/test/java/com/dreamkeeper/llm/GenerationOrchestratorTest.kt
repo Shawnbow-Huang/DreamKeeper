@@ -14,6 +14,7 @@ import com.dreamkeeper.data.db.TranscriptStatus
 import com.dreamkeeper.domain.Dream
 import com.dreamkeeper.llm.LlmException.Kind
 import com.dreamkeeper.llm.gates.FaithfulGates
+import com.dreamkeeper.llm.gates.GateMode
 import java.time.LocalDate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -929,5 +930,22 @@ class GenerationOrchestratorTest {
         // 记账行也要写真实使用的模型（faithful 那行不能跟着小说化模型走）。
         val calls = db.llmCallDao().listByDream(DREAM_ID)
         assertEquals(listOf("deepseek-flash", "deepseek-v4-pro"), calls.map { it.model })
+    }
+
+    @Test
+    fun homophone_audit_lists_changed_chars() {
+        val audit = homophoneAudit(
+            "澳门就不进枪了，所以我标里也别的一把枪。",
+            "澳门就不禁枪了，所以我腰里也别着一把枪。",
+        )
+        assertTrue(audit.contains("禁") || audit.contains("腰") || audit.contains("着"))
+    }
+
+    @Test
+    fun violation_payload_labels_f2_alert() {
+        val raw = "呃，我走了很远，走到一个地方，又走了很久，最后到了。"
+        val tooLong = raw + "路上风很大，天很黑，人很多，车也很多，我一直走，走到天亮。"
+        val payload = formatViolations(FaithfulGates.check(raw, tooLong, GateMode.FAITHFUL))
+        assertTrue(payload, payload.contains("F2:"))
     }
 }

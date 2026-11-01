@@ -286,6 +286,8 @@ class GenerationOrchestrator(
                 r.gate.name + "(" + (r.value?.let { "v=" + it } ?: "v=-") + ")" + r.detail.take(4)
             }
             android.util.Log.d("DreamGen", "faithful gate detail: " + detail)
+        } else {
+            android.util.Log.d("DreamGen", "faithful audit " + homophoneAudit(input, response.content))
         }
         return FaithfulCall(rendered, response, report)
     }
@@ -765,7 +767,9 @@ class GenerationOrchestrator(
      * 兜底：万一所有闸门都只回了空 detail（例如输出为空），退回人类可读说明，
      * 因为 `PromptRepository` 对有载荷的标记要求载荷非空（否则直接抛）。
      */
-    private fun violationPayload(report: GateReport): String {
+    private fun violationPayload(report: GateReport): String = formatViolations(report)
+
+    private fun unusedViolationPayload(report: GateReport): String {
         val lines = mutableListOf<String>()
         for (result in report.results) {
             if (result.passed) continue
@@ -783,7 +787,7 @@ class GenerationOrchestrator(
             report.results.filter { !it.passed }.forEach { lines += it.detail }
         }
         if (lines.isEmpty()) lines += "上一版存在未通过的忠实闸门，请逐字对照原文修正。"
-        return lines.joinToString("\n")
+    return lines.joinToString("\n")
     }
 
     /**
@@ -877,4 +881,29 @@ class GenerationOrchestrator(
         private const val MIN_QUOTE = 4
         private const val MAX_QUOTE = 40
     }
+}
+
+/** 仅 debug：列出输出比输入多出来的字（同音改动/新增字），排查过度改字用；不写库。 */
+internal fun homophoneAudit(input: String, output: String): String {
+    val inCounts = FaithfulGates.contentChars(input).groupingBy { it }.eachCount()
+    val surplus = FaithfulGates.contentChars(output).groupingBy { it }.eachCount()
+        .flatMap { (ch, c) -> List((c - (inCounts[ch] ?: 0)).coerceAtLeast(0)) { ch } }
+    return if (surplus.isEmpty()) "多出字=无" else "多出字=" + surplus.take(8).joinToString("")
+}
+
+/** 把闸门失败项排成 T1 的违规清单；带闸门代号，模型能直接看出 F2 还是 F1。 */
+internal fun formatViolations(report: GateReport): String {
+    val lines = mutableListOf<String>()
+    for (result in report.results) {
+        if (result.passed) continue
+        val picked = when (result.gate) {
+            Gate.G1 -> result.detail.take(10)
+            Gate.G4, Gate.G5 -> result.detail.take(6)
+            Gate.G6 -> result.detail.take(6)
+            Gate.F1, Gate.F2, Gate.F3 -> result.detail.take(6)
+            Gate.G2, Gate.G3 -> (result.detail + result.advisory).take(12)
+        }
+        picked.forEach { lines += "${result.gate.name}: $it" }
+    }
+    return lines.joinToString("\n")
 }
