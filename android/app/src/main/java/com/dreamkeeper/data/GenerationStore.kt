@@ -44,6 +44,22 @@ interface GenerationStore {
     /** 只写档位（T3 回退用）。实现复用同一条窄 UPDATE，先读行再把文本列原值写回。 */
     suspend fun updateStage(dreamId: String, stage: String)
 
+    /**
+     * 手动改字：原样稿**就地覆盖**，不建版本（原样稿不在版本线上，版本线只属于小说化）。
+     * 只改 `dreams.faithfulText` 一列。
+     */
+    suspend fun saveManualFaithful(dreamId: String, text: String) {
+        throw UnsupportedOperationException("当前 Store 不支持手动改字")
+    }
+
+    /**
+     * 手动改字：小说化稿**新建一个版本**（`origin = manual`），保留可回退，
+     * 并把 `dreams.novelText / novelVersion` 指到这一版。
+     */
+    suspend fun saveManualNovel(dreamId: String, text: String): Int {
+        throw UnsupportedOperationException("当前 Store 不支持手动改字")
+    }
+
     /** 该梦已记账的 HTTP 交换数。 */
     suspend fun callCount(dreamId: String): Int
 
@@ -126,6 +142,35 @@ class RoomGenerationStore(private val db: DreamDatabase) : GenerationStore {
             novelChangeLog = current.novelChangeLog,
             generationStage = stage,
             faithfulText = null,
+        )
+    }
+
+    override suspend fun saveManualFaithful(dreamId: String, text: String) {
+        db.dreamDao().updateFaithfulTextOnly(dreamId, text)
+    }
+
+    override suspend fun saveManualNovel(dreamId: String, text: String): Int {
+        val dream = requireNotNull(db.dreamDao().getById(dreamId)) { "dream 不存在：$dreamId" }
+        val draft = NovelVersionEntity(
+            id = java.util.UUID.randomUUID().toString(),
+            dreamId = dreamId,
+            version = 0, // 由 insertWithNextVersion 自增
+            text = text,
+            changeLogJson = dream.novelChangeLog,
+            origin = "manual",
+            promptId = "manual",
+            promptVersion = 0,
+            promptHash = "manual",
+            model = "manual",
+            reasoningEffort = null,
+            createdAt = System.currentTimeMillis(),
+        )
+        return commitSuccess(
+            dreamId = dreamId,
+            draft = draft,
+            changeLogJson = dream.novelChangeLog,
+            stage = null,
+            faithfulTextForDream = null,
         )
     }
 

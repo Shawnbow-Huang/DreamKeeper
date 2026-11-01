@@ -367,6 +367,10 @@ interface DreamDao {
         generationStage: String?,
         faithfulText: String?,
     ): Int
+
+    /** 手动改字：只覆盖原样稿一列，不碰版本、不碰小说稿（与 D202 同一约束）。 */
+    @Query("UPDATE dreams SET faithfulText = :text WHERE id = :id")
+    suspend fun updateFaithfulTextOnly(id: String, text: String): Int
 }
 
 /** 「全部」页的行模型：梦本体 + 选中版正文（可能为 NULL）。 */

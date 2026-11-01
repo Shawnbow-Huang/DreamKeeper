@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +54,10 @@ data class DetailUiState(
     val reviseError: String? = null,
     /** 每成功一轮 +1；NovelTab 用它清空输入框（失败时保留原文可重发，D330）。 */
     val revisionAck: Int = 0,
+    /** 手动改字：保存中 / 成功计数（UI 用它关弹层）/ 失败原因。 */
+    val editSaving: Boolean = false,
+    val editSavedAck: Int = 0,
+    val editError: String? = null,
 )
 
 /**
@@ -116,6 +121,8 @@ class DetailViewModel(
     private val generationScope: kotlinx.coroutines.CoroutineScope? = null,
     /** 跨 ViewModel 的进度表（T6b）：重进详情页要能看见 Running / Failed。 */
     private val tracker: GenerationTracker? = null,
+    /** 手动改字（Plan 8 追加）：原样稿就地改、小说稿建新版本。null 时按钮不显示。 */
+    private val store: com.dreamkeeper.data.GenerationStore? = null,
 ) : ViewModel() {
 
     private val dreamId: String = dreamId
@@ -132,6 +139,9 @@ class DetailViewModel(
         val revising: Boolean = false,
         val reviseError: String? = null,
         val revisionAck: Int = 0,
+        val editSaving: Boolean = false,
+        val editSavedAck: Int = 0,
+        val editError: String? = null,
     )
 
     private val conversation = MutableStateFlow(Conversation())
@@ -153,6 +163,9 @@ class DetailViewModel(
             revising = convo.revising,
             reviseError = convo.reviseError,
             revisionAck = convo.revisionAck,
+            editSaving = convo.editSaving,
+            editSavedAck = convo.editSavedAck,
+            editError = convo.editError,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -294,6 +307,30 @@ class DetailViewModel(
     }
 
     fun generateFaithful() = generate(GenerationKind.FAITHFUL)
+
+    /** 手动改字（原样稿）：就地覆盖 `dreams.faithfulText`，不建版本。 */
+    fun saveEditedFaithful(text: String) = saveEdit { requireStore().saveManualFaithful(dreamId, text) }
+
+    /** 手动改字（小说化稿）：新建一版 `origin=manual`，保留可回退。 */
+    fun saveEditedNovel(text: String) = saveEdit { requireStore().saveManualNovel(dreamId, text) }
+
+    private fun requireStore(): com.dreamkeeper.data.GenerationStore =
+        store ?: error("这条装配没有注入 GenerationStore")
+
+    private fun saveEdit(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            conversation.update { it.copy(editSaving = true, editError = null) }
+            runCatching { block() }
+                .onSuccess {
+                    refreshConversation()
+                    conversation.update { it.copy(editSaving = false, editSavedAck = it.editSavedAck + 1) }
+                }
+                .onFailure { error ->
+                    conversation.update { it.copy(editSaving = false, editError = error.message ?: "保存失败") }
+                }
+        }
+    }
+
 
     fun generateNovel() = generate(GenerationKind.NOVEL)
 

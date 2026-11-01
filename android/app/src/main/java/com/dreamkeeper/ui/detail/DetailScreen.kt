@@ -32,6 +32,9 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -170,6 +173,8 @@ fun DetailScreen(
     generationTracker: GenerationTracker? = null,
     /** Plan 5 T5（A2）：「重试转写」拨回 PENDING 后真正去跑 STT 的入口；null 时只改状态。 */
     onRetryTranscription: (() -> Unit)? = null,
+    /** 手动改字（Plan 8 追加）：原样稿就地改、小说稿建新版本；null 时按钮不显示。 */
+    store: com.dreamkeeper.data.GenerationStore? = null,
 ) {
     val vm: DetailViewModel = viewModel {
         DetailViewModel(
@@ -182,9 +187,31 @@ fun DetailScreen(
             generationScope = generationScope,
             tracker = generationTracker,
             onRetryTranscription = onRetryTranscription,
+            store = store,
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
+
+    // 手动改字：原样稿就地改、小说稿建新版本；保存成功后由 editSavedAck 关弹层。
+    var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+    LaunchedEffect(state.editSavedAck) {
+        if (state.editSavedAck > 0) editTarget = null
+    }
+    editTarget?.let { target ->
+        EditTextDialog(
+            title = target.title,
+            initial = target.text,
+            saving = state.editSaving,
+            error = state.editError,
+            onDismiss = { editTarget = null },
+            onSave = { text ->
+                when (target.kind) {
+                    EditKind.FAITHFUL -> vm.saveEditedFaithful(text)
+                    EditKind.NOVEL -> vm.saveEditedNovel(text)
+                }
+            },
+        )
+    }
     val generationPhase by vm.generationPhase.collectAsStateWithLifecycle()
     val novelIdeaOpen by vm.novelIdeaPrompt.collectAsStateWithLifecycle()
     val costMicroYuan by vm.costMicroYuan.collectAsStateWithLifecycle()
@@ -237,6 +264,9 @@ fun DetailScreen(
                                 hasFaithfulVersion = hasFaithfulVersion(state.dream, state.versions),
                                 onGenerateFaithful = vm::generateFaithful,
                                 onRetryGeneration = vm::retryGeneration,
+                                onEdit = { text ->
+                                    editTarget = EditTarget(EditKind.FAITHFUL, "改原样稿", text)
+                                },
                             )
 
                             1 -> NovelTab(
@@ -265,6 +295,9 @@ fun DetailScreen(
                                 onSend = vm::revise,
                                 onSelectVersion = vm::selectVersion,
                                 onExport = { exportOpen = true },
+                                onEdit = { text ->
+                                    editTarget = EditTarget(EditKind.NOVEL, "改小说稿", text)
+                                },
                             )
 
                             2 -> TagsTab(tags = state.tags)
@@ -451,6 +484,7 @@ private fun TranscriptTab(
     hasFaithfulVersion: Boolean,
     onGenerateFaithful: () -> Unit,
     onRetryGeneration: () -> Unit,
+    onEdit: (String) -> Unit = {},
 ) {
     if (dream == null) return
     val context = LocalContext.current
@@ -492,6 +526,16 @@ private fun TranscriptTab(
                 style = MaterialTheme.typography.labelSmall,
                 color = if (polishing) DreamColors.ember else DreamColors.inkDim,
             )
+            TextButton(
+                onClick = { onEdit(faithful ?: raw) },
+                enabled = (faithful ?: raw).isNotBlank(),
+            ) {
+                Text(
+                    text = "改字",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = DreamColors.paper,
+                )
+            }
             if (faithful != null && raw.isNotBlank()) {
                 TextButton(onClick = { showRaw = !showRaw }) {
                     Text(
@@ -760,6 +804,7 @@ private fun NovelTab(
     onSend: (String) -> Unit,
     onSelectVersion: (Int) -> Unit,
     onExport: () -> Unit,
+    onEdit: (String) -> Unit = {},
 ) {
     var opinion by rememberSaveable { mutableStateOf("") }
     // ASK 的助手气泡：只有 versionId==null 的 assistant 消息才是「没建版、只回话」的那条。
@@ -804,6 +849,16 @@ private fun NovelTab(
                 )
             } else {
                 Spacer(modifier = Modifier.weight(1f))
+            }
+            TextButton(
+                onClick = { novelText?.let(onEdit) },
+                enabled = hasNovelVersion && !novelText.isNullOrBlank(),
+            ) {
+                Text(
+                    text = "改字",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (hasNovelVersion) DreamColors.paper else DreamColors.inkDim,
+                )
             }
             TextButton(onClick = onExport) {
                 Text(
@@ -1263,4 +1318,63 @@ private fun shareExported(context: Context, result: ExportResult) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(Intent.createChooser(send, "分享导出文件"))
+}
+
+private enum class EditKind { FAITHFUL, NOVEL }
+
+private data class EditTarget(val kind: EditKind, val title: String, val text: String)
+
+/** 手动改字弹层：占屏 88% 宽 / 72% 高，标题固定、正文自己滚，避免长文本把标题顶出屏幕。 */
+@Composable
+private fun EditTextDialog(
+    title: String,
+    initial: String,
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    Dialog(onDismissRequest = { if (!saving) onDismiss() }) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.72f),
+            shape = RoundedCornerShape(16.dp),
+            color = DreamColors.paperSurface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, DreamColors.inkFaint.copy(alpha = 0.16f)),
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                Text(text, style = MaterialTheme.typography.titleMedium, color = DreamColors.paper)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                )
+                if (error != null) {
+                    Text(
+                        text = error,
+                        modifier = Modifier.padding(top = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DreamColors.ember,
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss, enabled = !saving) {
+                        Text("取消", color = DreamColors.inkDim)
+                    }
+                    TextButton(
+                        onClick = { onSave(text.trim()) },
+                        enabled = !saving && text.isNotBlank(),
+                    ) {
+                        Text(if (saving) "保存中…" else "保存", color = DreamColors.paper)
+                    }
+                }
+            }
+        }
+    }
 }
