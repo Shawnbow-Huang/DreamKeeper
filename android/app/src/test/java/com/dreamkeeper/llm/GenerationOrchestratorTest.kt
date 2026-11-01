@@ -171,6 +171,7 @@ class GenerationOrchestratorTest {
         val llm = FakeLlm()
         llm.enqueue(ok(T0_BAD))
         llm.enqueue(ok(T1_BAD))
+        llm.enqueue(ok(T1_BAD)) // T1b：同档再修一次仍红，才降到 T2
         llm.enqueue(ok(T2_CONSERVATIVE)) // 与输入内容字完全相同（只差标点）
         val store = FakeStore(dreamDomain())
 
@@ -179,16 +180,36 @@ class GenerationOrchestratorTest {
         assertNull(result.failure)
         assertEquals(GenerationStage.T2, result.finalStage)
         assertEquals(T2_CONSERVATIVE, result.text)
-        assertEquals(3, llm.requests.size)
+        assertEquals(4, llm.requests.size)
 
-        val t2Body = llm.requests[2].messages.single().content
+        val t2Body = llm.requests[3].messages.single().content
         assertTrue("T2 必须带只做标点的指令", t2Body.contains(PUNCTUATION_DIRECTIVE))
         assertFalse("T2 不该再带 T1 的违规载荷", t2Body.contains("丢了事实"))
-        assertNull("思考开着时 T2 也不发 temperature", llm.requests[2].temperature)
+        assertNull("思考开着时 T2 也不发 temperature", llm.requests[3].temperature)
 
         assertEquals("T2", store.commits.single().stage)
         assertTrue(FaithfulGates.isConservativeOk(RAW, T2_CONSERVATIVE))
         assertFalse("v3 的 CLEAN_T1 是重写，不该被逐字判据放行", FaithfulGates.isConservativeOk(RAW, CLEAN_T1))
+    }
+
+    @Test
+    fun `T1 红但 T1b 修干净时按 T1 提交`() = runTest {
+        val llm = FakeLlm()
+        llm.enqueue(ok(T0_BAD))
+        llm.enqueue(ok(T1_BAD))
+        llm.enqueue(ok(CLEAN_T1)) // T1b 把剩下的违规项也修掉
+        val store = FakeStore(dreamDomain())
+
+        val result = newOrchestrator(llm, store).generateFaithful(DREAM_ID)
+
+        assertNull(result.failure)
+        assertEquals(GenerationStage.T1, result.finalStage)
+        assertEquals(CLEAN_T1, result.text)
+        assertEquals(3, llm.requests.size)
+        assertEquals("T1", store.commits.single().stage) // 同档重试，仍记 T1
+
+        val t1bBody = llm.requests[2].messages.single().content
+        assertTrue("T1b 必须带上一轮的违规项", t1bBody.contains("丢了事实"))
     }
 
     // ------------------------------------------------------------ §0.11 #5
@@ -201,6 +222,7 @@ class GenerationOrchestratorTest {
         val extra = FakeLlm()
         extra.enqueue(ok(T0_BAD))
         extra.enqueue(ok(T1_BAD))
+        extra.enqueue(ok(T1_BAD))
         extra.enqueue(ok(RAW + "嗯"))
         val extraResult = newOrchestrator(extra, store).generateFaithful(DREAM_ID)
 
@@ -209,13 +231,14 @@ class GenerationOrchestratorTest {
         assertEquals(RAW, extraResult.text)
         assertEquals("T3 是原文回退，没有新版本", null, extraResult.version)
         assertEquals(RAW, extraResult.faithfulText)
-        assertEquals("T0/T1/T2 各一次，T3 不调模型", 3, extra.requests.size)
-        assertEquals(3, extraResult.attempts)
+        assertEquals("T0/T1/T1b/T2 各一次，T3 不调模型", 4, extra.requests.size)
+        assertEquals(4, extraResult.attempts)
 
         // 场景 b：等长但换字（「三十」→「四十」，长度不变、内容字不同）。
         // 这一条才是「逐字相等」与「只比长度」的判别式：只比长度会误判为保守成功。
         val swapped = FakeLlm()
         swapped.enqueue(ok(T0_BAD))
+        swapped.enqueue(ok(T1_BAD))
         swapped.enqueue(ok(T1_BAD))
         swapped.enqueue(ok(T2_SUBSTITUTED))
         val swappedResult = newOrchestrator(swapped, store).generateFaithful(DREAM_ID)
@@ -223,7 +246,7 @@ class GenerationOrchestratorTest {
         assertNull(swappedResult.failure)
         assertEquals(GenerationStage.T3, swappedResult.finalStage)
         assertEquals(RAW, swappedResult.text)
-        assertEquals(3, swapped.requests.size)
+        assertEquals(4, swapped.requests.size)
         assertTrue("等长换字必须被逐字判据拦住", FaithfulGates.isConservativeOk(RAW, T2_SUBSTITUTED).not())
         assertEquals(RAW.length, T2_SUBSTITUTED.length)
 

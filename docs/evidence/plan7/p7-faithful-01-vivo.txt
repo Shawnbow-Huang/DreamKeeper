@@ -1,0 +1,38 @@
+APK_SHA256=9b87c0008017abce…（0.13.0 / versionCode 11，release，338,835,066 B）
+DEVICE=V2405A（vivo X200 Pro mini 类目）/ Android 16 / arm64-v8a
+TEST_TIME=2026-11-01 20:54–20:56 CST
+REPLAY=adb logcat -v time -s DreamGen:V DKLLM:V > log.txt &  然后点「重新理顺」
+
+# 样本
+- 真机录音 92.3 秒，SenseVoice Small 离线转写，原始转写正文 380 个内容字
+- 原文特征：口水（呃/嗯/那个/我思考一下）、重复、同音字（做/坐）、接缝残留（去澳。）
+
+# 本轮门禁日志（原样整理模型 = DeepSeek Flash，原样整理思考 = 高）
+D DreamGen: faithful gate red: F3,G5
+D DreamGen: faithful gate detail: F3(v=1.0)[还有口水：那个] | G5(v=7.0)[「好像」原文 5 处，输出只剩 3 处, 「不知道」原文 2 处，输出只剩 1 处]
+D DeepSeekClient: DKLLM attempt n=1 kind=FAITHFUL status=ok http=200
+D DreamGen: faithful ok stage=T1 in=380 out=257
+
+# 结果
+- 阶段：T0 红 → T1 绿（T1b 已加但本轮没用上）
+- 压缩率：257 / 380 = 0.676（F2 要求 0.50–0.85）
+- 口水：0（呃/嗯/我思考一下/那个 全部消失）
+- 事实：4.4点钟、6点到、澳门、宇宙飞船、家人、4.4→6点 的纠结过程、包里的枪、店门口保管 都在
+- 不确定词：好像 ×3、不知道 ×2 保留（G5 绿）
+- 同音字：`得做一个类似的东西` 保留「做」——模型判定「做一个类似宇宙飞船的东西」在梦里也讲得通，按 §2.9「拿不准不改」处理；用户认为应作「坐」，已在 §2.9 给出窄口子，后续可再收紧
+
+# 证据截图（1080×2400 → 1260×2800 手机原始分辨率）
+p7-faithful-01-settings.png  248,020 B  sha256 903b7ac9729550a7  nearWhite 0.0081%
+p7-faithful-02-result.png    502,013 B  sha256 8cf8ede544d90f93  nearWhite 4.9557%
+p7-faithful-03-raw.png       486,628 B  sha256 2637275199f429b5  nearWhite 4.9548%
+
+# 读法
+- 01：设置页「原样整理模型 = DeepSeek Flash / 原样整理思考 = 高 / 小说化模型与思考各自独立」。
+- 02：整理后的原样稿（257 字，无口水，事实齐）。
+- 03：同一篇的「看原始转写」（380 字，口水满屏），对照用。
+- nearWhite 说明：手机截图使用「晨光纸」皮肤，卡片纸面接近纯白，故 nearWhite ≈4.96%；
+  该阈值在模拟器「灯下纸」截图上用于防止漏出白色弹层，不适用于浅色皮肤的卡片本身。
+
+# 未覆盖
+- T1b 在真机上未被触发（本轮 T1 一次通过）；由单测「T1 红但 T1b 修干净时按 T1 提交」守。
+- 同音字「做→坐」未被模型采纳（判定为两种读法都通）；若要强制，需要把 §2.9 从「拿不准不改」改成「讲得通也按常见搭配改」，属于产品取舍。

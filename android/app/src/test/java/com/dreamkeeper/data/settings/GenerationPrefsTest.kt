@@ -83,8 +83,8 @@ class GenerationPrefsTest {
     }
 
     @Test
-    fun `原样整理思考默认低且可单独设置`() {
-        assertEquals(ThinkingLevel.LOW, prefs().options().faithfulThinking)
+    fun `原样整理思考默认高且可单独设置`() {
+        assertEquals(ThinkingLevel.HIGH, prefs().options().faithfulThinking)
 
         prefs().setFaithfulThinking(ThinkingLevel.MAX)
 

@@ -167,7 +167,7 @@ class GenerationOrchestrator(
         }
         if (t0 == null) return llmFailure(GenerationKind.FAITHFUL, GenerationStage.T0, run, t0Error!!)
         if (t0.response.content.isNotBlank() && t0.report.passed) {
-            return commitFaithful(run, GenerationStage.T0, t0)
+            return commitFaithful(run, GenerationStage.T0, t0, input)
         }
 
         // ---- T1：把 T0 的具体违规项写回提示词。温度 0.0，让模型尽量只做定点修正。
@@ -185,7 +185,27 @@ class GenerationOrchestrator(
         // 同档重试预算用完 = 这次生成失败，不降 T2（§0.3）。
         if (t1 == null) return llmFailure(GenerationKind.FAITHFUL, GenerationStage.T1, run, t1Error!!)
         if (t1.response.content.isNotBlank() && t1.report.passed) {
-            return commitFaithful(run, GenerationStage.T1, t1)
+            return commitFaithful(run, GenerationStage.T1, t1, input)
+        }
+
+        // ---- T1b：一次修不干净时，再喂一次 T1 的违规项（同档重试，不降级）。
+        // 真机 380 字样本上，模型常在 T1 只修掉一半：T0 丢一个不确定词、T1 修回来又漏掉另一个。
+        val payload1b = violationPayload(t1.report)
+        val (t1b, t1bError) = retrying(run, GenerationKind.FAITHFUL) {
+            callFaithful(
+                run,
+                input,
+                temperature = 0.0,
+                markers = setOf(PromptMarker.PREVIOUS_VIOLATIONS),
+                payloads = mapOf(PromptMarker.PREVIOUS_VIOLATIONS to payload1b),
+            )
+        }
+        if (t1b != null && t1b.response.content.isNotBlank() && t1b.report.passed) {
+            return commitFaithful(run, GenerationStage.T1, t1b, input)
+        }
+        if (t1bError != null && t1b == null) {
+            // 网络/接口硬失败：按 T1 失败处理，继续走 T2 保守档（T2 也会走同一个 retrying）。
+            android.util.Log.d("DreamGen", "faithful t1b error: " + t1bError.message)
         }
 
         // ---- T2：保守档，只允许加标点。判据只有「内容字逐字相等」。
@@ -201,7 +221,7 @@ class GenerationOrchestrator(
         }
         if (t2 == null) return llmFailure(GenerationKind.FAITHFUL, GenerationStage.T2, run, t2Error!!)
         if (FaithfulGates.isConservativeOk(input, t2.response.content)) {
-            return commitFaithful(run, GenerationStage.T2, t2)
+            return commitFaithful(run, GenerationStage.T2, t2, input)
         }
 
         // ---- T3：连保守版都不行，整次回退原文，不调模型、不建版本（D319 failure=null）。
@@ -250,14 +270,28 @@ class GenerationOrchestrator(
                 provider = run.provider,
             ),
         )
-        return FaithfulCall(rendered, response, gate(input, response.content, GateMode.FAITHFUL))
+        val report = gate(input, response.content, GateMode.FAITHFUL)
+        if (!report.passed) {
+            // 只打闸门代号与命中项：真机校准时不用再猜是哪个词/哪个锚点红了（不打印正文）。
+            android.util.Log.d("DreamGen", "faithful gate red: " + report.failed.joinToString(","))
+            val detail = report.results.filter { !it.passed }.joinToString(" | ") { r ->
+                r.gate.name + "(" + (r.value?.let { "v=" + it } ?: "v=-") + ")" + r.detail.take(4)
+            }
+            android.util.Log.d("DreamGen", "faithful gate detail: " + detail)
+        }
+        return FaithfulCall(rendered, response, report)
     }
 
     private suspend fun commitFaithful(
         run: Run,
         stage: GenerationStage,
         call: FaithfulCall,
+        input: String,
     ): GenerationResult {
+        // 真机校准时唯一能自证的数：输入几个内容字、输出几个。只打长度，不打正文。
+        val inputChars = com.dreamkeeper.llm.gates.FaithfulGates.contentCharCount(input)
+        val outputChars = com.dreamkeeper.llm.gates.FaithfulGates.contentCharCount(call.response.content)
+        android.util.Log.d("DreamGen", "faithful ok stage=$stage in=$inputChars out=$outputChars")
         val version = store.commitSuccess(
             dreamId = run.dreamId,
             draft = draft(

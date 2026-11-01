@@ -385,7 +385,7 @@ git commit -m "feat(orchestrator): 违规清单支持 F 系列并锁定 T2 保�
 
 ```kotlin
 @Test
-fun `原样整理思考默认低且可改`() {
+fun `原样整理思考默认高且可改`() {
     val prefs = GenerationPrefs(ctx)
     assertEquals(ThinkingLevel.LOW, prefs.options().faithfulThinking)
     prefs.setFaithfulThinking(ThinkingLevel.HIGH)
@@ -407,7 +407,7 @@ data class GenerationOptions(
     val model: String,
     val faithfulModel: String = model,
     val novelThinking: ThinkingLevel = ThinkingLevel.HIGH,
-    val faithfulThinking: ThinkingLevel = ThinkingLevel.LOW,
+    val faithfulThinking: ThinkingLevel = ThinkingLevel.HIGH,
 )
 ```
 
@@ -459,7 +459,7 @@ cd /d/DreamKeeper && git add android/app/src/main/java/com/dreamkeeper/llm/Gener
   android/app/src/main/java/com/dreamkeeper/llm/GenerationOrchestrator.kt \
   android/app/src/test/java/com/dreamkeeper/data/settings/GenerationPrefsTest.kt \
   android/app/src/test/java/com/dreamkeeper/llm/GenerationOrchestratorTest.kt
-git commit -m "feat(llm): 原样整理思考档位（默认低，开时不发 temperature）（D579）"
+git commit -m "feat(llm): 原样整理思考档位（默认高，开时不发 temperature）（D579）"
 ```
 
 ---
@@ -505,7 +505,7 @@ ChoiceRow(
     onSelect = onFaithfulThinking,
 )
 Text(
-    "默认「低」：原样整理要的是换句不换事，不需要长篇推理；开思考时服务端会忽略 temperature。",
+    "默认「高」：真机 LOW 三档全红，HIGH 一次 T1 通过，不需要长篇推理；开思考时服务端会忽略 temperature。",
     style = MaterialTheme.typography.bodySmall,
     color = DreamColors.inkDim,
 )
@@ -604,7 +604,7 @@ cd /d/DreamKeeper && git add android/app/build.gradle.kts CHANGELOG.md docs/PROG
 git commit -m "release: 0.12.0 原样整理 v3（D582）"
 ```
 
-交付说明写：v3 与 v2.1 的差别、实测压缩率、思考默认低的原因、回滚办法（`PromptSpecs.FAITHFUL` 指回 v2.1 并跑全量测试）。
+交付说明写：v3 与 v2.1 的差别、实测压缩率、思考默认高的原因、回滚办法（`PromptSpecs.FAITHFUL` 指回 v2.1 并跑全量测试）。
 
 ---
 
@@ -615,6 +615,18 @@ git commit -m "release: 0.12.0 原样整理 v3（D582）"
 - [ ] 数字、颜色、方位、专名、说话人一个不缺
 - [ ] T0 失败 → T1 带 F 清单重试 → T2 只标点 → T3 回退原文，链路有测试
 - [ ] revise 仍跑 G1–G6，旧用例全绿
-- [ ] 设置页能选四档，默认低，开时不发 temperature
+- [ ] 设置页能选四档，默认高，开时不发 temperature
 - [ ] 真机 92 秒梦能出稿，成本 ≤ ¥0.01/次
 - [ ] 文档与 0.12.0 包齐备
+
+## 0.9 执行中追加（2026-11-01 真机校准后）
+
+- **D583 T1b 同档重试**：T1 仍红时再喂一次 T1 的违规清单，才降到 T2。
+  理由：真机 380 字样本上 T0 丢「好像/不知道」、T1 只修回一部分，一次修不干净；
+  证据 `faithful gate red: F3,G5` → `faithful ok stage=T1 in=380 out=267`。
+- **D584 闸门命中明细日志**：`faithful gate detail: F3(v=1.0)[还有口水：那个] | G5(v=7.0)[「好像」原文 5 处，输出只剩 3 处…]`，
+  以后不用靠猜是哪个词红的。
+- **D585 同音字窄口子**：`prompts/faithful.v3.md` §2.9——同音错只在「上下文只有一种读法」时改，全篇 ≤2 处，拿不准不改。
+  提示词 sha 改为 `5299229e`；`PromptSpec`/`PromptRepositoryTest` 同步。
+- 默认档位由 LOW 改为 **HIGH**：真机 LOW 三次全红（T0 F1+G5、T1 F3、T2 回退），HIGH 一次 T1 通过。
+- 版本口径：0.12.0 作为内部构建，实际发布 **0.13.0 / versionCode 11**。

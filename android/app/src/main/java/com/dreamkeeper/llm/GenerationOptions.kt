@@ -42,8 +42,11 @@ data class GenerationOptions(
     val faithfulModel: String = model,
     /** 小说化默认「高」；改稿固定「低」（见 ReviseOrchestrator 的 REVISE_LEVEL）。 */
     val novelThinking: ThinkingLevel = ThinkingLevel.HIGH,
-    /** 原样整理默认「低」：换句不换事，不需要长推理。 */
-    val faithfulThinking: ThinkingLevel = ThinkingLevel.LOW,
+    /**
+     * 原样整理默认「高」：真机 380 字口水稿上，LOW 三档全红（T0 F1+G5、T1 F3、T2 只能回退原话），
+     * HIGH 一次 T1 通过（380 → 267 字）。这活要同时守住事实与压缩，弱档做不了。
+     */
+    val faithfulThinking: ThinkingLevel = ThinkingLevel.HIGH,
 ) {
     companion object {
         const val FLASH = "deepseek-flash"

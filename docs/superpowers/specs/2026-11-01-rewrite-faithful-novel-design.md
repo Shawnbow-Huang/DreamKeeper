@@ -101,13 +101,14 @@ G6 会把正常改动判红（实现时用 3 处换字实测确认）。枚举�
 **重试策略**（沿用现有 T 链语义）：
 - T0：正常整理（temp 0.1，无违规清单）；
 - T1：带 T0 违规清单重试一次；
+- T1b：T1 仍红时，把 T1 的违规清单再喂一次（同档重试，不降级；真机 380 字样本上 T1 常只修掉一半）；
 - T2：只做标点（输出不得增删实词，仅补标点/断句）；
 - T3：不调模型，原样回退（只加标点）。
-任何一档通过即落库；T0/T1 由 F1–F3 判定，T2 由「实词零变化」判定（输出内容用字必须是输入的子序列），T3 必然通过但不计入「整理成功」，UI 标注「已回退原文」。
+任何一档通过即落库；T0/T1/T1b 由 F1–F3 + G4/G5 判定，T2 由「实词零变化」判定（输出内容用字必须是输入的子序列），T3 必然通过但不计入「整理成功」，UI 标注「已回退原文」。
 
 ### 3.4 思考档位
 
-- 新设置键：`dk_generation_faithful_thinking`（与小说化思考 `dk_generation_thinking` 一样是应用级、不按供应商分），取值 `OFF/LOW/HIGH/MAX`，默认 `LOW`。
+- 新设置键：`dk_generation_faithful_thinking`（与小说化思考 `dk_generation_thinking` 一样是应用级、不按供应商分），取值 `OFF/LOW/HIGH/MAX`，默认 `HIGH`（真机 LOW 三档全红，见 Plan 7 Task 8）。
 - 请求体：思考开启时不发 `temperature`；关闭时 `temperature=0.1`（现状）。
 - UI：设置 → 模型服务 → 单家详情 → 「原样整理思考」四枚胶囊。
 
@@ -207,7 +208,7 @@ G6 会把正常改动判红（实现时用 3 处换字实测确认）。枚举�
 | 审计 hash | `novel` 的 `promptHash` = `sha256(planBytes ‖ draftBytes ‖ polishBytes ‖ manifestBytes)` 前 8 位；算法写入 `PromptSpec` 注释与本文档 |
 | `GenerationStage` | 新增 `PLAN/DRAFT/POLISH`；faithful 仍 `T0–T3` |
 | `GenerationOptions` | 新增 `faithfulThinking: ThinkingLevel` |
-| `GenerationPrefs` | 新键 `dk_generation_faithful_thinking`（应用级），默认 LOW |
+| `GenerationPrefs` | 新键 `dk_generation_faithful_thinking`（应用级），默认 HIGH |
 | `Gate` 枚举 | 新增 `F1/F2/F3`、`N1/N2/N3`；按 mode 组合 |
 | `check-faithful.py` | 支持 v3 闸门组（`--kind faithful/revise`，v3 为默认）；v2 冻结向量保留作历史回归 |
 | 新增 `scripts/check-novel.py` | N1/N2/N3，`--self-test` 与向量 |
