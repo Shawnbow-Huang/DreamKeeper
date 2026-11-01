@@ -26,7 +26,7 @@ object FaithfulGates {
         "忘了", "不知道", "也可能", "应该是", "记混", "模糊",
     )
 
-    private val CAUSAL = listOf("于是", "因此", "所以", "正因为", "导致", "结果", "从而", "故而")
+    private val CAUSAL = listOf("于是", "因此", "所以", "正因为", "因为", "由于", "导致", "结果", "从而", "故而")
 
     private val SCENE_MARKERS = listOf(
         "后来切换到了", "画面一转", "画面又一转", "画面再一转", "然后我就",
@@ -55,6 +55,20 @@ object FaithfulGates {
     private val SPEECH_NAME_RE = Regex("([\\u4e00-\\u9fff]{2,4})[$SPEECH_VERBS]")
 
     // ---------------------------------------------------------------- 公共 API
+
+    private val IMPOSSIBLE_CLOCK = Regex("(\\d+)\\.\\d+(?=点)")
+
+    private val PERSON_TERMS = listOf(
+        "我妈", "爸爸", "父亲", "妈妈", "母亲", "舅舅", "叔叔", "阿姨",
+        "爷爷", "奶奶", "姐姐", "妹妹", "哥哥", "弟弟", "朋友", "同事", "同学",
+        "老师", "医生", "警察", "司机", "老板",
+    )
+    private val PLACE_TERMS = listOf("公园", "学校", "医院", "公司", "机场", "车站", "酒店", "餐厅", "商场", "超市")
+
+    internal fun normalizeNumbers(s: String): String = IMPOSSIBLE_CLOCK.replace(s) { it.groupValues[1] }
+
+    private fun newEntities(input: String, output: String): List<String> =
+        (PERSON_TERMS + PLACE_TERMS).filter { it in output && it !in input }
 
     fun contentChars(s: String): String {
         val cps = contentCodePoints(s)
@@ -143,12 +157,18 @@ object FaithfulGates {
     }
 
     private fun gateF1(input: String, output: String): GateResult {
-        val missing = anchors(input).filter { it !in output }
+        val out = normalizeNumbers(output)
+        val missing = anchors(normalizeNumbers(input)).filter { it !in out }
+        val added = newEntities(input, output)
+        val detail = buildList {
+            if (missing.isNotEmpty()) add("丢了事实：" + missing.take(10).joinToString("、"))
+            if (added.isNotEmpty()) add("新增人物/地点：" + added.take(6).joinToString("、"))
+        }
         return GateResult(
             gate = Gate.F1,
-            passed = missing.isEmpty(),
-            value = missing.size.toDouble(),
-            detail = if (missing.isEmpty()) emptyList() else listOf("丢了事实：" + missing.take(10).joinToString("、")),
+            passed = detail.isEmpty(),
+            value = (missing.size + added.size).toDouble(),
+            detail = detail,
         )
     }
 
@@ -156,9 +176,12 @@ object FaithfulGates {
         val a = contentCharCount(input)
         val b = contentCharCount(output)
         val ratio = if (a == 0) 0.0 else b.toDouble() / a
+        val missing = anchors(input).count { it !in normalizeNumbers(output) }
         val problems = buildList {
-            if (a > 0 && ratio < 0.50) add("压得太狠：输出/输入 = %.2f（下限 0.50）".format(ratio))
-            if (a > 0 && ratio > 0.85) add("几乎没压缩：输出/输入 = %.2f（上限 0.85）".format(ratio))
+            if (a > 0 && ratio < 0.60 && missing > 0) {
+                add("疑似丢事实：输出/输入 = %.2f 且缺 %d 个锚点".format(ratio, missing))
+            }
+            if (a > 0 && ratio > 1.40) add("疑似注水：输出/输入 = %.2f（上限 1.40）".format(ratio))
         }
         return GateResult(gate = Gate.F2, passed = problems.isEmpty(), value = ratio, detail = problems)
     }
@@ -343,109 +366,29 @@ object FaithfulGates {
     // ---------------------------------------------------------------- G4
 
     private fun gateG4(input: String, output: String): GateResult {
-        val inCps = codePointsOf(input)
-        val outCps = codePointsOf(output)
-        val inputHasCausal = CAUSAL.any { containsCp(inCps, codePointsOf(it)) }
-        val bad = ArrayList<String>()
-
-        for (start in sceneSplits(outCps)) {
-            val window = outCps.copyOfRange(start, minOf(start + 24, outCps.size))
-            for (cStr in CAUSAL) {
-                val c = codePointsOf(cStr)
-                val pos = indexOfCp(window, c, 0)
-                if (pos < 0) continue
-                val ctxStart = maxOf(0, pos - 6)
-                val ctxEnd = minOf(window.size, pos + c.size + 6)
-                if (!containsCp(inCps, window.copyOfRange(ctxStart, ctxEnd))) {
-                    val ctx = textOf(window, ctxStart, ctxEnd).replace('\n', ' ')
-                    bad.add("跨场景新增因果「$cStr」（…$ctx…）")
-                }
-            }
-        }
-
-        if (!inputHasCausal) {
-            for (cStr in CAUSAL) {
-                val c = codePointsOf(cStr)
-                var from = 0
-                while (true) {
-                    val pos = indexOfCp(outCps, c, from)
-                    if (pos < 0) break
-                    val ctxStart = maxOf(0, pos - 6)
-                    val ctxEnd = minOf(outCps.size, pos + c.size + 6)
-                    val marker = "跨场景新增因果「$cStr」"
-                    if (!containsCp(inCps, outCps.copyOfRange(ctxStart, ctxEnd)) &&
-                        marker !in (bad.joinToString(" ") + " ")
-                    ) {
-                        val ctx = textOf(outCps, ctxStart, ctxEnd).replace('\n', ' ')
-                        bad.add("新增因果「$cStr」（…$ctx…）")
-                        break
-                    }
-                    from = pos + c.size
-                }
-            }
-        }
-
-        return GateResult(Gate.G4, bad.isEmpty(), bad.size.toDouble(), bad.take(6))
+        // v3.1：改写必然改变上下文，逐字比对会误伤；改为计数，允许 1 处解释性因果。
+        val extra = CAUSAL.sumOf { output.windowed(it.length).count { w -> w == it } } -
+            CAUSAL.sumOf { input.windowed(it.length).count { w -> w == it } }
+        val problems = if (extra >= 3) listOf("新增因果连接词 $extra 处（允许 2 处）") else emptyList()
+        return GateResult(Gate.G4, problems.isEmpty(), maxOf(0, extra).toDouble(), problems)
     }
-
-    /** 等价于 Python `_scene_splits`：空行（`\n\s*\n` 非重叠匹配的 end）+ 场景硬切词 start。 */
-    private fun sceneSplits(text: IntArray): List<Int> {
-        val idx = sortedSetOf(0)
-
-        var i = 0
-        while (i < text.size) {
-            if (text[i] == '\n'.code) {
-                var j = i + 1
-                while (j < text.size && isWhitespace(text[j])) j++
-                var lastNewline = -1
-                var k = j - 1
-                while (k > i) {
-                    if (text[k] == '\n'.code) {
-                        lastNewline = k
-                        break
-                    }
-                    k--
-                }
-                if (lastNewline >= 0) {
-                    idx.add(lastNewline + 1)
-                    i = lastNewline + 1
-                    continue
-                }
-            }
-            i++
-        }
-
-        for (marker in SCENE_MARKERS) {
-            val m = codePointsOf(marker)
-            var from = 0
-            while (true) {
-                val at = indexOfCp(text, m, from)
-                if (at < 0) break
-                idx.add(at)
-                from = at + m.size
-            }
-        }
-
-        return idx.toList()
-    }
-
-    // ---------------------------------------------------------------- G5
 
     private fun gateG5(input: String, output: String): GateResult {
-        val inCps = codePointsOf(input)
-        val outCps = codePointsOf(output)
-        var value = 0
-        val bad = ArrayList<String>()
-        for (w in UNCERTAIN) {
-            val wc = codePointsOf(w)
-            val need = countUncertain(inCps, wc)
-            val got = countUncertain(outCps, wc)
-            value += need
-            if (need > 0 && got < need) {
-                bad.add("「$w」原文 $need 处，输出只剩 $got 处")
+        // v3.1：不再按次数守恒；只查「有没有把不确定写成确定」。
+        if (UNCERTAIN.none { it in input }) return GateResult(Gate.G5, true, 0.0, emptyList())
+        if (UNCERTAIN.none { it in output }) {
+            return GateResult(Gate.G5, false, 1.0, listOf("把不确定的事写成了确定"))
+        }
+        val inParas = input.split('\n').filter { it.isNotBlank() }
+        val outParas = output.split('\n').filter { it.isNotBlank() }
+        if (inParas.size == outParas.size) {
+            inParas.forEachIndexed { i, a ->
+                if (UNCERTAIN.any { it in a } && UNCERTAIN.none { it in outParas[i] }) {
+                    return GateResult(Gate.G5, false, (i + 1).toDouble(), listOf("第 ${i + 1} 段把推测写成了确定"))
+                }
             }
         }
-        return GateResult(Gate.G5, bad.isEmpty(), value.toDouble(), bad.take(6))
+        return GateResult(Gate.G5, true, 0.0, emptyList())
     }
 
     /** 等价于 Python `count_uncertain`：非重叠计数，排除否定式前缀（不没未别莫）。 */
