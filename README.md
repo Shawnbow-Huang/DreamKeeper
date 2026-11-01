@@ -57,4 +57,12 @@ cd android
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+首次构建前先拉取内置语音识别的大二进制（AAR 49MB + SenseVoice int8 模型 239MB）：
+
+```bash
+bash scripts/fetch-asr.sh   # 下载并按 SHA256 校验；缺失时 Gradle 会在 preBuild 明确报错
+```
+
+这两份二进制不入库（`.gitignore`），原因与校验值见 [docs/ASR-SENSEVOICE.md](docs/ASR-SENSEVOICE.md)。
+
 需要 JDK 17+（Android Studio 自带 jbr 即可）与 Android SDK 36。

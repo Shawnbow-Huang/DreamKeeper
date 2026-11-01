@@ -1,12 +1,13 @@
-# 梦匣 · 发布说明（0.10.0 多供应商候选版）
+# 梦匣 · 发布说明（0.11.0 内置离线语音识别）
 
-> 本版是 **模拟器验收的候选版（0.10.0 / versionCode 3）**，不是公开的 v1。
-> 相对 0.9.0：新增五家模型供应商、按家 Key、测试连接、按家请求适配与非 DeepSeek 的「未计价」口径。
+> 本版是 **模拟器验收的候选版（0.11.0 / versionCode 5）**，不是公开的 v1。
+> 相对 0.10.1：内置 SenseVoice Small 离线转写（随包 239MB 模型 + sherpa-onnx 运行时），不再依赖系统中文语音包；universal APK 约 323MiB。
 > 真机项按 [docs/QA-REAL-DEVICE.md](QA-REAL-DEVICE.md) 的清单执行；模拟器 PENDING 见 `docs/evidence/plan5/FINAL-REVIEW.md` 与 `docs/evidence/plan6/FINAL-REVIEW.md`。
 
 ## 构建
 
 ```bash
+bash scripts/fetch-asr.sh      # 首次构建前：拉取 AAR 与模型（不入库）
 cd android
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # Windows
 ./gradlew --no-daemon :app:assembleRelease
