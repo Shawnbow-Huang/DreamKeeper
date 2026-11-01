@@ -5,17 +5,17 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Plan 3 Task 7：用冻结向量逐例校验 Kotlin 五闸门与 Python 参考实现同集合。
+ * 用冻结向量逐例校验 Kotlin 闸门 G1–G6 与 Python 参考实现同集合。
  *
  * 刻意不用 Robolectric / org.json：本测试是纯 JVM 逻辑校验，JSON 解析由文件内的小解析器
  * 完成，避免 android.jar 的 stub JSONObject 在 plain JUnit4 下抛 "not mocked"。
- * 期望值全部来自 docs/evidence/plan3/faithful-gate-vectors.json（冻结向量）。
+ * 期望值全部来自 docs/evidence/plan6/p6-faithful-gate-vectors.json（冻结向量）。
  */
 class FaithfulGatesTest {
 
     @Test
     fun case01() {
-        assertEquals("向量条数", 15, vectors().size)
+        assertEquals("向量条数", 17, vectors().size)
         assertEquals("PUNCT 长度", 34, FaithfulGates.PUNCT.length)
         assertCase(1)
     }
@@ -62,14 +62,22 @@ class FaithfulGatesTest {
     @Test
     fun case15() = assertCase(15)
 
+    @Test
+    fun case16() = assertCase(16)
+
+    @Test
+    fun case17() = assertCase(17)
+
     private fun assertCase(id: Int) {
         val c = vectors().first { it.id == id }
         val report = FaithfulGates.check(c.input, c.output, c.mode)
         assertEquals("case $id ${c.name} mode", c.mode, report.mode)
-        assertEquals("case $id ${c.name} 闸门数", 5, report.results.size)
+        // G6 只适用于 faithful；revise 是整体改写，不该被改字审计误伤。
+        val expectedGates = if (c.mode == GateMode.FAITHFUL) Gate.values().toList() else Gate.values().filter { it != Gate.G6 }
+        assertEquals("case $id ${c.name} 闸门数", expectedGates.size, report.results.size)
         assertEquals(
             "case $id ${c.name} 闸门顺序",
-            Gate.values().toList(),
+            expectedGates,
             report.results.map { it.gate },
         )
         assertEquals("case $id ${c.name} failed 集合", c.expectFailed, report.failed)
@@ -99,6 +107,8 @@ class FaithfulGatesTest {
         val faithfulFailed: Set<Gate>?,
     )
 
+    private fun vectorsFile(): File = File(repoRoot(), "docs/evidence/plan6/p6-faithful-gate-vectors.json")
+
     private fun repoRoot(): File {
         var dir: File? = File("").absoluteFile
         while (dir != null) {
@@ -115,7 +125,7 @@ class FaithfulGatesTest {
     private fun vectors(): List<VectorCase> = VECTORS
 
     private fun loadVectors(): List<VectorCase> {
-        val file = File(repoRoot(), "docs/evidence/plan3/faithful-gate-vectors.json")
+        val file = vectorsFile()
         check(file.isFile) { "缺少冻结向量：${file.absolutePath}" }
         val root = MiniJson.parse(file.readText()) as? Map<*, *>
             ?: error("向量 JSON 根节点不是对象")

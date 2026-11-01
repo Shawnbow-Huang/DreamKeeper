@@ -5,7 +5,7 @@ import java.math.RoundingMode
 import java.util.Locale
 
 /**
- * Plan 3 Task 7：Python 五闸门 G1–G5 的纯 Kotlin 移植。
+ * Python 闸门 G1–G6 的纯 Kotlin 移植（G6 为 2026-11-01 新增的改字审计）。
  *
  * 语义真源是 `scripts/check-faithful.py`，逐字照抄；冻结向量是
  * `docs/evidence/plan3/faithful-gate-vectors.json`。
@@ -71,15 +71,51 @@ object FaithfulGates {
         output: String,
         mode: GateMode = GateMode.FAITHFUL,
     ): GateReport {
-        // 五个闸门全部算完、不短路；failed 顺序即 G1→G5。
-        val results = listOf(
-            gateG1(input, output),
-            gateG2(input, output, mode),
-            gateG3(input, output),
-            gateG4(input, output),
-            gateG5(input, output),
-        )
+        // 闸门全部算完、不短路；failed 顺序即 G1→G6。
+        val results = buildList {
+            add(gateG1(input, output))
+            add(gateG2(input, output, mode))
+            add(gateG3(input, output))
+            add(gateG4(input, output))
+            add(gateG5(input, output))
+            // revise 是对小说稿的整体改写，本来就允许换字；G6 只适用 faithful。
+            if (mode == GateMode.FAITHFUL) add(gateG6(input, output))
+        }
         return GateReport(mode, results)
+    }
+
+    // ---------------------------------------------------------------- G6
+
+    /**
+     * 改字审计：输出正文里「输入没有的字」不超过 2 个。
+     *
+     * 为什么要它：G1 只盯数字/颜色/方位/专名，G3 的 2-gram 覆盖率对**一个**同音字替换
+     * 几乎无感（如把「开饭时间」改成「开放时间」，长度不变、覆盖率仍 ≥95%）。
+     * 而语音识别的同音错恰好就是这种「一个说得通的字被换成另一个」——
+     * 不数出来，忠实稿就会在用户不知情时改掉一个事实。
+     *
+     * 为什么用「多出来的字」而不是编辑距离对齐：中文没有分词器，逐字对齐会在删口水处
+     * 产生大量假插入；同音替换必然带来「输入里没有的字」，这个口径可复算、两端一致。
+     * 代价：改动后的字若在原稿别处出现过，这里抓不到——由 G2 长度与 G3 覆盖率兜底。
+     */
+    private fun gateG6(input: String, output: String, limit: Int = 2): GateResult {
+        val inputCounts = contentChars(input).groupingBy { it }.eachCount()
+        val surplus = ArrayList<Char>()
+        for ((ch, count) in contentChars(output).groupingBy { it }.eachCount()) {
+            val extra = count - (inputCounts[ch] ?: 0)
+            repeat(extra.coerceAtLeast(0)) { surplus += ch }
+        }
+        val problems = if (surplus.size > limit) {
+            listOf("多出 ${surplus.size} 个原文没有的字：" + surplus.take(8).joinToString("、"))
+        } else {
+            emptyList()
+        }
+        return GateResult(
+            gate = Gate.G6,
+            passed = problems.isEmpty(),
+            value = surplus.size.toDouble(),
+            detail = problems,
+        )
     }
 
     // ---------------------------------------------------------------- G1

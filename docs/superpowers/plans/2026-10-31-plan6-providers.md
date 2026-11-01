@@ -178,6 +178,8 @@
 | D564 | 2026-11-01 | 语音 | 长录音按 25s 分段 + 0.8s 重叠，文本按最长公共前后缀去重（≤8 字）；采样按段读，不整文件进内存 | 单条上限 4h，整段 float 采样约 920MB；硬切会切在字中间，重叠 + 去重是成本最低的修法 |
 | D565 | 2026-11-01 | 语音 | `PreferredSttEngine`：内置优先 → 系统兜底；都不可用时把**内置**的原因抛给用户 | 内置模型随包发，正常永远是主路径；被商店按 ABI 裁包时系统识别器仍可救场；报「模型缺失，请重装」比「本机没有离线识别」更可行动 |
 | D566 | 2026-11-01 | 语音 | AAR（49MB）与模型（239MB）不入库：`scripts/fetch-asr.sh` 按 SHA256 拉取；Gradle `checkBundledAsr` 缺失即失败；许可证进 `THIRD-PARTY-NOTICES.md` | 二进制进 git 会撑爆历史；可复现性靠脚本 + 哈希，不靠大文件 |
+| D567 | 2026-11-01 | 忠实稿 | 提示词升 `faithful.v2.1`：§3.2 改「修字（默认不改）」，两种读法都讲得通（开饭/开放）一律保留，全篇 ≤2 处 | 用户问「开饭/开放 这种识别误差，忠实模式的提示词有没有优化」；v2 只写了「唯一读法」，对歧义两通的情形没有点名，模型会按「更常见」改写，等于悄悄改事实 |
+| D568 | 2026-11-01 | 忠实稿 | 新增闸门 G6「改字审计」：faithful 模式下输出中「输入没有的字」≤2，超出即红；revise 不适用 | G1 只盯数字/颜色/方位/专名，G3 的 2-gram 覆盖率对单个同音替换几乎无感（开饭→开放 长度不变、覆盖率仍 ≥95%），不数出来就抓不到 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -372,3 +374,13 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - **文档**：`docs/ASR-SENSEVOICE.md`（选型/结构/校验/限制）、`THIRD-PARTY-NOTICES.md`（sherpa-onnx Apache-2.0 + SenseVoice/FunASR MIT）、`docs/evidence/plan6/p6-asr-01-instrumented.txt` + `p6-asr-02-settings.png`（nearWhite 0.0000%）。
 - **PENDING**：vivo 真机真实录音（≥1 分钟）、4h 长录音接缝质量、armeabi-v7a 真机；ABI split 减包未做。
 - **结论**：通过（模拟器级真推理）；「不联网、不依赖系统语音包」的目标达成，代价是安装包 +323MB。
+
+### 忠实稿的同音错边界（Lead，2026-11-01）
+
+- 用户问：「既然出现了『开放』听成『开饭』是模型误差，忠实记录模式提交给大模型的提示词工程有没有对这种情况优化？没有的话现在是否要补上。」
+- **查证**：v2 已有 §3.2「唯一例外：修字」（同音 + 唯一读法 + 只改字），但**没有**点名「两种读法都讲得通」的情形，也没有上限；闸门侧 G1/G3 都抓不住单个同音替换。结论：规则有，边界不清、无牙。
+- **交付**：`prompts/faithful.v2.1.md`（sha256_8 `4eac16cb`）——§3.2 改「修字（默认不改）」+ 开饭/开放 反例 + 全篇 ≤2 处；`PromptSpec.FAITHFUL` 指 v2.1；`scripts/check-faithful.py` 与 `FaithfulGates.kt` 新增 **G6**（faithful：输出中「输入没有的字」≤2；revise 不适用）；冻结向量 15 → 17；Python 变异自测 +2（三处改字必红、单处 G6 放行）。
+- **复跑**：全量 `:app:testDebugUnitTest --rerun-tasks` → **classes=66 tests=528 failures=0**（基线 66/526，+2 向量例）；`python scripts/check-faithful.py --self-test` → 全绿。
+- **证据**：`docs/evidence/plan6/p6-faithful-01-homophone.txt`（prompt diff、自测输出、向量统计）。
+- **PENDING**：真实模型是否照做（需要有效 Key 跑一轮含「开饭时间」的录音）；G6 抓不到「改成的字恰好在原文别处出现过」的情形（由 G2/G3 兜底）。
+- **结论**：通过；忠实稿从「靠提示词自觉」变成「提示词说清楚 + 机器数得出来」。

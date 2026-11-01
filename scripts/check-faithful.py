@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check-faithful.py —— 五个规则闸门（设计 §7.2 ④ / §6.1 三级失败链）
+"""check-faithful.py —— 六个规则闸门（设计 §7.2 ④ / §6.1 三级失败链；G6 见 D568）
 
 用法：
   python scripts/check-faithful.py --input raw.txt --output clean.txt
@@ -16,6 +16,7 @@
   G3 原文关键 2-gram 覆盖率 ≥ 95%（近似"名词动词覆盖率"，见下）
   G4 跨场景因果连接词 = 0
   G5 不确定词保留率 = 100%
+  G6 改字审计：输出里「输入没有的字」≤ 2（同音改字也计数；revise 模式不适用）
 
 设计取舍（必须写清楚，否则过严会误伤）：
   * 中文没有分词器可用（不联网、不引依赖）。G3 用**字符 2-gram 覆盖率**近似"关键名词与动词覆盖率"：
@@ -300,6 +301,35 @@ def gate_g5(input_text, output_text):
     }
 
 
+def gate_g6(input_text, output_text, limit=2):
+    """改字审计：输出正文里多出来的字（输入里没有的字）不超过 limit。
+
+    为什么用「多出来的字」而不是对齐 diff：中文没有分词器，逐个字符做编辑距离
+    会在删口水处产生大量假插入；而语音识别的同音错必然带来「输入里没有的字」
+    （开饭/开放 里的 饭/放），这个口径简单、可复算、两端实现一致。
+    代价是：把 A 改成 B、而 B 正好在原文别处出现过时抓不到——可接受，
+    这类情况长度与 G3 覆盖率仍会兜底。
+    """
+    inp = multiset(content_chars(input_text))
+    out = multiset(content_chars(output_text))
+    surplus = []
+    for ch, n in out.items():
+        extra = n - inp.get(ch, 0)
+        if extra > 0:
+            surplus.extend([ch] * extra)
+    problems = []
+    if len(surplus) > limit:
+        problems.append("多出 %d 个原文没有的字：%s" % (len(surplus), "、".join(surplus[:8])))
+    return {
+        "gate": "G6",
+        "name": "改字审计（新增字 ≤ %d）" % limit,
+        "value": len(surplus),
+        "pass": len(problems) == 0,
+        "detail": problems,
+        "advisory": [],
+    }
+
+
 def run(input_text, output_text, kind="faithful"):
     gates = [
         gate_g1(input_text, output_text),
@@ -308,6 +338,9 @@ def run(input_text, output_text, kind="faithful"):
         gate_g4(input_text, output_text),
         gate_g5(input_text, output_text),
     ]
+    # revise 是对小说稿的整体改写，本来就允许换字；G6 只适用于 faithful。
+    if kind == "faithful":
+        gates.append(gate_g6(input_text, output_text))
     return {
         "kind": kind,
         "pass": all(g["pass"] for g in gates),
@@ -366,14 +399,34 @@ def _self_test():
     cases.append(("G5 丢不确定词", src,
                   good.replace("好像头顶到一块板", "头顶到一块板"), False))
 
+    # G6：同音改字也计数。三处替换 → 多出 3 个原文没有的字 → G6 必须红。
+    cases.append(("G6 同音改字超限（开饭/开放 这类）", src,
+                  good.replace("按不到一楼", "按不到一搂")
+                  .replace("窗外有沙砾", "窗外有沙粒")
+                  .replace("我转头看了一眼", "我转头砍了一眼"),
+                  False, ("G6",), ()))
+
+    # G6：只改一处（≤2）→ G6 不该红；短文本里 G3 会因 2-gram 掉点而红，属预期，只断言 G6 不在 failed。
+    cases.append(("G6 单处修字（G6 放行）", src,
+                  good.replace("窗外有沙砾", "窗外有沙粒"), False, (), ("G6",)))
+
     results, ok = [], True
-    for name, a, b, want_pass in cases:
+    for case in cases:
+        name, a, b, want_pass = case[:4]
+        want_fail = set(case[4]) if len(case) > 4 else None
+        want_not_fail = set(case[5]) if len(case) > 5 else set()
         r = run(a, b)
         good_enough = (r["pass"] == want_pass)
+        if want_fail is not None:
+            good_enough = good_enough and want_fail <= set(r["failed"])
+        if want_not_fail:
+            good_enough = good_enough and not (want_not_fail & set(r["failed"]))
         ok = ok and good_enough
         results.append({
             "case": name,
             "expect_pass": want_pass,
+            "expect_failed": sorted(want_fail) if want_fail is not None else None,
+            "expect_not_failed": sorted(want_not_fail),
             "actual_pass": r["pass"],
             "failed": r["failed"],
             "ok": good_enough,
@@ -385,7 +438,7 @@ def _self_test():
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
-    ap = argparse.ArgumentParser(description="梦匣五闸门检查器")
+    ap = argparse.ArgumentParser(description="梦匣六闸门检查器（G1–G6）")
     ap.add_argument("--input")
     ap.add_argument("--output")
     ap.add_argument("--kind", default="faithful", choices=["faithful", "revise"])
@@ -411,7 +464,7 @@ def main(argv):
     if a.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))
     else:
-        print("== 五闸门 ==  kind=%s  结论=%s" % (r["kind"], "通过" if r["pass"] else "不通过"))
+        print("== 六闸门 ==  kind=%s  结论=%s" % (r["kind"], "通过" if r["pass"] else "不通过"))
         for g in r["gates"]:
             mark = "OK  " if g["pass"] else "FAIL"
             print("  [%s] %-6s %-28s value=%s" % (mark, g["gate"], g["name"], g["value"]))

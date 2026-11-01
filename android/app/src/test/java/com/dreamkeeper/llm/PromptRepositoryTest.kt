@@ -28,7 +28,7 @@ class PromptRepositoryTest {
 
     // 计划 §0.1 钉死的 sha256 前 8 位；prompts/*.md 由 .gitattributes 钉成 LF（D284）。
     private val expectedSha256_8 = mapOf(
-        "faithful" to "5b9702ee",
+        "faithful" to "4eac16cb",
         "novel" to "cc497720",
         "novel_revise" to "45a17e0a",
     )

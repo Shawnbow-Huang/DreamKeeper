@@ -24,8 +24,8 @@ android {
         applicationId = "com.dreamkeeper"
         minSdk = 26
         targetSdk = 37
-        versionCode = 5
-        versionName = "0.11.0"
+        versionCode = 6
+        versionName = "0.11.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -172,6 +172,6 @@ tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("../docs/evidence/plan3/p3-cost-01-vectors.json"))
         .withPropertyName("costVectors")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.file(rootProject.file("../docs/evidence/plan3/faithful-gate-vectors.json"))
+    inputs.file(rootProject.file("../docs/evidence/plan6/p6-faithful-gate-vectors.json"))
         .withPropertyName("faithfulGateVectors")
 }

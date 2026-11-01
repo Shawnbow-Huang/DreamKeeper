@@ -617,6 +617,7 @@ class GenerationOrchestrator(
             val picked = when (result.gate) {
                 Gate.G1 -> result.detail.take(10)
                 Gate.G4, Gate.G5 -> result.detail.take(6)
+                Gate.G6 -> result.detail.take(6)
                 Gate.G2, Gate.G3 -> (result.detail + result.advisory).take(12)
             }
             lines += picked

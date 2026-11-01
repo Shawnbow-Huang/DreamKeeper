@@ -19,7 +19,7 @@ data class SlotSpec(
 /**
  * 非槽位的条件标记（§0.3：全库正文里只有 4 处 `【…】`，其中 3 处是标记）。
  *
- * 关键事实：它们是模板正文里**本来就有的字**——faithful.v2.md 正文写着
+ * 关键事实：它们是模板正文里**本来就有的字**——faithful.v2.1.md 正文写着
  * 「带 `【只做标点】` 标记时…」「带 `【上一版违规清单】` 标记时…」。
  * 因此"字在不在送出串里"不能当开关用（永远在），开关只能由调用方显式 enable，
  * 渲染器把标记块追加到输入块之后。
@@ -63,9 +63,9 @@ object PromptSpecs {
 
     val FAITHFUL = PromptSpec(
         promptId = "faithful",
-        version = "v2",
-        assetPath = "prompts/faithful.v2.md",
-        sha256_8 = "5b9702ee",
+        version = "v2.1",
+        assetPath = "prompts/faithful.v2.1.md",
+        sha256_8 = "4eac16cb",
         slots = listOf(
             SlotSpec("待理顺转写", required = true, allowEmpty = true),
         ),
