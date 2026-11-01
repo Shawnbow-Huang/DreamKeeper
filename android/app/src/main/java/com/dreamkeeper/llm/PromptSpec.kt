@@ -63,9 +63,9 @@ object PromptSpecs {
 
     val FAITHFUL = PromptSpec(
         promptId = "faithful",
-        version = "v3",
-        assetPath = "prompts/faithful.v3.md",
-        sha256_8 = "82c6e1f1",
+        version = "v3.1",
+        assetPath = "prompts/faithful.v3.1.md",
+        sha256_8 = "1a9082be",
         slots = listOf(
             SlotSpec("待理顺转写", required = true, allowEmpty = true),
         ),

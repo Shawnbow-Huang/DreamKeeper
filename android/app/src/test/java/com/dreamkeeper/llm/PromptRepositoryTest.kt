@@ -28,7 +28,7 @@ class PromptRepositoryTest {
 
     // 计划 §0.1 钉死的 sha256 前 8 位；prompts/*.md 由 .gitattributes 钉成 LF（D284）。
     private val expectedSha256_8 = mapOf(
-        "faithful" to "82c6e1f1",
+        "faithful" to "1a9082be",
         "novel" to "cc497720",
         "novel_revise" to "45a17e0a",
         "novel_plan" to "8a176536",
@@ -37,16 +37,17 @@ class PromptRepositoryTest {
     )
 
     @Test
-    fun `faithful v3 事实守恒与压缩口径都在提示词里`() {
+    fun `faithful v31 整篇语义改字与不压缩都在提示词里`() {
         val spec = PromptSpecs.FAITHFUL
-        assertEquals("v3", spec.version)
-        assertEquals("prompts/faithful.v3.md", spec.assetPath)
+        assertEquals("v3.1", spec.version)
+        assertEquals("prompts/faithful.v3.1.md", spec.assetPath)
         val text = PromptRepository(assets).render(
             spec.promptId,
             mapOf("待理顺转写" to "呃，我昨天做了一个梦，然后然后就去海边了。"),
         ).text
         assertTrue(text.contains("事实守恒"))
-        assertTrue(text.contains("压缩到原文的五六成"))
+        assertTrue(text.contains("没有目标"))
+        assertTrue(text.contains("整篇语义"))
         assertTrue(text.contains("【只做标点】"))
         assertTrue(text.contains("【上一版违规清单】"))
         assertTrue(text.contains("4 点 4 分"))
