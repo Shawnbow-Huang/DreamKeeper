@@ -172,6 +172,6 @@ tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("../docs/evidence/plan3/p3-cost-01-vectors.json"))
         .withPropertyName("costVectors")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.file(rootProject.file("../docs/evidence/plan6/p6-faithful-gate-vectors.json"))
+    inputs.file(rootProject.file("../docs/evidence/plan7/faithful-gate-v3-vectors.json"))
         .withPropertyName("faithfulGateVectors")
 }

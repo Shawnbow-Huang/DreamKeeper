@@ -42,6 +42,18 @@ FILLERS = [
     "对对对", "反正", "其实吧", "怎么说呢",
 ]
 
+# v3 的「口水清零」词表：比 FILLERS 更严，但**不含句末语气词 啊/呀/呢**——
+# 「好可怕啊」是人味，「呃…那个…」才是口水。脚本与 Kotlin 两侧必须逐字一致。
+FILLER_STRICT = [
+    "呃", "嗯", "唔", "唉", "哎", "诶", "那个", "就是说", "然后然后", "就是就是",
+    "这个这个", "对对对", "反正", "其实吧", "怎么说呢",
+]
+
+# 「想词儿」的元叙述：出现即红（与用户原话一一对应）。
+META_PHRASES = [
+    "我思考一下", "让我想想", "就是什么呢", "我在想", "怎么说呢", "你知道吧", "反正就是",
+]
+
 UNCERTAIN = [
     "好像", "记不清", "记不得", "大概", "似乎", "可能", "约莫", "说不定", "忘了",
     "不知道", "也可能", "应该是", "记混", "模糊",
@@ -74,6 +86,7 @@ CN_NUM_MULTI_RE = re.compile("[%s]{2,}" % CN_NUM)
 ARABIC_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
 
 SPEECH_VERBS = "说喊道问答叫嚷"
+SPEECH_NAME_RE = re.compile("([" + chr(0x4E00) + "-" + chr(0x9FFF) + "]{2,4})[" + SPEECH_VERBS + "]")
 PUNCT = "，。！？；：、,.!?;:…—　 \n\r\t“”\"'（）()《》【】[]"
 
 HAN_RE = re.compile(r"[\u4e00-\u9fff]")
@@ -172,6 +185,88 @@ def advisory_new_fragments(input_text, output_text, limit=12):
              if bg not in inp and HAN_RE.search(bg) and bg not in FILLERS]
     cands.sort(key=lambda x: -x[1])
     return [bg for bg, _ in cands[:limit]]
+
+
+def speech_names(text):
+    """说话动词前的人名：只认句读（或 和/跟/对/向…）之后、2–3 个不像虚词的汉字。
+
+    不能直接取「2-4 个汉字 + 说/喊/道」：真实句子里「就是说说」「听不清在说什么」
+    会被抓成假人名，F1 就永远红（2026-11-01 实测）。
+    """
+    out = []
+    for m in SPEECH_NAME_RE.finditer(text):
+        cand = m.group(1)
+        start = m.start(1)
+        prev = text[start - 1] if start > 0 else "　"
+        if prev not in NAME_BOUNDARY:
+            continue
+        if cand in FILLERS or any(ch in cand for ch in "的就是了在有没不我你他她它们这那"):
+            continue
+        out.append(cand)
+    return out
+
+
+GENERIC_NUM = {"一个", "一下", "一点", "一些", "一场", "一阵", "一遍", "一声", "一会", "一会儿"}
+NAME_BOUNDARY = PUNCT + "和跟对冲向与"
+
+
+def extract_anchors(text):
+    """F1 的事实锚点：数字、颜色、方位、引号专名、说话人。顺序稳定、去重保序。"""
+    anchors = []
+    anchors += ARABIC_NUM_RE.findall(text)
+    anchors += [x for x in CN_NUM_RE.findall(text) if x not in GENERIC_NUM]
+    anchors += CN_NUM_MULTI_RE.findall(text)
+    anchors += extract_colors(text)
+    anchors += extract_directions(text)
+    anchors += extract_quoted(text)
+    anchors += speech_names(text)
+    seen, uniq = set(), []
+    for a in anchors:
+        if a and a not in seen:
+            seen.add(a)
+            uniq.append(a)
+    return uniq
+
+
+def gate_f1(input_text, output_text):
+    missing = [a for a in extract_anchors(input_text) if a not in output_text]
+    return {
+        "gate": "F1", "name": "事实锚点全保留",
+        "value": len(missing), "pass": len(missing) == 0,
+        "detail": [] if not missing else ["丢了事实：%s" % "、".join(missing[:10])],
+        "advisory": [],
+    }
+
+
+def gate_f2(input_text, output_text):
+    a, b = len(content_chars(input_text)), len(content_chars(output_text))
+    ratio = 0.0 if a == 0 else b / a
+    problems = []
+    if a > 0 and ratio < 0.50:
+        problems.append("压得太狠：输出/输入 = %.2f（下限 0.50）" % ratio)
+    if a > 0 and ratio > 0.85:
+        problems.append("几乎没压缩：输出/输入 = %.2f（上限 0.85）" % ratio)
+    return {
+        "gate": "F2", "name": "压缩率 0.50–0.85",
+        "value": round(ratio, 4), "pass": len(problems) == 0,
+        "detail": problems, "advisory": [],
+    }
+
+
+def gate_f3(input_text, output_text):
+    hits = [w for w in FILLER_STRICT if w in input_text and w in output_text]
+    hits += [w for w in META_PHRASES if w in output_text]
+    seen, uniq = set(), []
+    for h in hits:
+        if h not in seen:
+            seen.add(h)
+            uniq.append(h)
+    return {
+        "gate": "F3", "name": "口水清零",
+        "value": len(uniq), "pass": len(uniq) == 0,
+        "detail": [] if not uniq else ["还有口水：%s" % "、".join(uniq)],
+        "advisory": [],
+    }
 
 
 # ---------------------------------------------------------------- 闸门
@@ -330,17 +425,20 @@ def gate_g6(input_text, output_text, limit=2):
     }
 
 
+def gates_for(kind):
+    """v3：原样整理跑 F1/F2/F3 + G4/G5；revise 仍跑 G1–G6（旧口径不动）。"""
+    if kind == "revise":
+        return [gate_g1, gate_g2, gate_g3, gate_g4, gate_g5, gate_g6]
+    return [gate_f1, gate_f2, gate_f3, gate_g4, gate_g5]
+
+
 def run(input_text, output_text, kind="faithful"):
-    gates = [
-        gate_g1(input_text, output_text),
-        gate_g2(input_text, output_text, kind),
-        gate_g3(input_text, output_text),
-        gate_g4(input_text, output_text),
-        gate_g5(input_text, output_text),
-    ]
-    # revise 是对小说稿的整体改写，本来就允许换字；G6 只适用于 faithful。
-    if kind == "faithful":
-        gates.append(gate_g6(input_text, output_text))
+    gates = []
+    for g in gates_for(kind):
+        if g is gate_g2:
+            gates.append(g(input_text, output_text, kind))
+        else:
+            gates.append(g(input_text, output_text))
     return {
         "kind": kind,
         "pass": all(g["pass"] for g in gates),
@@ -354,85 +452,72 @@ def run(input_text, output_text, kind="faithful"):
 def _self_test():
     """每条都是一个"应该变红"的变异；全绿则说明闸门没牙。"""
     src = (
-        "呃…我在电梯里，电梯一直往上，按不到一楼。那个…数字过了三十还在涨。"
-        "我有点失重，眼睛也看不清东西，好像头顶到一块板。\n\n"
-        "后来切换到了教室里面，窗外有沙砾涌进来。我转头看了一眼就不敢再看了。"
-        "（我好像并没有这么做，有点傻orz）"
+        "呃，我昨天做了一个梦，然后然后我们就去海边了，一共四个人。"
+        "然后那个海是灰色的，天快黑了。我们在沙滩上走了很久，好像是傍晚，也好像是夜里。"
     )
     good = (
-        "我在电梯里，电梯一直往上，按不到一楼。数字过了三十还在涨。"
-        "我有点失重，眼睛也看不清东西，好像头顶到一块板。\n\n"
-        "后来切换到了教室里面，窗外有沙砾涌进来。我转头看了一眼就不敢再看了。"
-        "（我好像并没有这么做，有点傻orz）"
+        "昨天我梦见我们四个人去了海边。海是灰色的，天快黑了。"
+        "我们在沙滩上走了很久，好像是傍晚，也好像是夜里。"
     )
     cases = []
 
-    cases.append(("合法理顺（只删口水+标点）", src, good, True))
+    def case(name, a, b, want_pass, want_fail=(), want_not_fail=(), kind="faithful"):
+        cases.append((name, a, b, want_pass, want_fail, want_not_fail, kind))
 
-    cases.append(("G1 新增数量", src,
-                  good.replace("数字过了三十还在涨", "数字过了四十还在涨"), False))
-
-    cases.append(("G1 新增颜色", src,
-                  good.replace("窗外有沙砾", "窗外有灰色沙砾"), False))
-
-    cases.append(("G1 新增方位", src,
-                  good.replace("我转头看了一眼", "我往右边转头看了一眼"), False))
-
-    cases.append(("G1 疑似专名", src,
-                  good.replace("后来切换到了教室里面", "后来切换到了教室里面，小王说快跑"), False))
-
-    dense = "".join(ch for ch in good if ch not in PUNCT)
-    cases.append(("G2 只加标点、正文不变（合法操作，必须绿）", dense, good, True))
-
-    cases.append(("G1 改单字数词（一楼→三楼；旧版正则是死的，看不见）", src,
-                  good.replace("按不到一楼", "按不到三楼"), False))
-
-    cases.append(("G2 长度膨胀", src,
-                  good + "我还能感觉到电梯井深处有一阵风，从脚底一直吹到后颈，像有人在耳边呼气。", False))
-
-    cases.append(("G3 丢事实", src,
-                  "我在电梯里，电梯一直往上。我有点失重，眼睛看不清东西，好像头顶到一块板。", False))
-
-    cases.append(("G4 新增因果", src,
-                  good.replace("后来切换到了教室里面", "于是我切换到了教室里面"), False))
-
-    cases.append(("G5 丢不确定词", src,
-                  good.replace("好像头顶到一块板", "头顶到一块板"), False))
-
-    # G6：同音改字也计数。三处替换 → 多出 3 个原文没有的字 → G6 必须红。
-    cases.append(("G6 同音改字超限（开饭/开放 这类）", src,
-                  good.replace("按不到一楼", "按不到一搂")
-                  .replace("窗外有沙砾", "窗外有沙粒")
-                  .replace("我转头看了一眼", "我转头砍了一眼"),
-                  False, ("G6",), ()))
-
-    # G6：只改一处（≤2）→ G6 不该红；短文本里 G3 会因 2-gram 掉点而红，属预期，只断言 G6 不在 failed。
-    cases.append(("G6 单处修字（G6 放行）", src,
-                  good.replace("窗外有沙砾", "窗外有沙粒"), False, (), ("G6",)))
+    case("v3 合法压缩：事实都在、口水清零", src, good, True)
+    case("F1 数字丢失", src, good.replace("四个人", "几个人"), False, ("F1",))
+    case("F1 颜色丢失", src, good.replace("海是灰色的", "海是暗的"), False, ("F1",))
+    case("F2 压得太狠", src, "昨天我梦见去海边。", False, ("F2",))
+    case("F2 几乎没压缩（原文照抄）", src, src, False, ("F2", "F3"))
+    case("F3 口水残留", src,
+         "呃，昨天我梦见我们四个人去了海边，海是灰色的，好像傍晚。", False, ("F3",))
+    case("G4 新增跨场景因果", src,
+         good.replace("海是灰色的", "于是海是灰色的"), False, ("G4",))
+    case("G5 丢不确定词", src,
+         good.replace("好像是傍晚", "是傍晚"), False, ("G5",))
+    case("revise 合法改写（G 口径不动）", "我站在站台上等末班车。", "我站在站台上，等末班车。", True, kind="revise")
+    case("revise 同音改字三处仍红", "电梯按不到一楼，窗外有沙砾，我转头看了一眼。",
+         "电梯按不到一搂，窗外有沙粒，我转头砍了一眼。", False, ("G6",), kind="revise")
 
     results, ok = [], True
-    for case in cases:
-        name, a, b, want_pass = case[:4]
-        want_fail = set(case[4]) if len(case) > 4 else None
-        want_not_fail = set(case[5]) if len(case) > 5 else set()
-        r = run(a, b)
+    for item in cases:
+        name, a, b, want_pass = item[:4]
+        want_fail = set(item[4]) if len(item) > 4 else set()
+        want_not_fail = set(item[5]) if len(item) > 5 else set()
+        kind = item[6] if len(item) > 6 else "faithful"
+        r = run(a, b, kind)
         good_enough = (r["pass"] == want_pass)
-        if want_fail is not None:
+        if want_fail:
             good_enough = good_enough and want_fail <= set(r["failed"])
         if want_not_fail:
             good_enough = good_enough and not (want_not_fail & set(r["failed"]))
         ok = ok and good_enough
         results.append({
-            "case": name,
-            "expect_pass": want_pass,
-            "expect_failed": sorted(want_fail) if want_fail is not None else None,
-            "expect_not_failed": sorted(want_not_fail),
-            "actual_pass": r["pass"],
-            "failed": r["failed"],
-            "ok": good_enough,
+            "case": name, "kind": kind, "expect_pass": want_pass,
+            "expect_failed": sorted(want_fail), "expect_not_failed": sorted(want_not_fail),
+            "actual_pass": r["pass"], "failed": r["failed"], "ok": good_enough,
         })
     print(json.dumps({"self_test": ok, "cases": results}, ensure_ascii=False, indent=2))
     return 0 if ok else 1
+
+
+def _run_vectors(path):
+    root = json.loads(read_text(path))
+    vectors = root["cases"] if isinstance(root, dict) else root
+    bad = 0
+    for v in vectors:
+        r = run(v["input"], v["output"], v.get("mode", "faithful"))
+        want = set(v.get("expect_failed", []))
+        got = set(r["failed"])
+        ok = want == got
+        if not ok:
+            bad += 1
+        print(json.dumps({
+            "name": v["name"], "mode": v.get("mode", "faithful"),
+            "ok": ok, "expect_failed": sorted(want), "actual_failed": sorted(got),
+        }, ensure_ascii=False))
+    print(json.dumps({"vectors": len(vectors), "failed": bad}, ensure_ascii=False))
+    return 0 if bad == 0 else 1
 
 
 # ---------------------------------------------------------------- CLI
@@ -444,10 +529,14 @@ def main(argv):
     ap.add_argument("--kind", default="faithful", choices=["faithful", "revise"])
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", dest="self_test", action="store_true")
+    ap.add_argument("--vectors", help="向量 JSON：逐条断言 failed 集合")
     a = ap.parse_args(argv)
 
     if a.self_test:
         return _self_test()
+
+    if a.vectors:
+        return _run_vectors(a.vectors)
 
     if not a.input or not a.output:
         ap.error("需要 --input 与 --output（或使用 --self-test）")

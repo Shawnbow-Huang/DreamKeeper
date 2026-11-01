@@ -129,7 +129,7 @@ class GenerationOrchestratorTest {
         // T1 的请求体里必须有「上一版违规清单」这个标记载荷，而且载荷里有具体引文（不是开关）。
         val t1Body = llm.requests[1].messages.single().content
         assertTrue("T1 请求体缺少违规清单标记", t1Body.contains("【上一版违规清单】"))
-        assertTrue("T1 载荷里没有 T0 的具体引文", t1Body.contains("四十"))
+        assertTrue("T1 载荷里没有 T0 的具体事实锚点", t1Body.contains("三十次"))
         assertFalse("T1 不是保守档，不该带只做标点的指令", t1Body.contains(PUNCTUATION_DIRECTIVE))
         assertEquals(0.0, llm.requests[1].temperature!!, 1e-9)
 
@@ -159,7 +159,7 @@ class GenerationOrchestratorTest {
         assertTrue(result.attempts >= 2)
         // 第三次仍是 T1（同档重试），不是 T2。
         // 同档重试仍带 T0 的具体引文；且不是保守档。
-        assertTrue(llm.requests[2].messages.single().content.contains("四十"))
+        assertTrue("违规清单要写出丢了哪个事实锚点", llm.requests[2].messages.single().content.contains("三十次"))
         assertFalse(llm.requests[2].messages.single().content.contains(PUNCTUATION_DIRECTIVE))
         assertEquals("T1", store.commits.single().stage)
     }
@@ -171,23 +171,24 @@ class GenerationOrchestratorTest {
         val llm = FakeLlm()
         llm.enqueue(ok(T0_BAD))
         llm.enqueue(ok(T1_BAD))
-        llm.enqueue(ok(CLEAN_T1)) // 与输入内容字完全相同（只差标点）
+        llm.enqueue(ok(T2_CONSERVATIVE)) // 与输入内容字完全相同（只差标点）
         val store = FakeStore(dreamDomain())
 
         val result = newOrchestrator(llm, store).generateFaithful(DREAM_ID)
 
         assertNull(result.failure)
         assertEquals(GenerationStage.T2, result.finalStage)
-        assertEquals(CLEAN_T1, result.text)
+        assertEquals(T2_CONSERVATIVE, result.text)
         assertEquals(3, llm.requests.size)
 
         val t2Body = llm.requests[2].messages.single().content
         assertTrue("T2 必须带只做标点的指令", t2Body.contains(PUNCTUATION_DIRECTIVE))
-        assertFalse("T2 不该再带 T1 的违规载荷", t2Body.contains("四十"))
+        assertFalse("T2 不该再带 T1 的违规载荷", t2Body.contains("丢了事实"))
         assertEquals(0.0, llm.requests[2].temperature!!, 1e-9)
 
         assertEquals("T2", store.commits.single().stage)
-        assertTrue(FaithfulGates.isConservativeOk(RAW, CLEAN_T1))
+        assertTrue(FaithfulGates.isConservativeOk(RAW, T2_CONSERVATIVE))
+        assertFalse("v3 的 CLEAN_T1 是重写，不该被逐字判据放行", FaithfulGates.isConservativeOk(RAW, CLEAN_T1))
     }
 
     // ------------------------------------------------------------ §0.11 #5
@@ -200,7 +201,7 @@ class GenerationOrchestratorTest {
         val extra = FakeLlm()
         extra.enqueue(ok(T0_BAD))
         extra.enqueue(ok(T1_BAD))
-        extra.enqueue(ok(CLEAN_T1 + "嗯"))
+        extra.enqueue(ok(RAW + "嗯"))
         val extraResult = newOrchestrator(extra, store).generateFaithful(DREAM_ID)
 
         assertNull(extraResult.failure)
@@ -211,7 +212,7 @@ class GenerationOrchestratorTest {
         assertEquals("T0/T1/T2 各一次，T3 不调模型", 3, extra.requests.size)
         assertEquals(3, extraResult.attempts)
 
-        // 场景 b：等长但换字（内容字 22→22，「三十」→「四十」）。
+        // 场景 b：等长但换字（「三十」→「四十」，长度不变、内容字不同）。
         // 这一条才是「逐字相等」与「只比长度」的判别式：只比长度会误判为保守成功。
         val swapped = FakeLlm()
         swapped.enqueue(ok(T0_BAD))
@@ -495,7 +496,7 @@ class GenerationOrchestratorTest {
         db.dreamDao().upsert(dreamEntity())
         val deepseek = FakeLlm()
         val qwen = FakeLlm()
-        qwen.enqueue(ok(RAW))
+        qwen.enqueue(ok(CLEAN_T1))
         val providerCalls = mutableListOf<ProviderId>()
         val orchestrator = newOrchestrator(
             llm = deepseek,
@@ -523,7 +524,7 @@ class GenerationOrchestratorTest {
         val db = room()
         db.dreamDao().upsert(dreamEntity())
         val qwen = FakeLlm()
-        qwen.enqueue(ok(RAW, usage = Usage(10, 20, 5, 0, 35)))
+        qwen.enqueue(ok(CLEAN_T1, usage = Usage(10, 20, 5, 0, 35)))
         val orchestrator = newOrchestrator(
             llm = qwen,
             store = RoomGenerationStore(db),
@@ -546,7 +547,7 @@ class GenerationOrchestratorTest {
         val db = room()
         db.dreamDao().upsert(dreamEntity())
         val llm = FakeLlm()
-        llm.enqueue(ok(RAW, usage = Usage(10, 20, 5, 0, 35)))
+        llm.enqueue(ok(CLEAN_T1, usage = Usage(10, 20, 5, 0, 35)))
         val orchestrator = newOrchestrator(
             llm = llm,
             store = RoomGenerationStore(db),
@@ -561,6 +562,26 @@ class GenerationOrchestratorTest {
         assertEquals("cost-v1", row.formulaVersion)
         assertTrue(row.costMicroYuan > 0)
         assertNotNull(row.priceSnapshotJson)
+    }
+
+    // ------------------------------------------------------------ v3 闸门清单（2026-11-01）
+
+    @Test
+    fun `T0 压太狠时把 F2 清单写进 T1 请求`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity(raw = RAW_V3))
+        val llm = FakeLlm().apply {
+            enqueue(ok("我去澳门了。"))            // F1（丢 4 点 4 分）+ F2（压太狠）
+            enqueue(ok(CLEAN_V3))                  // 落在区间、事实齐全
+        }
+
+        val result = newOrchestrator(llm, RoomGenerationStore(db)).generateFaithful(DREAM_ID)
+
+        assertNull(result.failure)
+        assertEquals(GenerationStage.T1, result.finalStage)
+        val t1 = llm.requests[1].messages.single().content
+        assertTrue("T1 必须带违规清单标记", t1.contains("【上一版违规清单】"))
+        assertTrue("清单里要能看见 F2 的具体判据", t1.contains("F2"))
     }
 
     // ------------------------------------------------------------ 真机回归（2026-11-01）
@@ -778,20 +799,25 @@ class GenerationOrchestratorTest {
         const val DREAM_ID = "dream-1"
         const val NOW = 1_793_500_000_000L
 
-        /** 22 个内容字 / 21 个 bigram，G3 的分母。 */
-        const val RAW = "我梦见车站。等了好久，车一直不来，我数着三十次呼吸。"
+        /** v3 的口水稿：足够长（F2 有分母）、含数字锚点（F1 可验）、口水密集（F3 可验）。 */
+        const val RAW = "呃，我梦见车站。然后然后等了好久，那个车一直不来，我数着三十次呼吸，就是说，嗯，有时候会听到广播，可是听不清在说什么。"
 
-        /** T0/T1 的坏输出：把「三十」换成「四十」——G1（数量）与 G3（bigram 覆盖 0.9048）都红。 */
-        const val T0_BAD = "我梦见车站。等了好久，车一直不来，我数着四十次呼吸。"
+        // v3 样本：足够长（F2 有分母）、含数字与地名（F1 有锚点）、口水密集（F3 可验）。
+        const val RAW_V3 = "呃，我昨天做了一个梦，然后然后我们就去澳门玩了。就是那个4点4分出发的，一路上我一直在想，嗯，然后那个船好像要坐很久很久，好像我们六个人一起去的，然后然后到了以后就去吃了饭，吃了好多东西，然后又去了海边，海边风很大，我就一直站在那里，好像站了很久，后来我们就回去了，回去的时候已经天黑了。"
+        const val CLEAN_V3 = "昨天我梦见我们六个人去澳门玩，好像是为了坐船。4点4分出发，船好像要坐很久很久。到了以后先去吃饭，又去海边，风很大，我好像站了很久。回去时天已经黑了。"
 
-        /** T1 又坏一次，只有「四十」这一处。 */
-        const val T1_BAD = "我梦见车站。等了好久，车一直不来，我数着四十次呼吸。"
+        /** 干净输出：事实都在、口水清零、压缩到约六成（v3 五个闸门全绿）。 */
+        const val CLEAN_T1 = "我梦见车站。等了好久，车一直不来，我数着三十次呼吸。广播声听不清。"
 
-        /** 干净输出：内容字与 [RAW] 完全相同，只改了标点（故意让 G2/G3 绿）。 */
-        const val CLEAN_T1 = "我梦见车站，等了好久，车一直不来，我数着三十次呼吸。"
+        /** T0/T1 的坏输出：把「三十次」改成「四十次」——F1 事实锚点红，其余绿。 */
+        const val T0_BAD = "我梦见车站。等了好久，车一直不来，我数着四十次呼吸。广播声听不清。"
+        const val T1_BAD = "我梦见车站。等了好久，车一直不来，我数着四十次呼吸。广播声听不清。"
 
-        /** 等长换字：内容字仍是 22 个，但「三十」变「四十」——逐字判据红、长度判据绿。 */
-        const val T2_SUBSTITUTED = "我梦见车站，等了好久，车一直不来，我数着四十次呼吸。"
+        /** T2 保守档：与 [RAW] 的内容字逐个相等（只差标点/空白），这才该被 `isConservativeOk` 放行。 */
+        const val T2_CONSERVATIVE = RAW
+
+        /** 等长换字：长度与 [RAW] 相同、但「三十」变「四十」——逐字判据必须拦住它。 */
+        val T2_SUBSTITUTED = RAW.replace("三十次", "四十次")
 
         /** `PromptRepository` 给【只做标点】自动追加的指令；用它区分「真带了标记」与「正文提到标记」。 */
         const val PUNCTUATION_DIRECTIVE = "本轮按保守档输出"

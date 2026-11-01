@@ -315,6 +315,9 @@ class ReviseOrchestrator(
                 com.dreamkeeper.llm.gates.Gate.G1 -> result.detail.take(10)
                 com.dreamkeeper.llm.gates.Gate.G4, com.dreamkeeper.llm.gates.Gate.G5 -> result.detail.take(6)
                 com.dreamkeeper.llm.gates.Gate.G6 -> result.detail.take(6)
+                com.dreamkeeper.llm.gates.Gate.F1,
+                com.dreamkeeper.llm.gates.Gate.F2,
+                com.dreamkeeper.llm.gates.Gate.F3 -> result.detail.take(6)
                 com.dreamkeeper.llm.gates.Gate.G2, com.dreamkeeper.llm.gates.Gate.G3 ->
                     (result.detail + result.advisory).take(12)
             }

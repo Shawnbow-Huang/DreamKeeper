@@ -638,9 +638,11 @@ class GenerationOrchestrator(
                 Gate.G1 -> result.detail.take(10)
                 Gate.G4, Gate.G5 -> result.detail.take(6)
                 Gate.G6 -> result.detail.take(6)
+                Gate.F1, Gate.F2, Gate.F3 -> result.detail.take(6)
                 Gate.G2, Gate.G3 -> (result.detail + result.advisory).take(12)
             }
-            lines += picked
+            // 带闸门代号：T1 的模型要能直接看出这是 F2 还是 F1，而不是只有一句中文。
+            picked.forEach { lines += "${result.gate.name}: $it" }
         }
         if (lines.isEmpty()) {
             report.results.filter { !it.passed }.forEach { lines += it.detail }

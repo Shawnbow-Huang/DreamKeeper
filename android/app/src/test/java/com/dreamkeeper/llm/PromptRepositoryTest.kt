@@ -28,10 +28,26 @@ class PromptRepositoryTest {
 
     // 计划 §0.1 钉死的 sha256 前 8 位；prompts/*.md 由 .gitattributes 钉成 LF（D284）。
     private val expectedSha256_8 = mapOf(
-        "faithful" to "4eac16cb",
+        "faithful" to "0478a668",
         "novel" to "cc497720",
         "novel_revise" to "45a17e0a",
     )
+
+    @Test
+    fun `faithful v3 事实守恒与压缩口径都在提示词里`() {
+        val spec = PromptSpecs.FAITHFUL
+        assertEquals("v3", spec.version)
+        assertEquals("prompts/faithful.v3.md", spec.assetPath)
+        val text = PromptRepository(assets).render(
+            spec.promptId,
+            mapOf("待理顺转写" to "呃，我昨天做了一个梦，然后然后就去海边了。"),
+        ).text
+        assertTrue(text.contains("事实守恒"))
+        assertTrue(text.contains("压缩到原文的五六成"))
+        assertTrue(text.contains("【只做标点】"))
+        assertTrue(text.contains("【上一版违规清单】"))
+        assertTrue(text.contains("4 点 4 分"))
+    }
 
     // 计划 §0.7：每个槽下面那行 `<…>` 提示语只用于给模型看，替换槽时必须连它一起替换。
     private val slotHintPrefixes = listOf(

@@ -71,17 +71,107 @@ object FaithfulGates {
         output: String,
         mode: GateMode = GateMode.FAITHFUL,
     ): GateReport {
-        // 闸门全部算完、不短路；failed 顺序即 G1→G6。
-        val results = buildList {
-            add(gateG1(input, output))
-            add(gateG2(input, output, mode))
-            add(gateG3(input, output))
-            add(gateG4(input, output))
-            add(gateG5(input, output))
-            // revise 是对小说稿的整体改写，本来就允许换字；G6 只适用 faithful。
-            if (mode == GateMode.FAITHFUL) add(gateG6(input, output))
+        // 闸门全部算完、不短路；failed 顺序与 Python 的 gates_for 一致：
+        // FAITHFUL = F1 → F2 → F3 → G4 → G5；REVISE = G1 → G2 → G3 → G4 → G5 → G6。
+        val results = if (mode == GateMode.REVISE) {
+            buildList {
+                add(gateG1(input, output))
+                add(gateG2(input, output, mode))
+                add(gateG3(input, output))
+                add(gateG4(input, output))
+                add(gateG5(input, output))
+                add(gateG6(input, output))
+            }
+        } else {
+            buildList {
+                add(gateF1(input, output))
+                add(gateF2(input, output))
+                add(gateF3(input, output))
+                add(gateG4(input, output))
+                add(gateG5(input, output))
+            }
         }
         return GateReport(mode, results)
+    }
+
+    // ---------------------------------------------------------------- F1–F3
+
+    /** 「一个梦」「一下」这类泛数量词不算事实锚点（与 Python 的 GENERIC_NUM 一致）。 */
+    private val GENERIC_NUM = setOf("一个", "一下", "一点", "一些", "一场", "一阵", "一遍", "一声", "一会", "一会儿")
+
+    private val FILLER_STRICT = listOf(
+        "呃", "嗯", "唔", "唉", "哎", "诶", "那个", "就是说", "然后然后", "就是就是",
+        "这个这个", "对对对", "反正", "其实吧", "怎么说呢",
+    )
+
+    private val META_PHRASES = listOf(
+        "我思考一下", "让我想想", "就是什么呢", "我在想", "怎么说呢", "你知道吧", "反正就是",
+    )
+
+    /** 事实锚点：数字、颜色、方位、引号专名、说话人；顺序稳定、去重保序。 */
+    internal fun anchors(text: String): List<String> {
+        val all = ArrayList<String>()
+        all += ARABIC_NUM_RE.findAll(text).map { it.value }
+        all += CN_NUM_RE.findAll(text).map { it.value }.filter { it !in GENERIC_NUM }
+        all += CN_NUM_MULTI_RE.findAll(text).map { it.value }
+        all += COLOR_RE.findAll(text).map { it.value }
+        all += DIRECTION_WORDS.filter { it in text }
+        all += QUOTED_RE.findAll(text).map { it.groupValues[1] }
+        all += speechNames(text)
+        return all.filter { it.isNotEmpty() }.distinct()
+    }
+
+    /**
+     * 说话人：只认句读（或 和/跟/对/向…）之后、2–3 个不像虚词的汉字。
+     *
+     * 不能直接用 `([汉]{2,4})([说喊道…])`：真实句子里的「就是说说」「听不清在说什么」
+     * 会被抓成假人名，F1 永远红（与 Python 的 speech_names 逐字一致）。
+     */
+    private fun speechNames(text: String): List<String> {
+        val boundary = PUNCT + "和跟对冲向与"
+        val out = ArrayList<String>()
+        for (m in SPEECH_NAME_RE.findAll(text)) {
+            val cand = m.groupValues[1]
+            val start = m.range.first
+            val prev = if (start > 0) text[start - 1] else '　'
+            if (prev !in boundary) continue
+            if (cand in FILLER_STRICT || cand.any { it in "的就是了在有没不我你他她它们这那" }) continue
+            out += cand
+        }
+        return out
+    }
+
+    private fun gateF1(input: String, output: String): GateResult {
+        val missing = anchors(input).filter { it !in output }
+        return GateResult(
+            gate = Gate.F1,
+            passed = missing.isEmpty(),
+            value = missing.size.toDouble(),
+            detail = if (missing.isEmpty()) emptyList() else listOf("丢了事实：" + missing.take(10).joinToString("、")),
+        )
+    }
+
+    private fun gateF2(input: String, output: String): GateResult {
+        val a = contentCharCount(input)
+        val b = contentCharCount(output)
+        val ratio = if (a == 0) 0.0 else b.toDouble() / a
+        val problems = buildList {
+            if (a > 0 && ratio < 0.50) add("压得太狠：输出/输入 = %.2f（下限 0.50）".format(ratio))
+            if (a > 0 && ratio > 0.85) add("几乎没压缩：输出/输入 = %.2f（上限 0.85）".format(ratio))
+        }
+        return GateResult(gate = Gate.F2, passed = problems.isEmpty(), value = ratio, detail = problems)
+    }
+
+    private fun gateF3(input: String, output: String): GateResult {
+        val hits = FILLER_STRICT.filter { it in input && it in output } +
+            META_PHRASES.filter { it in output }
+        val uniq = hits.distinct()
+        return GateResult(
+            gate = Gate.F3,
+            passed = uniq.isEmpty(),
+            value = uniq.size.toDouble(),
+            detail = if (uniq.isEmpty()) emptyList() else listOf("还有口水：" + uniq.joinToString("、")),
+        )
     }
 
     // ---------------------------------------------------------------- G6

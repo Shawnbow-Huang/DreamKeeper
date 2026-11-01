@@ -1,11 +1,14 @@
 package com.dreamkeeper.llm.gates
 
 /**
- * 闸门（G1–G6）的公共数据模型；G6 为 2026-11-01 新增的改字审计。
+ * 闸门的公共数据模型。
+ *
+ * - G1–G6：revise 链（整体改写小说稿）沿用旧口径；
+ * - F1–F3：原样整理 v3 的事实锚点 / 压缩率 / 口水清零（2026-11-01 新增）。
  *
  * 逐字对齐 `scripts/check-faithful.py`（唯一语义真源），不做"顺手改进"。
  */
-enum class Gate { G1, G2, G3, G4, G5, G6 }
+enum class Gate { G1, G2, G3, G4, G5, G6, F1, F2, F3 }
 
 enum class GateMode { FAITHFUL, REVISE }
 

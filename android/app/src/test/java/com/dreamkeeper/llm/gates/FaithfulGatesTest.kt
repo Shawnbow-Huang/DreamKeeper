@@ -5,20 +5,16 @@ import org.junit.Test
 import java.io.File
 
 /**
- * 用冻结向量逐例校验 Kotlin 闸门 G1–G6 与 Python 参考实现同集合。
+ * 用冻结向量逐例校验 Kotlin 闸门与 Python 参考实现同集合（v3：FAITHFUL 跑 F1/F2/F3 + G4/G5）。
  *
  * 刻意不用 Robolectric / org.json：本测试是纯 JVM 逻辑校验，JSON 解析由文件内的小解析器
  * 完成，避免 android.jar 的 stub JSONObject 在 plain JUnit4 下抛 "not mocked"。
- * 期望值全部来自 docs/evidence/plan6/p6-faithful-gate-vectors.json（冻结向量）。
+ * 期望值来自 docs/evidence/plan7/faithful-gate-v3-vectors.json（v3 冻结向量）。
  */
 class FaithfulGatesTest {
 
     @Test
-    fun case01() {
-        assertEquals("向量条数", 17, vectors().size)
-        assertEquals("PUNCT 长度", 34, FaithfulGates.PUNCT.length)
-        assertCase(1)
-    }
+    fun case01() = assertCase(1)
 
     @Test
     fun case02() = assertCase(2)
@@ -38,42 +34,16 @@ class FaithfulGatesTest {
     @Test
     fun case07() = assertCase(7)
 
-    @Test
-    fun case08() = assertCase(8)
-
-    @Test
-    fun case09() = assertCase(9)
-
-    @Test
-    fun case10() = assertCase(10)
-
-    @Test
-    fun case11() = assertCase(11)
-
-    @Test
-    fun case12() = assertCase(12)
-
-    @Test
-    fun case13() = assertCase(13)
-
-    @Test
-    fun case14() = assertCase(14)
-
-    @Test
-    fun case15() = assertCase(15)
-
-    @Test
-    fun case16() = assertCase(16)
-
-    @Test
-    fun case17() = assertCase(17)
-
     private fun assertCase(id: Int) {
         val c = vectors().first { it.id == id }
         val report = FaithfulGates.check(c.input, c.output, c.mode)
         assertEquals("case $id ${c.name} mode", c.mode, report.mode)
-        // G6 只适用于 faithful；revise 是整体改写，不该被改字审计误伤。
-        val expectedGates = if (c.mode == GateMode.FAITHFUL) Gate.values().toList() else Gate.values().filter { it != Gate.G6 }
+        // v3：faithful 只看 F1/F2/F3 + G4/G5；revise 仍是 G1–G6。
+        val expectedGates = if (c.mode == GateMode.FAITHFUL) {
+            listOf(Gate.F1, Gate.F2, Gate.F3, Gate.G4, Gate.G5)
+        } else {
+            listOf(Gate.G1, Gate.G2, Gate.G3, Gate.G4, Gate.G5, Gate.G6)
+        }
         assertEquals("case $id ${c.name} 闸门数", expectedGates.size, report.results.size)
         assertEquals(
             "case $id ${c.name} 闸门顺序",
@@ -83,7 +53,7 @@ class FaithfulGatesTest {
         assertEquals("case $id ${c.name} failed 集合", c.expectFailed, report.failed)
         assertEquals(
             "case $id ${c.name} failed 顺序",
-            Gate.values().filter { it in c.expectFailed },
+            expectedGates.filter { it in c.expectFailed },
             report.failed.toList(),
         )
         assertEquals("case $id ${c.name} passed", c.expectPass, report.passed)
@@ -107,7 +77,7 @@ class FaithfulGatesTest {
         val faithfulFailed: Set<Gate>?,
     )
 
-    private fun vectorsFile(): File = File(repoRoot(), "docs/evidence/plan6/p6-faithful-gate-vectors.json")
+    private fun vectorsFile(): File = File(repoRoot(), "docs/evidence/plan7/faithful-gate-v3-vectors.json")
 
     private fun repoRoot(): File {
         var dir: File? = File("").absoluteFile

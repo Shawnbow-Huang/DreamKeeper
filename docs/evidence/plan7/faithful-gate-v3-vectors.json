@@ -1,0 +1,83 @@
+{
+  "source": "docs/superpowers/plans/2026-11-02-plan7-faithful-v3.md §Task 2",
+  "prompt": "prompts/faithful.v3.md",
+  "cases": [
+    {
+      "id": 1,
+      "name": "v3 正常压缩：事实都在",
+      "input": "呃，我昨天做了一个梦，然后然后我们就去海边了，一共四个人。",
+      "output": "昨天我梦见我们四个人去了海边。",
+      "mode": "faithful",
+      "expect_pass": true,
+      "expect_failed": []
+    },
+    {
+      "id": 2,
+      "name": "F1 数字丢了",
+      "input": "我们4点4分出发，6点到澳门。",
+      "output": "我们很早就出发，中午到了澳门。",
+      "mode": "faithful",
+      "expect_pass": false,
+      "expect_failed": [
+        "F1",
+        "F2"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "F1 颜色丢了",
+      "input": "海是灰色的，天快黑了，我们四个人在沙滩上走。",
+      "output": "海是暗的，天快黑了，我们四个人在沙滩上走。",
+      "mode": "faithful",
+      "expect_pass": false,
+      "expect_failed": [
+        "F1",
+        "F2"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "F2 压得太狠",
+      "input": "我梦见自己在一间很旧的教室里，黑板上写着字，字在动。",
+      "output": "梦见了教室。",
+      "mode": "faithful",
+      "expect_pass": false,
+      "expect_failed": [
+        "F2",
+        "F1"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "F2 没压缩",
+      "input": "呃，我昨天做了一个梦，然后然后我们就去海边了。",
+      "output": "呃，我昨天做了一个梦，然后然后我们就去海边了。",
+      "mode": "faithful",
+      "expect_pass": false,
+      "expect_failed": [
+        "F2",
+        "F3"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "F3 口水没清",
+      "input": "嗯，我思考一下，就是什么呢，哦对，我要去澳门。",
+      "output": "嗯，我想了想，就是要去澳门。",
+      "mode": "faithful",
+      "expect_pass": false,
+      "expect_failed": [
+        "F3"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "revise 不受 F 闸门影响",
+      "input": "我站在站台上等末班车。",
+      "output": "我站在站台上，等末班车。",
+      "mode": "revise",
+      "expect_pass": true,
+      "expect_failed": []
+    }
+  ]
+}
