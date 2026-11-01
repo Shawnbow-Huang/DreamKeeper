@@ -183,6 +183,9 @@
 | D569 | 2026-11-01 | 语音 | `TranscriptWriter` 切尾段前 `mkdirs()`；切分/转写异常 `markAppendFailed`→`FAILED`；录音文件丢失也标 FAILED | 真机 92 秒录音卡死主因：`cacheDir/stt-tail` 未创建 → ENOENT 被吞 → 行永远 PENDING |
 | D570 | 2026-11-01 | 语音 | PENDING 也给「重新转写」；等待文案 90 秒封顶改口；FAILED 的「去下载语音包」换「重新转写」 | 旧入口只服务 FAILED，僵住的 PENDING 只能干等；内置模型已随包，语音包提示已过时 |
 | D571 | 2026-11-01 | 语音 | 分段拼接改按「正文用字」比对最长公共前后缀，命中后清掉接缝处多出的句读 | 真机接缝「去澳。，去澳门」「6点钟到。，6点钟到啊」：带标点比对永远撞不上，同一个词被读两遍 |
+| D572 | 2026-11-01 | 生成链 | `GenerationStore.DreamEntity.toDream()` 补 `transcriptMs`；闸门拒绝时打 `DreamGen` 日志（status/rawMs/transcriptMs/textLen） | 真机事故：漏映射让领域模型恒 0，`rawAudioMs <= transcriptMs` 永不成立，所有带录音的梦都被判「转写未完成」，两个生成入口全废 |
+| D573 | 2026-11-01 | 详情 IA | 「原样整理」从小说化 tab 挪到原样 tab；小说化 tab 只留「小说化」 | 用户反馈「点了小说化才出现两个条目」；两个动作本来就是并列入口，不该互相遮挡 |
+| D574 | 2026-11-01 | 文案 | 用户可见统一为「原样整理 / 原样稿」；内部 `faithful` 标识不动 | 用户问「到底是原样整理还是忠实整理」；UI 与设置两套叫法会让人以为是两个功能 |
 | D525 | 2026-10-31 | T5 | 任务表把「生成链派发/成本」拆成 T5、把 FINAL-REVIEW/ACCEPTANCE 3g 顺延为 T6 | 生成链改动比预估大（快照 + 计价白名单 + check-cost），与终验证据分开提交更可审 |
 | D524 | 2026-10-31 | T5 | 设备取证改用 `assembleRelease` 重装（release 与 debug 签名不同，`install -r` 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`） | 保留设备上的 v3 数据库与真实梦；重建 release 只改签名不改数据 |
 
@@ -398,3 +401,16 @@ G4：全量绿（实测计数）+ 证据齐 + 看板/偏差表/FINAL-REVIEW。
 - **测试**：新增 `TranscriptReconcileTest`（2 例）+ `AppendEntryTest` 1 例 + `SegmentPlanTest` 2 例；全量 **67 类 / 533 例**绿。
 - **PENDING**：新录音在真机上的接缝效果需用户再录一条 ≥60 秒确认；本机未做 4 小时长录音。
 - **结论**：通过；「转写失败」不再表现成「永远正在转写」。
+
+### 生成链真机修复与详情节入口（Lead，2026-11-01）
+
+- 用户把手机接上电脑后，现场点「原样整理」只得到「转写未完成或原文为空」。
+- **日志定位**：`DreamGen: gate blocked: status=OK rawMs=92300 transcriptMs=0` → `GenerationStore` 漏映射 `transcriptMs`；
+  闸门 `rawAudioMs <= transcriptMs` 永不成立，**所有带录音的梦都生成不了**（此前的设备 E2E 用的是无音频种子数据，没暴露）。
+- **修复**：补映射 + 闸门拒绝日志（D572）；真机复核 `FAITHFUL http=200`、`NOVEL http=200`，原样稿与小说 v2 都落库。
+- **IA**（D573）：原样 tab 顶部直接给「原样整理」，小说化 tab 只留「小说化」；两栏各自独立。
+- **术语**（D574）：UI 统一「原样整理 / 原样稿」；设置里「忠实整理模型」改名；内部 `faithful` 审计字段不动。
+- **测试**：新增 1 条回归（store 必须带回 transcriptMs）；全量 **67 类 / 534 例**绿。
+- **证据**：`p6-ui-17-{original-tab,novel-tab,novel-result}.png` + `p6-ui-17-actions-and-naming.txt`。
+- **PENDING**：小说质量主观评价、旧录音按新拼接重转（需新增入口）。
+- **结论**：通过（真机实测）；生成链从「真机全废」恢复到「两条链路都通」。

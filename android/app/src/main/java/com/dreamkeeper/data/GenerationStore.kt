@@ -210,4 +210,8 @@ private fun DreamEntity.toDream() = Dream(
     rawAudioPath = rawAudioPath,
     rawAudioMs = rawAudioMs,
     novelSelectedVersion = novelSelectedVersion,
+    // 真机事故（2026-11-01）：漏了这一列，Dream.transcriptMs 恒为 0，
+    // 于是 generatable() 的「rawAudioMs <= transcriptMs」永远不成立，
+    // 有录音的梦一律被判「转写未完成」——生成链在真机上完全打不开。
+    transcriptMs = transcriptMs,
 )

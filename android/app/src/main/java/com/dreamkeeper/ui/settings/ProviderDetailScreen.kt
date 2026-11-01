@@ -323,11 +323,11 @@ private fun GenerationCard(
 
         // 顺序按「先整理、后小说化」：忠实是第一步，也是更省的那一步。
         Spacer(modifier = Modifier.height(14.dp))
-        Text("忠实整理模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
+        Text("原样整理模型", style = MaterialTheme.typography.bodyMedium, color = DreamColors.paper)
         Spacer(modifier = Modifier.height(6.dp))
         ModelDropdown(models = models, selected = faithfulModel, onSelect = onFaithfulModel)
         Text(
-            text = "整理只做「补标点、顺语序」，思考固定关闭；可以单独选一个更便宜的模型。",
+            text = "原样整理只做「补标点、顺语序」，思考固定关闭；可以单独选一个更便宜的模型。",
             modifier = Modifier.padding(top = 6.dp),
             style = MaterialTheme.typography.labelSmall,
             color = DreamColors.inkFaint,
@@ -349,7 +349,7 @@ private fun GenerationCard(
         )
 
         Text(
-            text = "思考开着时，服务端会忽略 temperature；忠实整理固定关闭思考。",
+            text = "思考开着时，服务端会忽略 temperature；原样整理固定关闭思考。",
             modifier = Modifier.padding(top = 12.dp),
             style = MaterialTheme.typography.labelSmall,
             color = DreamColors.inkFaint,

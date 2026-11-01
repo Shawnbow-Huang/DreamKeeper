@@ -108,7 +108,10 @@ class GenerationOrchestrator(
             // 调用可能带着过期状态进入生成。
             val dream = store.dream(dreamId)
                 ?: return protocol(GenerationKind.FAITHFUL, "dream 不存在")
-            if (!generatable(dream)) return protocol(GenerationKind.FAITHFUL, GATE_MESSAGE)
+            if (!generatable(dream)) {
+                logGateBlocked(dream)
+                return protocol(GenerationKind.FAITHFUL, GATE_MESSAGE)
+            }
             return faithfulChain(dream, newRun(dreamId), onProgress)
         } finally {
             mutex.unlock()
@@ -131,7 +134,10 @@ class GenerationOrchestrator(
         try {
             val dream = store.dream(dreamId)
                 ?: return protocol(GenerationKind.NOVEL, "dream 不存在")
-            if (!generatable(dream)) return protocol(GenerationKind.NOVEL, GATE_MESSAGE)
+            if (!generatable(dream)) {
+                logGateBlocked(dream)
+                return protocol(GenerationKind.NOVEL, GATE_MESSAGE)
+            }
             return novel(dream, newRun(dreamId), idea, onProgress)
         } finally {
             mutex.unlock()
@@ -594,6 +600,20 @@ class GenerationOrchestrator(
             dream.rawTranscript.trim().isNotEmpty() &&
             // A3：半截原文不许进模型（rawAudioMs > transcriptMs 说明还有没转成文字的尾巴）。
             (dream.rawAudioMs ?: 0L) <= dream.transcriptMs
+
+    /**
+     * 闸门拒绝时把「为什么」打进日志。
+     *
+     * 真机排查（2026-11-01）时，界面只有一句「转写未完成或原文为空」，
+     * 到底是状态没到 OK、正文为空、还是水位没追平，全靠猜；这三个字段都是非隐私元数据。
+     */
+    private fun logGateBlocked(dream: Dream) {
+        android.util.Log.w(
+            "DreamGen",
+            "gate blocked: status=${dream.transcriptStatus} rawMs=${dream.rawAudioMs} " +
+                "transcriptMs=${dream.transcriptMs} textLen=${dream.rawTranscript.length}",
+        )
+    }
 
     private fun attemptOf(stage: GenerationStage): Int = stage.ordinal + 1
 

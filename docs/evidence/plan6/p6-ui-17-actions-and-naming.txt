@@ -1,0 +1,48 @@
+HOST_ONLY=1 （vivo V2405A 真机 adb 采集；转写与小说内容为测试者本人 11-01 的梦，已获准用于证据）
+DEVICE=vivo V2405A / Android 16 / arm64-v8a
+APP=0.11.4（versionCode 9）
+DATE=2026-11-01T08:07Z / 16:07 CST
+
+# 任务
+用户问两件事：
+1) 「你可以直接在我的手机上测试，忠实整理和小说化能否正常进行？」
+2) 「为什么点了『小说化』，才出现『原样整理』和『小说化』的条目？这两个模式难道不是并列的吗？」
+3) 「到底是『原样整理』还是『忠实整理』？各个界面对于同一个东西的描述应该得统一吧？」
+
+# 一、生成链在真机上完全打不开（第三个真机 bug）
+点「原样整理」立刻失败，界面只有「没生成成：转写未完成或原文为空」。
+加日志后（`DreamGen` tag）：
+W DreamGen: gate blocked: status=OK rawMs=92300 transcriptMs=0 textLen=424
+→ `GenerationStore` 的 `DreamEntity.toDream()` **漏映射 `transcriptMs`**，领域模型恒为 0，
+   `generatable()` 的「rawAudioMs <= transcriptMs」永远不成立 → 所有带录音的梦都被判「转写未完成」。
+修复：`GenerationStore.kt` 补 `transcriptMs = transcriptMs`；新增回归用例
+「有录音的梦：RoomGenerationStore 必须带回 transcriptMs 否则永远过不了闸门」。
+
+修复后真机实测（同一篇 92.3 秒录音、423 字原样稿）：
+D DeepSeekClient: DKLLM attempt n=1 kind=FAITHFUL status=ok http=200
+D DeepSeekClient: DKLLM attempt n=1 kind=NOVEL status=ok http=200
+
+# 二、两个模式不再是「点了小说化才出现」
+- 原样 tab：顶部直接有「原样整理」；标题行写「原样稿 / 看原始转写」。
+- 小说化 tab：只有「小说化」，不再出现「原样整理」。
+- 两个动作各归各栏，互相独立（小说化内部仍会先跑一遍整理链拿基座，但入口不再互相遮挡）。
+
+# 三、术语统一
+用户可见文案统一为「**原样整理** / **原样稿**」：
+- 设置 → 模型：原「忠实整理模型」→「原样整理模型」；说明改「原样整理只做『补标点、顺语序』……」
+- 详情：原「整理稿」→「原样稿」；「看整理稿」→「看原样稿」；「正在理顺…」→「正在原样整理…」
+- 代码/提示词内部的 `faithful` 命名保持不变（契约与 promptId 是审计字段，不跟着 UI 改）。
+
+# 设备证据
+p6-ui-17-original-tab.png  484353 B sha256 fd930118708c4a63
+p6-ui-17-novel-tab.png  397820 B sha256 9d50d641a702fcd8
+p6-ui-17-novel-result.png  315706 B sha256 08b1f56dc905b1ed
+
+# 测试
+新增：generatable 回归用例 1 条；全量 classes=67 tests=534 failures=0 errors=0 skipped=0。
+（0.11.3 的 533 例 + 1）
+
+# PENDING
+- 小说化质量主观评价未做（只验证链路通）；
+- 「补写 7 处」清单逐条核对未做；
+- 用户若希望旧 92 秒录音用新拼接算法重转，需要另加「重新转写这段」入口（当前未做）。

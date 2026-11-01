@@ -234,6 +234,9 @@ fun DetailScreen(
                                 onRetryTranscription = vm::retryTranscription,
                                 onSkipTranscription = vm::skipTranscription,
                                 onRestartTranscription = vm::restartTranscription,
+                                hasFaithfulVersion = hasFaithfulVersion(state.dream, state.versions),
+                                onGenerateFaithful = vm::generateFaithful,
+                                onRetryGeneration = vm::retryGeneration,
                             )
 
                             1 -> NovelTab(
@@ -445,6 +448,9 @@ private fun TranscriptTab(
     onRetryTranscription: () -> Unit,
     onSkipTranscription: () -> Unit,
     onRestartTranscription: () -> Unit,
+    hasFaithfulVersion: Boolean,
+    onGenerateFaithful: () -> Unit,
+    onRetryGeneration: () -> Unit,
 ) {
     if (dream == null) return
     val context = LocalContext.current
@@ -461,15 +467,25 @@ private fun TranscriptTab(
         generationPhase.kind == GenerationKind.FAITHFUL
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 标题行：现在显示的是整理稿还是原始转写；有整理稿时给「看原始转写」（Plan 4 §0.6）。
+        // 原样整理是「原样」这一栏自己的动作：以前它和「小说化」一起塞在小说化 tab 里，
+        // 用户得先点小说化才看得见两个按钮（2026-11-01 反馈）。两个动作各归各栏。
+        GenerationActions(
+            phase = generationPhase,
+            showFaithful = !hasFaithfulVersion,
+            showNovel = false,
+            onFaithful = onGenerateFaithful,
+            onNovel = {},
+            onRetry = onRetryGeneration,
+        )
+        // 标题行：现在显示的是原样稿还是原始转写；有原样稿时给「看原始转写」（Plan 4 §0.6）。
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = when {
-                    polishing -> "正在理顺…"
-                    faithful != null && !showRaw -> "整理稿"
+                    polishing -> "正在原样整理…"
+                    faithful != null && !showRaw -> "原样稿"
                     else -> "原始转写"
                 },
                 modifier = Modifier.weight(1f),
@@ -479,7 +495,7 @@ private fun TranscriptTab(
             if (faithful != null && raw.isNotBlank()) {
                 TextButton(onClick = { showRaw = !showRaw }) {
                     Text(
-                        text = if (showRaw) "看整理稿" else "看原始转写",
+                        text = if (showRaw) "看原样稿" else "看原始转写",
                         style = MaterialTheme.typography.labelSmall,
                         color = DreamColors.paper,
                     )
@@ -761,7 +777,7 @@ private fun NovelTab(
         // 「原样整理」仍按 D406 收起（整理两遍只会得到近似重复的版本）。
         GenerationActions(
             phase = generationPhase,
-            showFaithful = !hasFaithfulVersion,
+            showFaithful = false,
             showNovel = true,
             onFaithful = onGenerateFaithful,
             onNovel = onGenerateNovel,

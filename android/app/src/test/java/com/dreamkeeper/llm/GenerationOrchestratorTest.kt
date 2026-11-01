@@ -563,10 +563,29 @@ class GenerationOrchestratorTest {
         assertNotNull(row.priceSnapshotJson)
     }
 
+    // ------------------------------------------------------------ 真机回归（2026-11-01）
+
+    @Test
+    fun `有录音的梦：RoomGenerationStore 必须带回 transcriptMs 否则永远过不了闸门`() = runTest {
+        val db = room()
+        db.dreamDao().upsert(dreamEntity(rawAudioMs = 92_300, transcriptMs = 92_300))
+
+        val dream = RoomGenerationStore(db).dream(DREAM_ID)!!
+
+        assertEquals("漏映射会让 generatable() 恒假", 92_300L, dream.transcriptMs)
+        // 端到端再确认一次：闸门能过，链路正常跑到 T0。
+        val llm = FakeLlm().apply { enqueue(ok(CLEAN_T1)) }
+        val result = newOrchestrator(llm, RoomGenerationStore(db)).generateFaithful(DREAM_ID)
+        assertNull(result.failure)
+        assertEquals(1, llm.requests.size)
+    }
+
     private fun dreamEntity(        id: String = DREAM_ID,
         raw: String = RAW,
         faithful: String? = null,
         stage: String? = null,
+        rawAudioMs: Long? = null,
+        transcriptMs: Long = 0L,
     ): DreamEntity = DreamEntity(
         id = id,
         dreamDate = LocalDate.of(2026, 10, 30),
@@ -577,6 +596,8 @@ class GenerationOrchestratorTest {
         novelText = null,
         generationStage = stage,
         transcriptStatus = TranscriptStatus.OK,
+        rawAudioMs = rawAudioMs,
+        transcriptMs = transcriptMs,
     )
 
     private fun dreamDomain(
